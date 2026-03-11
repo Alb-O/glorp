@@ -83,6 +83,8 @@ use std::fmt::{self, Display, Write as _};
 use std::ops::Range;
 const SIDEBAR_WIDTH: f32 = 380.0;
 const CONTROL_LABEL_WIDTH: f32 = 90.0;
+const CONTROL_RADIUS: f32 = 6.0;
+const CHECKBOX_RADIUS: f32 = 4.0;
 
 pub fn run() -> iced::Result {
 	let settings = iced::Settings {
@@ -329,56 +331,71 @@ impl Playground {
 				control_row(
 					"Preset",
 					pick_list(SamplePreset::ALL, Some(self.preset), Message::LoadPreset,)
+						.style(rounded_pick_list_style)
+						.menu_style(rounded_pick_list_menu_style)
 						.width(Length::Fill)
 						.into(),
 				),
 				control_row(
 					"Font",
 					pick_list(FontChoice::ALL, Some(self.font), Message::FontSelected)
+						.style(rounded_pick_list_style)
+						.menu_style(rounded_pick_list_menu_style)
 						.width(Length::Fill)
 						.into(),
 				),
 				control_row(
 					"Shaping",
 					pick_list(ShapingChoice::ALL, Some(self.shaping), Message::ShapingSelected,)
+						.style(rounded_pick_list_style)
+						.menu_style(rounded_pick_list_menu_style)
 						.width(Length::Fill)
 						.into(),
 				),
 				control_row(
 					"Wrap",
 					pick_list(WrapChoice::ALL, Some(self.wrapping), Message::WrappingSelected,)
+						.style(rounded_pick_list_style)
+						.menu_style(rounded_pick_list_menu_style)
 						.width(Length::Fill)
 						.into(),
 				),
 				control_row(
 					"Render",
 					pick_list(RenderMode::ALL, Some(self.render_mode), Message::RenderModeSelected,)
+						.style(rounded_pick_list_style)
+						.menu_style(rounded_pick_list_menu_style)
 						.width(Length::Fill)
 						.into(),
 				),
 				control_row(
 					format!("Size {:.0}", self.font_size),
 					slider(10.0..=48.0, self.font_size, Message::FontSizeChanged)
+						.style(rounded_slider_style)
 						.width(Length::Fill)
 						.into(),
 				),
 				control_row(
 					format!("Line {:.0}", self.line_height),
 					slider(12.0..=72.0, self.line_height, Message::LineHeightChanged)
+						.style(rounded_slider_style)
 						.width(Length::Fill)
 						.into(),
 				),
 				control_row(
 					format!("Width {:.0}", self.layout_width),
 					slider(180.0..=900.0, self.layout_width, Message::LayoutWidthChanged)
+						.style(rounded_slider_style)
 						.width(Length::Fill)
 						.into(),
 				),
 				checkbox(self.show_baselines)
 					.label("Show baselines and line tops")
+					.style(rounded_checkbox_style)
 					.on_toggle(Message::ShowBaselinesChanged),
 				checkbox(self.show_hitboxes)
 					.label("Show glyph hitboxes")
+					.style(rounded_checkbox_style)
 					.on_toggle(Message::ShowHitboxesChanged),
 				text("Source").size(18),
 				self.view_source_editor(),
@@ -395,6 +412,7 @@ impl Playground {
 			.wrapping(self.wrapping.to_iced())
 			.line_height(LineHeight::Absolute(Pixels(self.line_height)))
 			.size(Pixels((self.font_size * 0.68).max(14.0)))
+			.style(rounded_text_editor_style)
 			.height(220)
 			.into()
 	}
@@ -440,7 +458,7 @@ impl Playground {
 							palette.background.strong.color
 						},
 						width: 1.0,
-						radius: 8.0.into(),
+						radius: CONTROL_RADIUS.into(),
 					},
 					..Default::default()
 				}
@@ -551,7 +569,7 @@ fn panel_style(theme: &Theme) -> container::Style {
 		border: iced::Border {
 			color: palette.background.strong.color,
 			width: 1.0,
-			radius: 8.0.into(),
+			radius: CONTROL_RADIUS.into(),
 		},
 		..Default::default()
 	}
@@ -564,10 +582,42 @@ fn surface_style(theme: &Theme) -> container::Style {
 		border: iced::Border {
 			color: palette.background.strong.color,
 			width: 1.0,
-			radius: 8.0.into(),
+			radius: CONTROL_RADIUS.into(),
 		},
 		..Default::default()
 	}
+}
+
+fn rounded_pick_list_style(theme: &Theme, status: iced::widget::pick_list::Status) -> iced::widget::pick_list::Style {
+	let mut style = iced::widget::pick_list::default(theme, status);
+	style.border.radius = CONTROL_RADIUS.into();
+	style
+}
+
+fn rounded_pick_list_menu_style(theme: &Theme) -> iced::overlay::menu::Style {
+	let mut style = iced::overlay::menu::default(theme);
+	style.border.radius = CONTROL_RADIUS.into();
+	style
+}
+
+fn rounded_checkbox_style(theme: &Theme, status: iced::widget::checkbox::Status) -> iced::widget::checkbox::Style {
+	let mut style = iced::widget::checkbox::primary(theme, status);
+	style.border.radius = CHECKBOX_RADIUS.into();
+	style
+}
+
+fn rounded_text_editor_style(
+	theme: &Theme, status: iced::widget::text_editor::Status,
+) -> iced::widget::text_editor::Style {
+	let mut style = iced::widget::text_editor::default(theme, status);
+	style.border.radius = CONTROL_RADIUS.into();
+	style
+}
+
+fn rounded_slider_style(theme: &Theme, status: iced::widget::slider::Status) -> iced::widget::slider::Style {
+	let mut style = iced::widget::slider::default(theme, status);
+	style.rail.border.radius = CONTROL_RADIUS.into();
+	style
 }
 
 fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'static, Message> {
