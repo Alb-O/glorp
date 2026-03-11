@@ -578,7 +578,7 @@ fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'static, Messag
 				palette.background.base.text
 			} else {
 				let mut color = palette.background.base.text;
-				color.a = 0.6;
+				color.a = 0.82;
 				color
 			}),
 		}
@@ -601,11 +601,37 @@ fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'static, Messag
 	let content = column![
 		indicator,
 		container(
-			button(label_text)
-				.on_press(Message::SelectSidebarTab(tab))
-				.style(button::text)
+			button(
+				container(label_text)
+					.width(Length::Fill)
+					.height(Length::Fill)
+					.center_x(Length::Fill)
+					.center_y(Length::Fill),
+			)
+			.on_press(Message::SelectSidebarTab(tab))
+			.width(Length::Fill)
+			.height(Length::Fill)
+			.style(move |theme: &Theme, status| {
+				let palette = theme.extended_palette();
+				let mut overlay = palette.background.strong.color;
+				overlay.a = if is_active {
+					0.0
+				} else {
+					match status {
+						button::Status::Hovered => 0.18,
+						button::Status::Pressed => 0.24,
+						_ => 0.0,
+					}
+				};
+
+				button::Style {
+					background: Some(overlay.into()),
+					..button::text(theme, status)
+				}
+			})
 		)
 		.padding([3, 10])
+		.height(Length::Fill)
 		.width(Length::Fill)
 	]
 	.spacing(0);
