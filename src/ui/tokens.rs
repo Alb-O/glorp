@@ -8,6 +8,7 @@ const CONTROL_LABEL_WIDTH: f32 = 90.0;
 pub(crate) const CONTROL_RADIUS: f32 = 6.0;
 const CHECKBOX_RADIUS: f32 = 4.0;
 const PANEL_SCROLLBAR_WIDTH: f32 = 8.0;
+const PANEL_SCROLLER_WIDTH: f32 = 8.0;
 const PANEL_SCROLLBAR_GAP: f32 = 10.0;
 
 pub(crate) fn control_row<'a>(label: impl Into<String>, control: Element<'a, Message>) -> Element<'a, Message> {
@@ -36,7 +37,7 @@ pub(crate) fn panel_scrollable<'a>(content: impl Into<Element<'a, Message>>) -> 
 		.direction(scrollable::Direction::Vertical(
 			scrollable::Scrollbar::new()
 				.width(PANEL_SCROLLBAR_WIDTH)
-				.scroller_width(PANEL_SCROLLBAR_WIDTH)
+				.scroller_width(PANEL_SCROLLER_WIDTH)
 				.spacing(PANEL_SCROLLBAR_GAP),
 		))
 		.style(panel_scrollable_style)
@@ -60,17 +61,47 @@ pub(crate) fn panel_scrollable_style(
 ) -> iced::widget::scrollable::Style {
 	let palette = theme.extended_palette();
 	let mut style = iced::widget::scrollable::default(theme, status);
+
+	let idle = (0.10, 0.38, palette.background.strongest.color, 0.0);
+	let (rail_alpha, handle_alpha, handle_color, border_alpha) = match status {
+		iced::widget::scrollable::Status::Active { .. } => idle,
+		iced::widget::scrollable::Status::Hovered {
+			is_vertical_scrollbar_hovered,
+			..
+		} => {
+			if is_vertical_scrollbar_hovered {
+				(0.18, 0.92, palette.primary.strong.color, 0.35)
+			} else {
+				idle
+			}
+		}
+		iced::widget::scrollable::Status::Dragged {
+			is_vertical_scrollbar_dragged,
+			..
+		} => {
+			if is_vertical_scrollbar_dragged {
+				(0.24, 1.0, palette.primary.base.color, 0.5)
+			} else {
+				idle
+			}
+		}
+	};
+
 	let rail = iced::widget::scrollable::Rail {
-		background: Some(palette.background.weak.color.scale_alpha(0.55).into()),
+		background: Some(palette.background.weak.color.scale_alpha(rail_alpha).into()),
 		border: iced::Border {
+			color: palette.background.strong.color.scale_alpha(border_alpha * 0.5),
+			width: if border_alpha > 0.0 { 1.0 } else { 0.0 },
 			radius: CONTROL_RADIUS.into(),
-			..style.vertical_rail.border
+			..iced::Border::default()
 		},
 		scroller: iced::widget::scrollable::Scroller {
-			background: palette.background.strongest.color.scale_alpha(0.9).into(),
+			background: handle_color.scale_alpha(handle_alpha).into(),
 			border: iced::Border {
+				color: palette.background.base.color.scale_alpha(border_alpha),
+				width: if border_alpha > 0.0 { 1.0 } else { 0.0 },
 				radius: CONTROL_RADIUS.into(),
-				..style.vertical_rail.scroller.border
+				..iced::Border::default()
 			},
 		},
 	};
