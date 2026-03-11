@@ -1,0 +1,453 @@
+use cosmic_text::{Attrs, Buffer, Command, FontSystem, Metrics, SwashCache};
+use iced::{Font, Point};
+
+use std::fmt::Write as _;
+use std::ops::Range;
+
+use crate::types::{CanvasTarget, FontChoice, RenderMode, ShapingChoice, WrapChoice};
+
+#[derive(Debug, Clone)]
+pub(crate) struct LayoutScene {
+	pub(crate) text: String,
+	pub(crate) font: Font,
+	pub(crate) shaping: ShapingChoice,
+	pub(crate) font_size: f32,
+	pub(crate) line_height: f32,
+	pub(crate) max_width: f32,
+	pub(crate) measured_width: f32,
+	pub(crate) measured_height: f32,
+	pub(crate) glyph_count: usize,
+	pub(crate) runs: Vec<RunInfo>,
+	pub(crate) fonts_seen: Vec<String>,
+	pub(crate) warnings: Vec<String>,
+	pub(crate) dump: String,
+	pub(crate) draw_canvas_text: bool,
+	pub(crate) draw_outlines: bool,
+	pub(crate) canvas_wraps: bool,
+}
+
+impl LayoutScene {
+	#[allow(clippy::too_many_arguments)]
+	pub(crate) fn build(
+		font_system: &mut FontSystem, text: String, font_choice: FontChoice, shaping: ShapingChoice,
+		wrapping: WrapChoice, font_size: f32, line_height: f32, max_width: f32, render_mode: RenderMode,
+	) -> Self {
+		let mut buffer = Buffer::new(font_system, Metrics::new(font_size, line_height));
+		buffer.set_size(font_system, Some(max_width), None);
+		buffer.set_wrap(font_system, wrapping.to_cosmic());
+		buffer.set_text(
+			font_system,
+			&text,
+			&to_attributes(font_choice.to_iced_font()),
+			shaping.to_cosmic(&text),
+			None,
+		);
+
+		let mut swash_cache = SwashCache::new();
+		let mut runs = Vec::new();
+		let mut warnings = Vec::new();
+		let mut fonts_seen = Vec::<String>::new();
+		let mut measured_width: f32 = 0.0;
+		let mut measured_height: f32 = 0.0;
+		let mut glyph_count = 0usize;
+
+		for run in buffer.layout_runs() {
+			measured_width = measured_width.max(run.line_w);
+			measured_height = measured_height.max(run.line_top + run.line_height);
+
+			let mut glyphs = Vec::new();
+			for glyph in run.glyphs {
+				glyph_count += 1;
+
+				let font_name = font_system
+					.db()
+					.face(glyph.font_id)
+					.map(|face| face.post_script_name.clone())
+					.unwrap_or_else(|| format!("font#{:?}", glyph.font_id));
+
+				if !fonts_seen.iter().any(|existing| existing == &font_name) {
+					fonts_seen.push(font_name.clone());
+				}
+
+				let cluster_text = run
+					.text
+					.get(glyph.start..glyph.end)
+					.map(debug_snippet)
+					.unwrap_or_else(|| "<invalid utf8 slice>".to_string());
+
+				let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
+				let outline = swash_cache
+					.get_outline_commands(font_system, physical_glyph.cache_key)
+					.map(|commands| OutlinePath {
+						commands: commands
+							.iter()
+							.map(|command| match command {
+								Command::MoveTo(point) => PathCommand::MoveTo(PathPoint {
+									x: point.x + glyph.x + glyph.x_offset,
+									y: -point.y + run.line_y + glyph.y_offset,
+								}),
+								Command::LineTo(point) => PathCommand::LineTo(PathPoint {
+									x: point.x + glyph.x + glyph.x_offset,
+									y: -point.y + run.line_y + glyph.y_offset,
+								}),
+								Command::QuadTo(control, to) => PathCommand::QuadTo(
+									PathPoint {
+										x: control.x + glyph.x + glyph.x_offset,
+										y: -control.y + run.line_y + glyph.y_offset,
+									},
+									PathPoint {
+										x: to.x + glyph.x + glyph.x_offset,
+										y: -to.y + run.line_y + glyph.y_offset,
+									},
+								),
+								Command::CurveTo(a, b, to) => PathCommand::CurveTo(
+									PathPoint {
+										x: a.x + glyph.x + glyph.x_offset,
+										y: -a.y + run.line_y + glyph.y_offset,
+									},
+									PathPoint {
+										x: b.x + glyph.x + glyph.x_offset,
+										y: -b.y + run.line_y + glyph.y_offset,
+									},
+									PathPoint {
+										x: to.x + glyph.x + glyph.x_offset,
+										y: -to.y + run.line_y + glyph.y_offset,
+									},
+								),
+								Command::Close => PathCommand::Close,
+							})
+							.collect(),
+					});
+
+				glyphs.push(GlyphInfo {
+					cluster: cluster_text,
+					cluster_range: glyph.start..glyph.end,
+					x: glyph.x,
+					y: run.line_top + glyph.y,
+					width: glyph.w,
+					height: glyph.line_height_opt.unwrap_or(run.line_height),
+					glyph_id: glyph.glyph_id,
+					font_name,
+					font_size: glyph.font_size,
+					x_offset: glyph.x_offset,
+					y_offset: glyph.y_offset,
+					outline,
+				});
+			}
+
+			runs.push(RunInfo {
+				line_index: run.line_i,
+				rtl: run.rtl,
+				baseline: run.line_y,
+				line_top: run.line_top,
+				line_height: run.line_height,
+				line_width: run.line_w,
+				glyphs,
+			});
+		}
+
+		if matches!(render_mode, RenderMode::CanvasOnly | RenderMode::CanvasAndOutlines)
+			&& matches!(wrapping, WrapChoice::Glyph | WrapChoice::WordOrGlyph)
+		{
+			warnings.push(
+                "The blue overlay uses `canvas::Text`, which only exposes Iced's default wrapping behavior. Glyph-level wrapping is only reflected in the outline and dump.".to_string(),
+            );
+		}
+
+		if runs.is_empty() {
+			warnings.push("No layout runs were produced. Check the font choice and text content.".to_string());
+		}
+
+		let dump = build_dump(
+			&text,
+			font_choice,
+			shaping,
+			wrapping,
+			render_mode,
+			font_size,
+			line_height,
+			max_width,
+			measured_width,
+			measured_height,
+			glyph_count,
+			&fonts_seen,
+			&runs,
+		);
+
+		Self {
+			text,
+			font: font_choice.to_iced_font(),
+			shaping,
+			font_size,
+			line_height,
+			max_width,
+			measured_width,
+			measured_height,
+			glyph_count,
+			runs,
+			fonts_seen,
+			warnings,
+			dump,
+			draw_canvas_text: render_mode.draw_canvas_text(),
+			draw_outlines: render_mode.draw_outlines(),
+			canvas_wraps: !matches!(wrapping, WrapChoice::None),
+		}
+	}
+
+	pub(crate) fn hit_test(&self, local: Point) -> Option<CanvasTarget> {
+		for (run_index, run) in self.runs.iter().enumerate() {
+			for (glyph_index, glyph) in run.glyphs.iter().enumerate() {
+				if contains_point(local, glyph.x, glyph.y, glyph.width.max(1.0), glyph.height.max(1.0)) {
+					return Some(CanvasTarget::Glyph { run_index, glyph_index });
+				}
+			}
+
+			if contains_point(
+				local,
+				0.0,
+				run.line_top,
+				self.max_width.max(run.line_width).max(1.0),
+				run.line_height.max(1.0),
+			) {
+				return Some(CanvasTarget::Run(run_index));
+			}
+		}
+
+		None
+	}
+
+	pub(crate) fn target_details(&self, target: Option<CanvasTarget>) -> Option<String> {
+		match target? {
+			CanvasTarget::Run(run_index) => {
+				let run = self.runs.get(run_index)?;
+				Some(format!(
+					"  kind: run\n  run index: {run_index}\n  source line: {}\n  rtl: {}\n  top: {:.1}\n  baseline: {:.1}\n  height: {:.1}\n  width: {:.1}\n  glyphs: {}",
+					run.line_index,
+					run.rtl,
+					run.line_top,
+					run.baseline,
+					run.line_height,
+					run.line_width,
+					run.glyphs.len(),
+				))
+			}
+			CanvasTarget::Glyph { run_index, glyph_index } => {
+				let run = self.runs.get(run_index)?;
+				let glyph = run.glyphs.get(glyph_index)?;
+				Some(format!(
+					"  kind: glyph\n  run index: {run_index}\n  glyph index: {glyph_index}\n  source line: {}\n  cluster: {}\n  bytes: {:?}\n  font: {}\n  glyph id: {}\n  x/y: {:.1}, {:.1}\n  w/h: {:.1}, {:.1}\n  size: {:.1}\n  x/y offset: {:.3}, {:.3}\n  outline: {}",
+					run.line_index,
+					glyph.cluster,
+					glyph.cluster_range,
+					glyph.font_name,
+					glyph.glyph_id,
+					glyph.x,
+					glyph.y,
+					glyph.width,
+					glyph.height,
+					glyph.font_size,
+					glyph.x_offset,
+					glyph.y_offset,
+					glyph.outline.is_some(),
+				))
+			}
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RunInfo {
+	pub(crate) line_index: usize,
+	pub(crate) rtl: bool,
+	pub(crate) baseline: f32,
+	pub(crate) line_top: f32,
+	pub(crate) line_height: f32,
+	pub(crate) line_width: f32,
+	pub(crate) glyphs: Vec<GlyphInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GlyphInfo {
+	pub(crate) cluster: String,
+	pub(crate) cluster_range: Range<usize>,
+	pub(crate) x: f32,
+	pub(crate) y: f32,
+	pub(crate) width: f32,
+	pub(crate) height: f32,
+	pub(crate) glyph_id: u16,
+	pub(crate) font_name: String,
+	pub(crate) font_size: f32,
+	pub(crate) x_offset: f32,
+	pub(crate) y_offset: f32,
+	pub(crate) outline: Option<OutlinePath>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct OutlinePath {
+	pub(crate) commands: Vec<PathCommand>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum PathCommand {
+	MoveTo(PathPoint),
+	LineTo(PathPoint),
+	QuadTo(PathPoint, PathPoint),
+	CurveTo(PathPoint, PathPoint, PathPoint),
+	Close,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PathPoint {
+	pub(crate) x: f32,
+	pub(crate) y: f32,
+}
+
+pub(crate) fn make_font_system() -> FontSystem {
+	let mut font_system = FontSystem::new();
+	let db = font_system.db_mut();
+	db.set_monospace_family("JetBrains Mono");
+	db.set_sans_serif_family("Noto Sans CJK SC");
+	font_system
+}
+
+fn contains_point(point: Point, x: f32, y: f32, width: f32, height: f32) -> bool {
+	point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + height
+}
+
+fn to_attributes(font: Font) -> Attrs<'static> {
+	Attrs::new()
+		.family(to_family(font.family))
+		.weight(to_weight(font.weight))
+		.stretch(to_stretch(font.stretch))
+		.style(to_style(font.style))
+}
+
+fn to_family(family: iced::font::Family) -> cosmic_text::Family<'static> {
+	match family {
+		iced::font::Family::Name(name) => cosmic_text::Family::Name(name),
+		iced::font::Family::SansSerif => cosmic_text::Family::SansSerif,
+		iced::font::Family::Serif => cosmic_text::Family::Serif,
+		iced::font::Family::Cursive => cosmic_text::Family::Cursive,
+		iced::font::Family::Fantasy => cosmic_text::Family::Fantasy,
+		iced::font::Family::Monospace => cosmic_text::Family::Monospace,
+	}
+}
+
+fn to_weight(weight: iced::font::Weight) -> cosmic_text::Weight {
+	match weight {
+		iced::font::Weight::Thin => cosmic_text::Weight::THIN,
+		iced::font::Weight::ExtraLight => cosmic_text::Weight::EXTRA_LIGHT,
+		iced::font::Weight::Light => cosmic_text::Weight::LIGHT,
+		iced::font::Weight::Normal => cosmic_text::Weight::NORMAL,
+		iced::font::Weight::Medium => cosmic_text::Weight::MEDIUM,
+		iced::font::Weight::Semibold => cosmic_text::Weight::SEMIBOLD,
+		iced::font::Weight::Bold => cosmic_text::Weight::BOLD,
+		iced::font::Weight::ExtraBold => cosmic_text::Weight::EXTRA_BOLD,
+		iced::font::Weight::Black => cosmic_text::Weight::BLACK,
+	}
+}
+
+fn to_stretch(stretch: iced::font::Stretch) -> cosmic_text::Stretch {
+	match stretch {
+		iced::font::Stretch::UltraCondensed => cosmic_text::Stretch::UltraCondensed,
+		iced::font::Stretch::ExtraCondensed => cosmic_text::Stretch::ExtraCondensed,
+		iced::font::Stretch::Condensed => cosmic_text::Stretch::Condensed,
+		iced::font::Stretch::SemiCondensed => cosmic_text::Stretch::SemiCondensed,
+		iced::font::Stretch::Normal => cosmic_text::Stretch::Normal,
+		iced::font::Stretch::SemiExpanded => cosmic_text::Stretch::SemiExpanded,
+		iced::font::Stretch::Expanded => cosmic_text::Stretch::Expanded,
+		iced::font::Stretch::ExtraExpanded => cosmic_text::Stretch::ExtraExpanded,
+		iced::font::Stretch::UltraExpanded => cosmic_text::Stretch::UltraExpanded,
+	}
+}
+
+fn to_style(style: iced::font::Style) -> cosmic_text::Style {
+	match style {
+		iced::font::Style::Normal => cosmic_text::Style::Normal,
+		iced::font::Style::Italic => cosmic_text::Style::Italic,
+		iced::font::Style::Oblique => cosmic_text::Style::Oblique,
+	}
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_dump(
+	text_value: &str, font: FontChoice, shaping: ShapingChoice, wrapping: WrapChoice, render_mode: RenderMode,
+	font_size: f32, line_height: f32, max_width: f32, measured_width: f32, measured_height: f32, glyph_count: usize,
+	fonts_seen: &[String], runs: &[RunInfo],
+) -> String {
+	let mut dump = String::new();
+
+	let _ = writeln!(dump, "config");
+	let _ = writeln!(dump, "  font: {font}");
+	let _ = writeln!(dump, "  shaping: {shaping}");
+	let _ = writeln!(dump, "  wrapping: {wrapping}");
+	let _ = writeln!(dump, "  render mode: {render_mode}");
+	let _ = writeln!(dump, "  text length: {} bytes", text_value.len());
+	let _ = writeln!(dump, "  font size: {:.1}", font_size);
+	let _ = writeln!(dump, "  line height: {:.1}", line_height);
+	let _ = writeln!(dump, "  max width: {:.1}", max_width);
+	let _ = writeln!(dump, "  measured width: {:.1}", measured_width);
+	let _ = writeln!(dump, "  measured height: {:.1}", measured_height);
+	let _ = writeln!(dump, "  runs: {}", runs.len());
+	let _ = writeln!(dump, "  glyphs: {glyph_count}");
+	let _ = writeln!(dump, "  fonts used: {}", fonts_seen.join(", "));
+	let _ = writeln!(dump);
+
+	let glyph_limit = 220usize;
+	let mut emitted = 0usize;
+
+	for (run_index, run) in runs.iter().enumerate() {
+		let _ = writeln!(
+			dump,
+			"run {run_index}: line={} rtl={} top={:.1} baseline={:.1} height={:.1} width={:.1} glyphs={}",
+			run.line_index,
+			run.rtl,
+			run.line_top,
+			run.baseline,
+			run.line_height,
+			run.line_width,
+			run.glyphs.len(),
+		);
+
+		for glyph in &run.glyphs {
+			if emitted >= glyph_limit {
+				let remaining = glyph_count.saturating_sub(emitted);
+				let _ = writeln!(dump, "  ... truncated {remaining} more glyphs");
+				return dump;
+			}
+
+			emitted += 1;
+			let _ = writeln!(
+				dump,
+				"  glyph {}: cluster={} bytes={:?} font={} glyph_id={} x={:.1} y={:.1} w={:.1} h={:.1} size={:.1} x_off={:.3} y_off={:.3} outline={}",
+				emitted - 1,
+				glyph.cluster,
+				glyph.cluster_range,
+				glyph.font_name,
+				glyph.glyph_id,
+				glyph.x,
+				glyph.y,
+				glyph.width,
+				glyph.height,
+				glyph.font_size,
+				glyph.x_offset,
+				glyph.y_offset,
+				glyph.outline.is_some(),
+			);
+		}
+
+		let _ = writeln!(dump);
+	}
+
+	dump
+}
+
+fn debug_snippet(text: &str) -> String {
+	let escaped: String = text.chars().flat_map(char::escape_default).collect();
+
+	if escaped.is_empty() {
+		"<empty>".to_string()
+	} else {
+		format!("\"{escaped}\"")
+	}
+}
