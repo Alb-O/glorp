@@ -1,12 +1,13 @@
 use iced::Font;
-use iced::advanced::text::{Shaping, Wrapping};
-use iced::widget::text_editor;
+use iced::Point;
+use iced::advanced::text::Shaping;
 
 use std::fmt::{self, Display};
 
+use crate::editor::EditorCommand;
+
 #[derive(Debug, Clone)]
 pub(crate) enum Message {
-	Edit(text_editor::Action),
 	LoadPreset(SamplePreset),
 	FontSelected(FontChoice),
 	ShapingSelected(ShapingChoice),
@@ -19,7 +20,11 @@ pub(crate) enum Message {
 	ShowHitboxesChanged(bool),
 	SelectSidebarTab(SidebarTab),
 	CanvasHovered(Option<CanvasTarget>),
-	CanvasSelected(Option<CanvasTarget>),
+	CanvasClicked {
+		target: Option<CanvasTarget>,
+		position: Point,
+	},
+	EditorCommand(EditorCommand),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -190,15 +195,6 @@ pub(crate) enum WrapChoice {
 
 impl WrapChoice {
 	pub(crate) const ALL: [WrapChoice; 4] = [Self::None, Self::Word, Self::Glyph, Self::WordOrGlyph];
-
-	pub(crate) fn to_iced(self) -> Wrapping {
-		match self {
-			WrapChoice::None => Wrapping::None,
-			WrapChoice::Word => Wrapping::Word,
-			WrapChoice::Glyph => Wrapping::Glyph,
-			WrapChoice::WordOrGlyph => Wrapping::WordOrGlyph,
-		}
-	}
 
 	pub(crate) fn to_cosmic(self) -> cosmic_text::Wrap {
 		match self {

@@ -18,6 +18,7 @@ pub(crate) struct LayoutScene {
 	pub(crate) measured_height: f32,
 	pub(crate) glyph_count: usize,
 	pub(crate) runs: Vec<RunInfo>,
+	pub(crate) clusters: Vec<ClusterInfo>,
 	pub(crate) fonts_seen: Vec<String>,
 	pub(crate) warnings: Vec<String>,
 	pub(crate) dump: String,
@@ -50,6 +51,7 @@ impl LayoutScene {
 		let mut measured_width: f32 = 0.0;
 		let mut measured_height: f32 = 0.0;
 		let mut glyph_count = 0usize;
+		let mut clusters = Vec::new();
 
 		for run in buffer.layout_runs() {
 			measured_width = measured_width.max(run.line_w);
@@ -135,6 +137,10 @@ impl LayoutScene {
 				});
 			}
 
+			let cluster_start = clusters.len();
+			clusters.extend(build_clusters(&text, run.line_i, runs.len(), &glyphs));
+			let cluster_end = clusters.len();
+
 			runs.push(RunInfo {
 				line_index: run.line_i,
 				rtl: run.rtl,
@@ -142,6 +148,7 @@ impl LayoutScene {
 				line_top: run.line_top,
 				line_height: run.line_height,
 				line_width: run.line_w,
+				cluster_range: cluster_start..cluster_end,
 				glyphs,
 			});
 		}
@@ -185,6 +192,7 @@ impl LayoutScene {
 			measured_height,
 			glyph_count,
 			runs,
+			clusters,
 			fonts_seen,
 			warnings,
 			dump,
@@ -214,6 +222,157 @@ impl LayoutScene {
 		}
 
 		None
+	}
+
+	pub(crate) fn hit_test_cluster(&self, local: Point) -> Option<usize> {
+		if self.clusters.is_empty() {
+			return None;
+		}
+
+		if let Some(target) = self.hit_test(local) {
+			return self.cluster_index_for_target(target);
+		}
+
+		let run_index = self
+			.runs
+			.iter()
+			.enumerate()
+			.find(|(_, run)| {
+				contains_point(
+					local,
+					0.0,
+					run.line_top,
+					self.max_width.max(1.0),
+					run.line_height.max(1.0),
+				)
+			})
+			.map(|(index, _)| index)
+			.or_else(|| nearest_run(self.runs.iter().enumerate(), local.y));
+
+		run_index.and_then(|run_index| self.nearest_cluster_in_run(run_index, local.x))
+	}
+
+	pub(crate) fn clusters(&self) -> &[ClusterInfo] {
+		&self.clusters
+	}
+
+	pub(crate) fn cluster(&self, index: usize) -> Option<&ClusterInfo> {
+		self.clusters.get(index)
+	}
+
+	pub(crate) fn cluster_index_for_range(&self, range: &Range<usize>) -> Option<usize> {
+		self.clusters.iter().position(|cluster| cluster.byte_range == *range)
+	}
+
+	pub(crate) fn cluster_index_for_target(&self, target: CanvasTarget) -> Option<usize> {
+		match target {
+			CanvasTarget::Run(run_index) => self.nearest_cluster_in_run(run_index, 0.0),
+			CanvasTarget::Glyph { run_index, glyph_index } => self
+				.runs
+				.get(run_index)
+				.and_then(|run| run.glyphs.get(glyph_index))
+				.and_then(|glyph| self.cluster_index_for_range(&glyph.cluster_range)),
+		}
+	}
+
+	pub(crate) fn cluster_at_or_after(&self, byte: usize) -> Option<usize> {
+		self.clusters
+			.iter()
+			.position(|cluster| cluster.byte_range.start >= byte || is_inside(cluster.byte_range.clone(), byte))
+	}
+
+	pub(crate) fn cluster_before(&self, byte: usize) -> Option<usize> {
+		self.clusters
+			.iter()
+			.enumerate()
+			.filter(|(_, cluster)| cluster.byte_range.end <= byte || is_inside(cluster.byte_range.clone(), byte))
+			.map(|(index, _)| index)
+			.last()
+	}
+
+	pub(crate) fn first_cluster_in_run(&self, run_index: usize) -> Option<usize> {
+		self.runs
+			.get(run_index)
+			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.start))
+	}
+
+	pub(crate) fn last_cluster_in_run(&self, run_index: usize) -> Option<usize> {
+		self.runs
+			.get(run_index)
+			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.end - 1))
+	}
+
+	pub(crate) fn nearest_cluster_on_adjacent_run(
+		&self, run_index: usize, preferred_x: f32, direction: isize,
+	) -> Option<usize> {
+		let mut next = run_index as isize + direction;
+
+		while next >= 0 && next < self.runs.len() as isize {
+			if let Some(target) = self.nearest_cluster_in_run(next as usize, preferred_x) {
+				return Some(target);
+			}
+			next += direction;
+		}
+
+		None
+	}
+
+	pub(crate) fn nearest_cluster_in_run(&self, run_index: usize, preferred_x: f32) -> Option<usize> {
+		let run = self.runs.get(run_index)?;
+		if run.cluster_range.is_empty() {
+			return None;
+		}
+
+		self.clusters[run.cluster_range.clone()]
+			.iter()
+			.enumerate()
+			.min_by(|(_, a), (_, b)| {
+				(a.center_x() - preferred_x)
+					.abs()
+					.total_cmp(&(b.center_x() - preferred_x).abs())
+			})
+			.map(|(offset, _)| run.cluster_range.start + offset)
+	}
+
+	pub(crate) fn caret_metrics(&self, byte: usize) -> CaretMetrics {
+		if self.clusters.is_empty() {
+			return CaretMetrics {
+				x: 0.0,
+				y: 0.0,
+				height: self.line_height.max(1.0),
+				run_index: 0,
+			};
+		}
+
+		if let Some(index) = self.cluster_at_or_after(byte) {
+			let cluster = &self.clusters[index];
+			if byte <= cluster.byte_range.start {
+				return CaretMetrics {
+					x: cluster.x,
+					y: cluster.y,
+					height: cluster.height.max(1.0),
+					run_index: cluster.run_index,
+				};
+			}
+		}
+
+		if let Some(index) = self.cluster_before(byte) {
+			let cluster = &self.clusters[index];
+			return CaretMetrics {
+				x: cluster.x + cluster.width,
+				y: cluster.y,
+				height: cluster.height.max(1.0),
+				run_index: cluster.run_index,
+			};
+		}
+
+		let cluster = &self.clusters[0];
+		CaretMetrics {
+			x: cluster.x,
+			y: cluster.y,
+			height: cluster.height.max(1.0),
+			run_index: cluster.run_index,
+		}
 	}
 
 	pub(crate) fn target_details(&self, target: Option<CanvasTarget>) -> Option<String> {
@@ -263,7 +422,27 @@ pub(crate) struct RunInfo {
 	pub(crate) line_top: f32,
 	pub(crate) line_height: f32,
 	pub(crate) line_width: f32,
+	pub(crate) cluster_range: Range<usize>,
 	pub(crate) glyphs: Vec<GlyphInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ClusterInfo {
+	pub(crate) run_index: usize,
+	pub(crate) glyph_start: usize,
+	pub(crate) glyph_end: usize,
+	pub(crate) byte_range: Range<usize>,
+	pub(crate) x: f32,
+	pub(crate) y: f32,
+	pub(crate) width: f32,
+	pub(crate) height: f32,
+	pub(crate) preview: String,
+}
+
+impl ClusterInfo {
+	pub(crate) fn center_x(&self) -> f32 {
+		self.x + (self.width * 0.5)
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -302,6 +481,14 @@ pub(crate) struct PathPoint {
 	pub(crate) y: f32,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CaretMetrics {
+	pub(crate) x: f32,
+	pub(crate) y: f32,
+	pub(crate) height: f32,
+	pub(crate) run_index: usize,
+}
+
 pub(crate) fn make_font_system() -> FontSystem {
 	let mut font_system = FontSystem::new();
 	let db = font_system.db_mut();
@@ -312,6 +499,61 @@ pub(crate) fn make_font_system() -> FontSystem {
 
 fn contains_point(point: Point, x: f32, y: f32, width: f32, height: f32) -> bool {
 	point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + height
+}
+
+fn build_clusters(text: &str, line_index: usize, run_index: usize, glyphs: &[GlyphInfo]) -> Vec<ClusterInfo> {
+	let mut clusters = Vec::new();
+	let mut current: Option<ClusterInfo> = None;
+
+	for (glyph_index, glyph) in glyphs.iter().enumerate() {
+		match current.as_mut() {
+			Some(cluster) if cluster.byte_range == glyph.cluster_range => {
+				cluster.width = (glyph.x + glyph.width - cluster.x).max(cluster.width);
+				cluster.height = cluster.height.max(glyph.height);
+				cluster.glyph_end = glyph_index + 1;
+				cluster.y = cluster.y.min(glyph.y);
+			}
+			_ => {
+				if let Some(cluster) = current.take() {
+					clusters.push(cluster);
+				}
+
+				current = Some(ClusterInfo {
+					run_index,
+					glyph_start: glyph_index,
+					glyph_end: glyph_index + 1,
+					byte_range: glyph.cluster_range.clone(),
+					x: glyph.x,
+					y: glyph.y,
+					width: glyph.width.max(1.0),
+					height: glyph.height.max(1.0),
+					preview: text
+						.get(glyph.cluster_range.clone())
+						.map(debug_snippet)
+						.unwrap_or_else(|| format!("<line {line_index}>")),
+				});
+			}
+		}
+	}
+
+	if let Some(cluster) = current {
+		clusters.push(cluster);
+	}
+
+	clusters
+}
+
+fn nearest_run<'a>(runs: impl Iterator<Item = (usize, &'a RunInfo)>, y: f32) -> Option<usize> {
+	runs.min_by(|(_, a), (_, b)| {
+		let a_center = a.line_top + (a.line_height * 0.5);
+		let b_center = b.line_top + (b.line_height * 0.5);
+		(a_center - y).abs().total_cmp(&(b_center - y).abs())
+	})
+	.map(|(index, _)| index)
+}
+
+fn is_inside(range: Range<usize>, byte: usize) -> bool {
+	range.start < byte && byte < range.end
 }
 
 fn to_attributes(font: Font) -> Attrs<'static> {

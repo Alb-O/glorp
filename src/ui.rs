@@ -63,14 +63,6 @@ pub(crate) fn rounded_checkbox_style(
 	style
 }
 
-pub(crate) fn rounded_text_editor_style(
-	theme: &Theme, status: iced::widget::text_editor::Status,
-) -> iced::widget::text_editor::Style {
-	let mut style = iced::widget::text_editor::default(theme, status);
-	style.border.radius = CONTROL_RADIUS.into();
-	style
-}
-
 pub(crate) fn rounded_slider_style(theme: &Theme, status: iced::widget::slider::Status) -> iced::widget::slider::Style {
 	let mut style = iced::widget::slider::default(theme, status);
 	style.rail.border.radius = CONTROL_RADIUS.into();

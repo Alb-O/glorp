@@ -1,19 +1,19 @@
-use iced::advanced::text::LineHeight;
-use iced::widget::{canvas, checkbox, column, container, pick_list, row, scrollable, slider, text, text_editor};
-use iced::{Element, Font, Length, Pixels, Task, Theme};
+use iced::widget::{canvas, checkbox, column, container, pick_list, row, scrollable, slider, text};
+use iced::{Element, Font, Length, Task, Theme};
 
 use std::fmt::Write as _;
 
 use crate::canvas_view::GlyphCanvas;
+use crate::editor::EditorBuffer;
 use crate::scene::{LayoutScene, make_font_system};
 use crate::types::{FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
 use crate::ui::{
 	CONTROL_RADIUS, SIDEBAR_WIDTH, control_row, panel_style, rounded_checkbox_style, rounded_pick_list_menu_style,
-	rounded_pick_list_style, rounded_slider_style, rounded_text_editor_style, surface_style, view_sidebar_tab,
+	rounded_pick_list_style, rounded_slider_style, surface_style, view_sidebar_tab,
 };
 
 pub(crate) struct Playground {
-	source: text_editor::Content,
+	editor: EditorBuffer,
 	preset: SamplePreset,
 	font: FontChoice,
 	shaping: ShapingChoice,
@@ -29,13 +29,14 @@ pub(crate) struct Playground {
 	selected_target: Option<crate::types::CanvasTarget>,
 	scene: LayoutScene,
 	font_system: cosmic_text::FontSystem,
+	scene_revision: u64,
 }
 
 impl Playground {
 	pub(crate) fn new() -> (Self, Task<Message>) {
 		let mut font_system = make_font_system();
 		let preset = SamplePreset::Mixed;
-		let source = text_editor::Content::with_text(preset.text());
+		let editor = EditorBuffer::new(preset.text());
 		let font = FontChoice::JetBrainsMono;
 		let shaping = ShapingChoice::Advanced;
 		let wrapping = WrapChoice::Word;
@@ -48,7 +49,7 @@ impl Playground {
 		let active_sidebar_tab = SidebarTab::Controls;
 		let scene = LayoutScene::build(
 			&mut font_system,
-			source.text(),
+			editor.text().to_string(),
 			font,
 			shaping,
 			wrapping,
@@ -57,10 +58,12 @@ impl Playground {
 			layout_width,
 			render_mode,
 		);
+		let mut editor = editor;
+		editor.sync_with_scene(&scene);
 
 		(
 			Self {
-				source,
+				editor,
 				preset,
 				font,
 				shaping,
@@ -76,6 +79,7 @@ impl Playground {
 				selected_target: None,
 				scene,
 				font_system,
+				scene_revision: 1,
 			},
 			Task::none(),
 		)
@@ -83,15 +87,10 @@ impl Playground {
 
 	pub(crate) fn update(&mut self, message: Message) -> Task<Message> {
 		match message {
-			Message::Edit(action) => {
-				self.source.perform(action);
-				self.preset = SamplePreset::Custom;
-				self.refresh_scene();
-			}
 			Message::LoadPreset(preset) => {
 				self.preset = preset;
 				if !matches!(preset, SamplePreset::Custom) {
-					self.source = text_editor::Content::with_text(preset.text());
+					self.editor.reset(preset.text());
 					self.refresh_scene();
 				}
 			}
@@ -126,9 +125,11 @@ impl Playground {
 			}
 			Message::ShowBaselinesChanged(show_baselines) => {
 				self.show_baselines = show_baselines;
+				self.scene_revision += 1;
 			}
 			Message::ShowHitboxesChanged(show_hitboxes) => {
 				self.show_hitboxes = show_hitboxes;
+				self.scene_revision += 1;
 			}
 			Message::SelectSidebarTab(tab) => {
 				self.active_sidebar_tab = tab;
@@ -136,8 +137,20 @@ impl Playground {
 			Message::CanvasHovered(target) => {
 				self.hovered_target = target;
 			}
-			Message::CanvasSelected(target) => {
+			Message::CanvasClicked { target, position } => {
 				self.selected_target = target;
+				self.editor
+					.apply(crate::editor::EditorCommand::SelectClusterAt(position), &self.scene);
+				self.sync_selected_target();
+			}
+			Message::EditorCommand(command) => {
+				let changed = self.editor.apply(command, &self.scene);
+				self.preset = SamplePreset::Custom;
+				if changed {
+					self.refresh_scene();
+				} else {
+					self.sync_selected_target();
+				}
 			}
 		}
 
@@ -161,6 +174,7 @@ impl Playground {
 				)
 				.size(15),
 				self.view_sidebar_tabs(),
+				self.view_editor_status(),
 				container(self.view_sidebar_body()).height(Length::Fill),
 			]
 			.spacing(12)
@@ -261,24 +275,39 @@ impl Playground {
 					.label("Show glyph hitboxes")
 					.style(rounded_checkbox_style)
 					.on_toggle(Message::ShowHitboxesChanged),
-				text("Source").size(18),
-				self.view_source_editor(),
+				text("Canvas editor").size(18),
+				self.view_editor_help(),
 			]
 			.spacing(14),
 		)
 		.into()
 	}
 
-	fn view_source_editor(&self) -> Element<'_, Message> {
-		text_editor(&self.source)
-			.on_action(Message::Edit)
-			.font(self.font.to_iced_font())
-			.wrapping(self.wrapping.to_iced())
-			.line_height(LineHeight::Absolute(Pixels(self.line_height)))
-			.size(Pixels((self.font_size * 0.68).max(14.0)))
-			.style(rounded_text_editor_style)
-			.height(220)
-			.into()
+	fn view_editor_status(&self) -> Element<'_, Message> {
+		container(
+			text(format!(
+				"Editor: {} mode, {} bytes",
+				self.editor.mode(),
+				self.editor.text().len()
+			))
+			.font(Font::MONOSPACE)
+			.size(14),
+		)
+		.padding([0, 2])
+		.into()
+	}
+
+	fn view_editor_help(&self) -> Element<'_, Message> {
+		container(
+			text(
+				"Click the canvas to focus.\nNormal: h/j/k/l or arrows move, i inserts before, a inserts after, x deletes.\nInsert: type, Enter/Tab insert text, Backspace/Delete edit, Esc returns to normal mode."
+			)
+			.size(14)
+			.width(Length::Fill),
+		)
+		.padding(12)
+		.style(panel_style)
+		.into()
 	}
 
 	fn view_inspect_tab(&self) -> Element<'_, Message> {
@@ -368,6 +397,8 @@ impl Playground {
 			show_hitboxes: self.show_hitboxes,
 			hovered_target: self.hovered_target,
 			selected_target: self.selected_target,
+			editor: self.editor.view_state(),
+			scene_revision: self.scene_revision,
 		})
 		.width(Length::Fill)
 		.height(Length::Fill);
@@ -383,7 +414,7 @@ impl Playground {
 	fn refresh_scene(&mut self) {
 		self.scene = LayoutScene::build(
 			&mut self.font_system,
-			self.source.text(),
+			self.editor.text().to_string(),
 			self.font,
 			self.shaping,
 			self.wrapping,
@@ -392,12 +423,31 @@ impl Playground {
 			self.layout_width,
 			self.render_mode,
 		);
+		self.editor.sync_with_scene(&self.scene);
 		self.hovered_target = None;
-		self.selected_target = None;
+		self.sync_selected_target();
+		self.scene_revision += 1;
+	}
+
+	fn sync_selected_target(&mut self) {
+		self.selected_target = self
+			.editor
+			.view_state()
+			.selection
+			.as_ref()
+			.and_then(|selection| self.scene.cluster_index_for_range(selection))
+			.and_then(|index| self.scene.cluster(index))
+			.map(|cluster| crate::types::CanvasTarget::Glyph {
+				run_index: cluster.run_index,
+				glyph_index: cluster.glyph_start,
+			});
 	}
 
 	fn interaction_details(&self) -> String {
 		let mut details = String::new();
+		let _ = writeln!(details, "editor");
+		let _ = writeln!(details, "{}", self.editor.selection_details(&self.scene));
+		let _ = writeln!(details);
 		let _ = writeln!(details, "hover");
 		let _ = writeln!(
 			details,

@@ -72,6 +72,7 @@
 //! - Hover/click hit-testing: already local
 mod app;
 mod canvas_view;
+mod editor;
 mod scene;
 mod types;
 mod ui;
