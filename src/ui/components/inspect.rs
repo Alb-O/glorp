@@ -1,0 +1,75 @@
+use iced::widget::{column, container, scrollable, text};
+use iced::{Element, Font, Length, Theme};
+
+use crate::types::Message;
+use crate::ui::{CONTROL_RADIUS, panel_style};
+
+/// Props for the inspect tab.
+pub(crate) struct InspectTabProps<'a> {
+	pub(crate) warnings: &'a [String],
+	pub(crate) interaction_details: String,
+}
+
+pub(crate) fn view_inspect_tab(props: InspectTabProps<'_>) -> Element<'_, Message> {
+	scrollable(
+		column![
+			text("Warnings").size(18),
+			view_warnings_panel(props.warnings),
+			text("Hover and selection").size(18),
+			view_interaction_panel(props.interaction_details),
+		]
+		.spacing(12),
+	)
+	.into()
+}
+
+fn view_warnings_panel<'a>(warnings: &'a [String]) -> Element<'a, Message> {
+	let warnings_text = if warnings.is_empty() {
+		"No warnings".to_string()
+	} else {
+		warnings.join("\n")
+	};
+	let has_warnings = !warnings.is_empty();
+
+	container(text(warnings_text).size(14).width(Length::Fill))
+		.padding(12)
+		.style(move |theme: &Theme| {
+			let palette = theme.extended_palette();
+			container::Style {
+				background: Some(
+					if has_warnings {
+						palette.warning.weak.color
+					} else {
+						palette.background.weak.color
+					}
+					.into(),
+				),
+				border: iced::Border {
+					color: if has_warnings {
+						palette.warning.strong.color
+					} else {
+						palette.background.strong.color
+					},
+					width: 1.0,
+					radius: CONTROL_RADIUS.into(),
+				},
+				..Default::default()
+			}
+		})
+		.into()
+}
+
+fn view_interaction_panel(interaction_details: String) -> Element<'static, Message> {
+	container(
+		scrollable(
+			text(interaction_details)
+				.font(Font::MONOSPACE)
+				.size(14)
+				.width(Length::Fill),
+		)
+		.height(Length::Shrink),
+	)
+	.padding(12)
+	.style(panel_style)
+	.into()
+}

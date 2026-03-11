@@ -1,15 +1,14 @@
-use iced::widget::{canvas, checkbox, column, container, pick_list, responsive, row, scrollable, slider, text};
-use iced::{Element, Font, Length, Size, Task, Theme};
+use iced::widget::responsive;
+use iced::{Element, Length, Task};
 
 use std::fmt::Write as _;
 
-use crate::canvas_view::GlyphCanvas;
 use crate::editor::EditorBuffer;
 use crate::scene::{LayoutScene, make_font_system};
 use crate::types::{FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
 use crate::ui::{
-	CONTROL_RADIUS, SIDEBAR_WIDTH, control_row, panel_style, rounded_checkbox_style, rounded_pick_list_menu_style,
-	rounded_pick_list_style, rounded_slider_style, surface_style, view_sidebar_tab,
+	CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, view_canvas_pane, view_controls_tab,
+	view_dump_tab, view_inspect_tab, view_shell, view_sidebar,
 };
 
 pub(crate) struct Playground {
@@ -31,8 +30,6 @@ pub(crate) struct Playground {
 	font_system: cosmic_text::FontSystem,
 	scene_revision: u64,
 }
-
-const STACK_LAYOUT_BREAKPOINT: f32 = 1120.0;
 
 impl Playground {
 	pub(crate) fn new() -> (Self, Task<Message>) {
@@ -160,279 +157,53 @@ impl Playground {
 	}
 
 	pub(crate) fn view(&self) -> Element<'_, Message> {
-		responsive(|size| self.view_root(size))
-			.width(Length::Fill)
-			.height(Length::Fill)
-			.into()
-	}
+		responsive(|size| {
+			let stacked = size.width < 1120.0;
+			let sidebar = view_sidebar(SidebarProps {
+				active_tab: self.active_sidebar_tab,
+				editor_mode: self.editor.mode(),
+				editor_bytes: self.editor.text().len(),
+				body: self.view_sidebar_body(),
+				stacked,
+			});
+			let canvas = view_canvas_pane(CanvasPaneProps {
+				scene: self.scene.clone(),
+				show_baselines: self.show_baselines,
+				show_hitboxes: self.show_hitboxes,
+				hovered_target: self.hovered_target,
+				selected_target: self.selected_target,
+				editor: self.editor.view_state(),
+				scene_revision: self.scene_revision,
+				stacked,
+			});
 
-	fn view_root(&self, size: Size) -> Element<'_, Message> {
-		let stacked = size.width < STACK_LAYOUT_BREAKPOINT;
-		let content: Element<'_, Message> = if stacked {
-			column![self.view_canvas_pane(true), self.view_sidebar(true),]
-				.spacing(12)
-				.into()
-		} else {
-			row![self.view_sidebar(false), self.view_canvas_pane(false),]
-				.spacing(16)
-				.into()
-		};
-
-		container(content)
-			.padding(16)
-			.width(Length::Fill)
-			.height(Length::Fill)
-			.into()
-	}
-
-	fn view_sidebar(&self, stacked: bool) -> Element<'_, Message> {
-		container(
-			column![
-				text("Glyph Playground").size(28),
-				text(
-					"Iced + cosmic-text + swash. Edit the source, then inspect the shaped runs, glyph boxes, and vendored outlines."
-				)
-				.size(15),
-				self.view_sidebar_tabs(),
-				self.view_editor_status(),
-				container(self.view_sidebar_body()).height(Length::Fill),
-			]
-			.spacing(12)
-			.padding(16),
-		)
-		.width(if stacked {
-			Length::Fill
-		} else {
-			Length::Fixed(SIDEBAR_WIDTH)
+			view_shell(size, sidebar, canvas)
 		})
-		.height(if stacked { Length::FillPortion(2) } else { Length::Fill })
-		.style(surface_style)
-		.into()
-	}
-
-	fn view_sidebar_tabs(&self) -> Element<'_, Message> {
-		row(SidebarTab::ALL
-			.into_iter()
-			.map(|tab| view_sidebar_tab(tab, tab == self.active_sidebar_tab))
-			.collect::<Vec<_>>())
-		.spacing(2)
+		.width(Length::Fill)
+		.height(Length::Fill)
 		.into()
 	}
 
 	fn view_sidebar_body(&self) -> Element<'_, Message> {
 		match self.active_sidebar_tab {
-			SidebarTab::Controls => self.view_controls_tab(),
-			SidebarTab::Inspect => self.view_inspect_tab(),
-			SidebarTab::Dump => self.view_dump_tab(),
+			SidebarTab::Controls => view_controls_tab(ControlsTabProps {
+				preset: self.preset,
+				font: self.font,
+				shaping: self.shaping,
+				wrapping: self.wrapping,
+				render_mode: self.render_mode,
+				font_size: self.font_size,
+				line_height: self.line_height,
+				layout_width: self.layout_width,
+				show_baselines: self.show_baselines,
+				show_hitboxes: self.show_hitboxes,
+			}),
+			SidebarTab::Inspect => view_inspect_tab(InspectTabProps {
+				warnings: &self.scene.warnings,
+				interaction_details: self.interaction_details(),
+			}),
+			SidebarTab::Dump => view_dump_tab(&self.scene.dump),
 		}
-	}
-
-	fn view_controls_tab(&self) -> Element<'_, Message> {
-		scrollable(
-			column![
-				control_row(
-					"Preset",
-					pick_list(SamplePreset::ALL, Some(self.preset), Message::LoadPreset)
-						.style(rounded_pick_list_style)
-						.menu_style(rounded_pick_list_menu_style)
-						.width(Length::Fill)
-						.into(),
-				),
-				control_row(
-					"Font",
-					pick_list(FontChoice::ALL, Some(self.font), Message::FontSelected)
-						.style(rounded_pick_list_style)
-						.menu_style(rounded_pick_list_menu_style)
-						.width(Length::Fill)
-						.into(),
-				),
-				control_row(
-					"Shaping",
-					pick_list(ShapingChoice::ALL, Some(self.shaping), Message::ShapingSelected)
-						.style(rounded_pick_list_style)
-						.menu_style(rounded_pick_list_menu_style)
-						.width(Length::Fill)
-						.into(),
-				),
-				control_row(
-					"Wrap",
-					pick_list(WrapChoice::ALL, Some(self.wrapping), Message::WrappingSelected)
-						.style(rounded_pick_list_style)
-						.menu_style(rounded_pick_list_menu_style)
-						.width(Length::Fill)
-						.into(),
-				),
-				control_row(
-					"Render",
-					pick_list(RenderMode::ALL, Some(self.render_mode), Message::RenderModeSelected)
-						.style(rounded_pick_list_style)
-						.menu_style(rounded_pick_list_menu_style)
-						.width(Length::Fill)
-						.into(),
-				),
-				control_row(
-					format!("Size {:.0}", self.font_size),
-					slider(10.0..=48.0, self.font_size, Message::FontSizeChanged)
-						.style(rounded_slider_style)
-						.width(Length::Fill)
-						.into(),
-				),
-				control_row(
-					format!("Line {:.0}", self.line_height),
-					slider(12.0..=72.0, self.line_height, Message::LineHeightChanged)
-						.style(rounded_slider_style)
-						.width(Length::Fill)
-						.into(),
-				),
-				control_row(
-					format!("Width {:.0}", self.layout_width),
-					slider(180.0..=900.0, self.layout_width, Message::LayoutWidthChanged)
-						.style(rounded_slider_style)
-						.width(Length::Fill)
-						.into(),
-				),
-				checkbox(self.show_baselines)
-					.label("Show baselines and line tops")
-					.style(rounded_checkbox_style)
-					.on_toggle(Message::ShowBaselinesChanged),
-				checkbox(self.show_hitboxes)
-					.label("Show glyph hitboxes")
-					.style(rounded_checkbox_style)
-					.on_toggle(Message::ShowHitboxesChanged),
-				text("Canvas editor").size(18),
-				self.view_editor_help(),
-			]
-			.spacing(14),
-		)
-		.into()
-	}
-
-	fn view_editor_status(&self) -> Element<'_, Message> {
-		container(
-			text(format!(
-				"Editor: {} mode, {} bytes",
-				self.editor.mode(),
-				self.editor.text().len()
-			))
-			.font(Font::MONOSPACE)
-			.size(14),
-		)
-		.padding([0, 2])
-		.into()
-	}
-
-	fn view_editor_help(&self) -> Element<'_, Message> {
-		container(
-			text(
-				"Click the canvas to focus.\nNormal: h/j/k/l or arrows move, i inserts before, a inserts after, x deletes.\nInsert: type, Enter/Tab insert text, Backspace/Delete edit, Esc returns to normal mode."
-			)
-			.size(14)
-			.width(Length::Fill),
-		)
-		.padding(12)
-		.style(panel_style)
-		.into()
-	}
-
-	fn view_inspect_tab(&self) -> Element<'_, Message> {
-		scrollable(
-			column![
-				text("Warnings").size(18),
-				self.view_warnings_panel(),
-				text("Hover and selection").size(18),
-				self.view_interaction_panel(),
-			]
-			.spacing(12),
-		)
-		.into()
-	}
-
-	fn view_warnings_panel(&self) -> Element<'_, Message> {
-		let warnings_text = if self.scene.warnings.is_empty() {
-			"No warnings".to_string()
-		} else {
-			self.scene.warnings.join("\n")
-		};
-		let has_warnings = !self.scene.warnings.is_empty();
-
-		container(text(warnings_text).size(14).width(Length::Fill))
-			.padding(12)
-			.style(move |theme: &Theme| {
-				let palette = theme.extended_palette();
-				container::Style {
-					background: Some(
-						if has_warnings {
-							palette.warning.weak.color
-						} else {
-							palette.background.weak.color
-						}
-						.into(),
-					),
-					border: iced::Border {
-						color: if has_warnings {
-							palette.warning.strong.color
-						} else {
-							palette.background.strong.color
-						},
-						width: 1.0,
-						radius: CONTROL_RADIUS.into(),
-					},
-					..Default::default()
-				}
-			})
-			.into()
-	}
-
-	fn view_interaction_panel(&self) -> Element<'_, Message> {
-		container(
-			scrollable(
-				text(self.interaction_details())
-					.font(Font::MONOSPACE)
-					.size(14)
-					.width(Length::Fill),
-			)
-			.height(Length::Shrink),
-		)
-		.padding(12)
-		.style(panel_style)
-		.into()
-	}
-
-	fn view_dump_tab(&self) -> Element<'_, Message> {
-		container(
-			scrollable(
-				text(self.scene.dump.clone())
-					.font(Font::MONOSPACE)
-					.size(14)
-					.width(Length::Fill),
-			)
-			.height(Length::Fill),
-		)
-		.padding(12)
-		.height(Length::Fill)
-		.style(panel_style)
-		.into()
-	}
-
-	fn view_canvas_pane(&self, stacked: bool) -> Element<'_, Message> {
-		let canvas_view = canvas(GlyphCanvas {
-			scene: self.scene.clone(),
-			show_baselines: self.show_baselines,
-			show_hitboxes: self.show_hitboxes,
-			hovered_target: self.hovered_target,
-			selected_target: self.selected_target,
-			editor: self.editor.view_state(),
-			scene_revision: self.scene_revision,
-		})
-		.width(Length::Fill)
-		.height(Length::Fill);
-
-		container(canvas_view)
-			.padding(8)
-			.width(Length::Fill)
-			.height(if stacked { Length::FillPortion(3) } else { Length::Fill })
-			.style(surface_style)
-			.into()
 	}
 
 	fn refresh_scene(&mut self) {
