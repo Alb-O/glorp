@@ -442,7 +442,8 @@ fn next_char_boundary(text: &str, byte: usize) -> Option<usize> {
 #[cfg(test)]
 mod tests {
 	use super::{EditorBuffer, EditorCommand, EditorMode};
-	use crate::scene::{CaretMetrics, ClusterInfo, LayoutScene, RunInfo};
+	use crate::scene::{CaretMetrics, ClusterInfo, LayoutScene, RunInfo, make_font_system};
+	use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
 	use iced::Font;
 
 	fn scene(clusters: &[(usize, usize, usize, f32)]) -> LayoutScene {
@@ -547,5 +548,46 @@ mod tests {
 		assert_eq!(editor.view_state().mode, EditorMode::Normal);
 		assert_eq!(editor.view_state().selection, Some(1..2));
 		let CaretMetrics { .. } = scene.caret_metrics(editor.view_state().caret);
+	}
+
+	#[test]
+	fn delete_selection_on_later_line_handles_multibyte_text() {
+		let text = "🙂\né";
+		let mut font_system = make_font_system();
+		let scene = LayoutScene::build(
+			&mut font_system,
+			text.to_string(),
+			FontChoice::SansSerif,
+			ShapingChoice::Advanced,
+			WrapChoice::None,
+			24.0,
+			32.0,
+			400.0,
+			RenderMode::CanvasAndOutlines,
+		);
+		let mut editor = EditorBuffer::new(text);
+		editor.sync_with_scene(&scene);
+
+		assert_eq!(
+			editor
+				.view_state()
+				.selection
+				.as_ref()
+				.and_then(|selection| scene.text.get(selection.clone())),
+			Some("🙂")
+		);
+
+		editor.apply(EditorCommand::MoveDown, &scene);
+		assert_eq!(
+			editor
+				.view_state()
+				.selection
+				.as_ref()
+				.and_then(|selection| scene.text.get(selection.clone())),
+			Some("é")
+		);
+
+		assert!(editor.apply(EditorCommand::DeleteSelection, &scene));
+		assert_eq!(editor.text(), "🙂\n");
 	}
 }

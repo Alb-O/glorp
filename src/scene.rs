@@ -52,8 +52,10 @@ impl LayoutScene {
 		let mut measured_height: f32 = 0.0;
 		let mut glyph_count = 0usize;
 		let mut clusters = Vec::new();
+		let line_byte_offsets = line_byte_offsets(&text);
 
 		for run in buffer.layout_runs() {
+			let line_byte_offset = line_byte_offsets[run.line_i];
 			measured_width = measured_width.max(run.line_w);
 			measured_height = measured_height.max(run.line_top + run.line_height);
 
@@ -123,7 +125,7 @@ impl LayoutScene {
 
 				glyphs.push(GlyphInfo {
 					cluster: cluster_text,
-					cluster_range: glyph.start..glyph.end,
+					cluster_range: (line_byte_offset + glyph.start)..(line_byte_offset + glyph.end),
 					x: glyph.x,
 					y: run.line_top + glyph.y,
 					width: glyph.w,
@@ -692,4 +694,16 @@ fn debug_snippet(text: &str) -> String {
 	} else {
 		format!("\"{escaped}\"")
 	}
+}
+
+fn line_byte_offsets(text: &str) -> Vec<usize> {
+	let mut offsets = vec![0];
+
+	for (index, ch) in text.char_indices() {
+		if ch == '\n' {
+			offsets.push(index + ch.len_utf8());
+		}
+	}
+
+	offsets
 }
