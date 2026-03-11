@@ -41,7 +41,7 @@ pub(crate) struct Playground {
 impl Playground {
 	pub(crate) fn new() -> (Self, Task<Message>) {
 		let mut font_system = make_font_system();
-		let preset = SamplePreset::Mixed;
+		let preset = SamplePreset::Tall;
 		let editor = EditorBuffer::new(preset.text());
 		let font = FontChoice::JetBrainsMono;
 		let shaping = ShapingChoice::Advanced;

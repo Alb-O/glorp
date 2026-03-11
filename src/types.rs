@@ -60,6 +60,7 @@ pub(crate) enum CanvasTarget {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SamplePreset {
+	Tall,
 	Mixed,
 	Rust,
 	Ligatures,
@@ -70,7 +71,8 @@ pub(crate) enum SamplePreset {
 }
 
 impl SamplePreset {
-	pub(crate) const ALL: [SamplePreset; 7] = [
+	pub(crate) const ALL: [SamplePreset; 8] = [
+		SamplePreset::Tall,
 		SamplePreset::Mixed,
 		SamplePreset::Rust,
 		SamplePreset::Ligatures,
@@ -82,6 +84,28 @@ impl SamplePreset {
 
 	pub(crate) fn text(self) -> &'static str {
 		match self {
+			SamplePreset::Tall => concat!(
+				"chapter 01: office affine ffi ffl fj\n",
+				"chapter 02: 漢字カタカナ and Latin in one lane\n",
+				"chapter 03: السلام عليكم مع سطور إضافية\n",
+				"chapter 04: emoji 🙂🚀👩‍💻 over baseline checks\n",
+				"chapter 05: fjord buffer glyph wrap probe\n",
+				"chapter 06: 日本語の行送りと混在テキスト\n",
+				"chapter 07: bidi mix -> abc אבג 123\n",
+				"chapter 08: outline fallback and font fallback\n",
+				"chapter 09: ligatures office official affluent\n",
+				"chapter 10: accents cafe café caffè caﬀe\n",
+				"chapter 11: ASCII rulers 0123456789\n",
+				"chapter 12: more emoji 🧪🧭🌊🛰️\n",
+				"chapter 13: the quick brown fox scroll probe\n",
+				"chapter 14: glyph boxes should keep coming\n",
+				"chapter 15: this canvas now has vertical runway\n",
+				"chapter 16: Arabic مرحبا بالعالم مرة ثانية\n",
+				"chapter 17: kana かなカナ漢字ひらがな\n",
+				"chapter 18: source editing should still work\n",
+				"chapter 19: swipe or wheel to pan the scene\n",
+				"chapter 20: end marker"
+			),
 			SamplePreset::Mixed => "office affine ffi ffl\n漢字カタカナ and Latin\nالسلام عليكم\nemoji 🙂🚀👩‍💻",
 			SamplePreset::Rust => "fn main() {\n    println!(\"ffi -> office -> 汉字\");\n}\n",
 			SamplePreset::Ligatures => "office affine final fluff ffi ffl fj",
@@ -96,6 +120,7 @@ impl SamplePreset {
 impl Display for SamplePreset {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
+			SamplePreset::Tall => write!(f, "Tall"),
 			SamplePreset::Mixed => write!(f, "Mixed"),
 			SamplePreset::Rust => write!(f, "Rust"),
 			SamplePreset::Ligatures => write!(f, "Ligatures"),

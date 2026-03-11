@@ -4,7 +4,7 @@ use iced::advanced::text::{Alignment, LineHeight};
 use iced::alignment;
 use iced::keyboard::{self, key};
 use iced::widget::canvas;
-use iced::{Color, Font, Pixels, Point, Rectangle, Size, Theme, mouse};
+use iced::{Color, Font, Pixels, Point, Rectangle, Size, Theme, Vector, mouse, window};
 
 use crate::editor::{EditorCommand, EditorMode, EditorViewState};
 use crate::scene::{LayoutScene, PathCommand};
@@ -25,8 +25,11 @@ pub(crate) struct GlyphCanvas {
 pub(crate) struct CanvasState {
 	hovered_target: Option<CanvasTarget>,
 	focused: bool,
+	scroll: Vector,
+	target_scroll: Vector,
 	scene_cache: canvas::Cache,
 	cached_scene_revision: Cell<Option<u64>>,
+	cached_scroll: Cell<Option<(i32, i32)>>,
 }
 
 impl canvas::Program<Message> for GlyphCanvas {
@@ -35,11 +38,27 @@ impl canvas::Program<Message> for GlyphCanvas {
 	fn update(
 		&self, state: &mut Self::State, event: &canvas::Event, bounds: Rectangle, cursor: mouse::Cursor,
 	) -> Option<canvas::Action<Message>> {
+		let max_scroll = max_scroll(bounds, &self.scene);
+		state.target_scroll = clamp_scroll(state.target_scroll, max_scroll);
+		state.scroll = clamp_scroll(state.scroll, max_scroll);
+
 		let cursor_position = cursor.position_in(bounds);
-		let cursor_local = cursor_position.map(to_scene_local);
+		let cursor_local = cursor_position.map(|position| to_scene_local(position, state.scroll));
 		let cursor_target = cursor_local.and_then(|position| self.scene.hit_test(position));
 
 		match event {
+			canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
+				if !cursor.is_over(bounds) {
+					return None;
+				}
+
+				state.focused = true;
+				state.target_scroll = clamp_scroll(state.target_scroll + scroll_delta(*delta), max_scroll);
+
+				if vector_length(state.target_scroll - state.scroll) > 0.1 {
+					return Some(canvas::Action::request_redraw().and_capture());
+				}
+			}
 			canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
 				if state.hovered_target != cursor_target {
 					state.hovered_target = cursor_target;
@@ -80,6 +99,15 @@ impl canvas::Program<Message> for GlyphCanvas {
 					return Some(canvas::Action::publish(Message::EditorCommand(command)).and_capture());
 				}
 			}
+			canvas::Event::Window(window::Event::RedrawRequested(_now)) => {
+				let next_scroll = animate_scroll(state.scroll, state.target_scroll);
+				if vector_length(next_scroll - state.scroll) > 0.01 {
+					state.scroll = clamp_scroll(next_scroll, max_scroll);
+					return Some(canvas::Action::request_redraw());
+				}
+
+				state.scroll = clamp_scroll(state.target_scroll, max_scroll);
+			}
 			_ => {
 				if !cursor.is_over(bounds) && state.hovered_target.is_some() {
 					state.hovered_target = None;
@@ -95,17 +123,22 @@ impl canvas::Program<Message> for GlyphCanvas {
 		&self, state: &Self::State, renderer: &iced::Renderer, _theme: &Theme, bounds: Rectangle,
 		_cursor: iced::mouse::Cursor,
 	) -> Vec<canvas::Geometry> {
-		if state.cached_scene_revision.get() != Some(self.scene_revision) {
+		let cached_scroll = (state.scroll.x.round() as i32, state.scroll.y.round() as i32);
+
+		if state.cached_scene_revision.get() != Some(self.scene_revision)
+			|| state.cached_scroll.get() != Some(cached_scroll)
+		{
 			state.scene_cache.clear();
 			state.cached_scene_revision.set(Some(self.scene_revision));
+			state.cached_scroll.set(Some(cached_scroll));
 		}
 
 		let static_layer = state.scene_cache.draw(renderer, bounds.size(), |frame| {
-			draw_static_scene(frame, bounds, self);
+			draw_static_scene(frame, bounds, self, state.scroll);
 		});
 
 		let mut overlay = canvas::Frame::new(renderer, bounds.size());
-		draw_dynamic_overlay(&mut overlay, bounds, self, state.focused);
+		draw_dynamic_overlay(&mut overlay, bounds, self, state.focused, state.scroll);
 
 		vec![static_layer, overlay.into_geometry()]
 	}
@@ -118,8 +151,8 @@ impl canvas::Program<Message> for GlyphCanvas {
 	}
 }
 
-fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas) {
-	let origin = scene_origin();
+fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas, scroll: Vector) {
+	let origin = scrolled_origin(scroll);
 	let text_area_size = Size::new(
 		canvas.scene.max_width.max(1.0),
 		canvas.scene.measured_height.max(bounds.height - origin.y - 24.0),
@@ -256,8 +289,10 @@ fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &Glyp
 	});
 }
 
-fn draw_dynamic_overlay(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas, focused: bool) {
-	let origin = scene_origin();
+fn draw_dynamic_overlay(
+	frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas, focused: bool, scroll: Vector,
+) {
+	let origin = scrolled_origin(scroll);
 
 	if let Some(selection) = &canvas.editor.selection {
 		if let Some(cluster_index) = canvas.scene.cluster_index_for_range(selection) {
@@ -310,7 +345,10 @@ fn draw_dynamic_overlay(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &G
 	}
 
 	frame.fill_text(canvas::Text {
-		content: format!("mode={} focus={focused}", canvas.editor.mode),
+		content: format!(
+			"mode={} focus={focused} scroll={:.0},{:.0}",
+			canvas.editor.mode, scroll.x, scroll.y
+		),
 		position: Point::new(bounds.width - 170.0, bounds.height - 24.0),
 		color: Color::from_rgb8(210, 214, 228),
 		size: Pixels(14.0),
@@ -437,10 +475,96 @@ fn key_command(
 	}
 }
 
-fn to_scene_local(position: Point) -> Point {
-	Point::new(position.x - scene_origin().x, position.y - scene_origin().y)
+fn animate_scroll(current: Vector, target: Vector) -> Vector {
+	current + ((target - current) * 0.22)
+}
+
+fn clamp_scroll(scroll: Vector, max_scroll: Vector) -> Vector {
+	Vector::new(scroll.x.clamp(0.0, max_scroll.x), scroll.y.clamp(0.0, max_scroll.y))
+}
+
+fn max_scroll(bounds: Rectangle, scene: &LayoutScene) -> Vector {
+	let viewport = viewport_size(bounds);
+	Vector::new(
+		(scene.max_width - viewport.width).max(0.0),
+		(scene.measured_height - viewport.height).max(0.0),
+	)
+}
+
+fn scroll_delta(delta: mouse::ScrollDelta) -> Vector {
+	match delta {
+		mouse::ScrollDelta::Lines { x, y } => -Vector::new(x, y) * 60.0,
+		mouse::ScrollDelta::Pixels { x, y } => -Vector::new(x, y),
+	}
+}
+
+fn vector_length(vector: Vector) -> f32 {
+	(vector.x * vector.x + vector.y * vector.y).sqrt()
+}
+
+fn to_scene_local(position: Point, scroll: Vector) -> Point {
+	Point::new(
+		position.x - scene_origin().x + scroll.x,
+		position.y - scene_origin().y + scroll.y,
+	)
+}
+
+fn scrolled_origin(scroll: Vector) -> Point {
+	Point::new(scene_origin().x - scroll.x, scene_origin().y - scroll.y)
+}
+
+fn viewport_size(bounds: Rectangle) -> Size {
+	Size::new(
+		(bounds.width - scene_origin().x - 24.0).max(1.0),
+		(bounds.height - scene_origin().y - 36.0).max(1.0),
+	)
 }
 
 fn scene_origin() -> Point {
 	Point::new(24.0, 28.0)
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{clamp_scroll, max_scroll};
+	use crate::scene::LayoutScene;
+	use iced::{Font, Rectangle, Vector};
+
+	fn scene(width: f32, height: f32) -> LayoutScene {
+		LayoutScene {
+			text: String::new(),
+			font: Font::MONOSPACE,
+			shaping: crate::types::ShapingChoice::Basic,
+			font_size: 16.0,
+			line_height: 20.0,
+			max_width: width,
+			measured_width: width,
+			measured_height: height,
+			glyph_count: 0,
+			runs: Vec::new(),
+			clusters: Vec::new(),
+			fonts_seen: Vec::new(),
+			warnings: Vec::new(),
+			dump: String::new(),
+			draw_canvas_text: true,
+			draw_outlines: false,
+			canvas_wraps: true,
+		}
+	}
+
+	#[test]
+	fn canvas_scroll_is_clamped_to_scene_extent() {
+		let scene = scene(1200.0, 1600.0);
+		let bounds = Rectangle {
+			x: 0.0,
+			y: 0.0,
+			width: 900.0,
+			height: 700.0,
+		};
+
+		let max = max_scroll(bounds, &scene);
+		assert!(max.x > 0.0);
+		assert!(max.y > 0.0);
+		assert_eq!(clamp_scroll(Vector::new(-10.0, 2000.0), max), Vector::new(0.0, max.y));
+	}
 }

@@ -106,7 +106,7 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 fn view_editor_help() -> Element<'static, Message> {
 	iced::widget::container(
 		text(
-			"Click the canvas to focus.\nNormal: h/j/k/l or arrows move, i inserts before, a inserts after, x deletes.\nInsert: type, Enter/Tab insert text, Backspace/Delete edit, Esc returns to normal mode."
+			"Wheel or touchpad-scroll to pan the canvas.\nClick the canvas to focus.\nNormal: h/j/k/l or arrows move, i inserts before, a inserts after, x deletes.\nInsert: type, Enter/Tab insert text, Backspace/Delete edit, Esc returns to normal mode."
 		)
 		.size(14)
 		.width(Length::Fill),
