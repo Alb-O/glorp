@@ -28,7 +28,7 @@ in
 {
   imports = [ (inputs.dvnv-rust-env + "/devenv.nix") ];
 
-  rustEnv.package.manifestPath = ./Cargo.toml;
+  rustEnv.managedCargo.enable = true;
 
   env = lib.optionalAttrs pkgs.stdenv.isLinux {
     FONTCONFIG_FILE = fontsConf;

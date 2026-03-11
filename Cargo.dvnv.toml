@@ -1,0 +1,8 @@
+[package]
+name = "liney"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cosmic-text = true
+iced = { features = ["advanced", "canvas"] }
