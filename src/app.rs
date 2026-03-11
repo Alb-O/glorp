@@ -1,5 +1,5 @@
-use iced::widget::{canvas, checkbox, column, container, pick_list, row, scrollable, slider, text};
-use iced::{Element, Font, Length, Task, Theme};
+use iced::widget::{canvas, checkbox, column, container, pick_list, responsive, row, scrollable, slider, text};
+use iced::{Element, Font, Length, Size, Task, Theme};
 
 use std::fmt::Write as _;
 
@@ -31,6 +31,8 @@ pub(crate) struct Playground {
 	font_system: cosmic_text::FontSystem,
 	scene_revision: u64,
 }
+
+const STACK_LAYOUT_BREAKPOINT: f32 = 1120.0;
 
 impl Playground {
 	pub(crate) fn new() -> (Self, Task<Message>) {
@@ -158,14 +160,32 @@ impl Playground {
 	}
 
 	pub(crate) fn view(&self) -> Element<'_, Message> {
-		container(row![self.view_sidebar(), self.view_canvas_pane()].spacing(16))
+		responsive(|size| self.view_root(size))
+			.width(Length::Fill)
+			.height(Length::Fill)
+			.into()
+	}
+
+	fn view_root(&self, size: Size) -> Element<'_, Message> {
+		let stacked = size.width < STACK_LAYOUT_BREAKPOINT;
+		let content: Element<'_, Message> = if stacked {
+			column![self.view_canvas_pane(true), self.view_sidebar(true),]
+				.spacing(12)
+				.into()
+		} else {
+			row![self.view_sidebar(false), self.view_canvas_pane(false),]
+				.spacing(16)
+				.into()
+		};
+
+		container(content)
 			.padding(16)
 			.width(Length::Fill)
 			.height(Length::Fill)
 			.into()
 	}
 
-	fn view_sidebar(&self) -> Element<'_, Message> {
+	fn view_sidebar(&self, stacked: bool) -> Element<'_, Message> {
 		container(
 			column![
 				text("Glyph Playground").size(28),
@@ -180,8 +200,12 @@ impl Playground {
 			.spacing(12)
 			.padding(16),
 		)
-		.width(SIDEBAR_WIDTH)
-		.height(Length::Fill)
+		.width(if stacked {
+			Length::Fill
+		} else {
+			Length::Fixed(SIDEBAR_WIDTH)
+		})
+		.height(if stacked { Length::FillPortion(2) } else { Length::Fill })
 		.style(surface_style)
 		.into()
 	}
@@ -390,7 +414,7 @@ impl Playground {
 		.into()
 	}
 
-	fn view_canvas_pane(&self) -> Element<'_, Message> {
+	fn view_canvas_pane(&self, stacked: bool) -> Element<'_, Message> {
 		let canvas_view = canvas(GlyphCanvas {
 			scene: self.scene.clone(),
 			show_baselines: self.show_baselines,
@@ -406,7 +430,7 @@ impl Playground {
 		container(canvas_view)
 			.padding(8)
 			.width(Length::Fill)
-			.height(Length::Fill)
+			.height(if stacked { Length::FillPortion(3) } else { Length::Fill })
 			.style(surface_style)
 			.into()
 	}
