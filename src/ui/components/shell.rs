@@ -3,6 +3,7 @@ use iced::{Element, Length, Size};
 
 use crate::canvas_view::GlyphCanvas;
 use crate::editor::EditorViewState;
+use crate::perf::PerfBridge;
 use crate::scene::LayoutScene;
 use crate::types::{CanvasTarget, Message};
 use crate::ui::tokens::{SIDEBAR_WIDTH, surface_style};
@@ -19,6 +20,7 @@ pub(crate) struct CanvasPaneProps {
 	pub(crate) selected_target: Option<CanvasTarget>,
 	pub(crate) editor: EditorViewState,
 	pub(crate) scene_revision: u64,
+	pub(crate) perf: PerfBridge,
 	pub(crate) stacked: bool,
 }
 
@@ -53,6 +55,7 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 		selected_target: props.selected_target,
 		editor: props.editor,
 		scene_revision: props.scene_revision,
+		perf: props.perf,
 	})
 	.width(Length::Fill)
 	.height(Length::Fill);

@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::time::Instant;
 
 use iced::advanced::text::{Alignment, LineHeight};
 use iced::alignment;
@@ -7,6 +8,7 @@ use iced::widget::canvas;
 use iced::{Color, Font, Pixels, Point, Rectangle, Size, Theme, Vector, mouse, window};
 
 use crate::editor::{EditorCommand, EditorMode, EditorViewState};
+use crate::perf::PerfBridge;
 use crate::scene::{LayoutScene, PathCommand};
 use crate::types::{CanvasTarget, Message};
 
@@ -19,6 +21,7 @@ pub(crate) struct GlyphCanvas {
 	pub(crate) selected_target: Option<CanvasTarget>,
 	pub(crate) editor: EditorViewState,
 	pub(crate) scene_revision: u64,
+	pub(crate) perf: PerfBridge,
 }
 
 #[derive(Debug, Default)]
@@ -38,6 +41,7 @@ impl canvas::Program<Message> for GlyphCanvas {
 	fn update(
 		&self, state: &mut Self::State, event: &canvas::Event, bounds: Rectangle, cursor: mouse::Cursor,
 	) -> Option<canvas::Action<Message>> {
+		let started = Instant::now();
 		let max_scroll = max_scroll(bounds, &self.scene);
 		state.target_scroll = clamp_scroll(state.target_scroll, max_scroll);
 		state.scroll = clamp_scroll(state.scroll, max_scroll);
@@ -46,46 +50,46 @@ impl canvas::Program<Message> for GlyphCanvas {
 		let cursor_local = cursor_position.map(|position| to_scene_local(position, state.scroll));
 		let cursor_target = cursor_local.and_then(|position| self.scene.hit_test(position));
 
-		match event {
+		let action = match event {
 			canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
 				if !cursor.is_over(bounds) {
-					return None;
-				}
+					None
+				} else {
+					state.focused = true;
+					state.target_scroll = clamp_scroll(state.target_scroll + scroll_delta(*delta), max_scroll);
 
-				state.focused = true;
-				state.target_scroll = clamp_scroll(state.target_scroll + scroll_delta(*delta), max_scroll);
-
-				if vector_length(state.target_scroll - state.scroll) > 0.1 {
-					return Some(canvas::Action::request_redraw().and_capture());
+					if vector_length(state.target_scroll - state.scroll) > 0.1 {
+						Some(canvas::Action::request_redraw().and_capture())
+					} else {
+						None
+					}
 				}
 			}
 			canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
 				if state.hovered_target != cursor_target {
 					state.hovered_target = cursor_target;
-					return Some(canvas::Action::publish(Message::CanvasHovered(cursor_target)));
+					Some(canvas::Action::publish(Message::CanvasHovered(cursor_target)))
+				} else {
+					None
 				}
 			}
 			canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
 				if !cursor.is_over(bounds) {
 					state.focused = false;
-					return None;
-				}
+					None
+				} else if let Some(position) = cursor_local {
+					state.focused = true;
+					state.hovered_target = cursor_target;
 
-				let Some(position) = cursor_local else {
-					return None;
-				};
-
-				state.focused = cursor.is_over(bounds);
-				state.hovered_target = cursor_target;
-
-				if cursor.is_over(bounds) {
-					return Some(
+					Some(
 						canvas::Action::publish(Message::CanvasClicked {
 							target: cursor_target,
 							position,
 						})
 						.and_capture(),
-					);
+					)
+				} else {
+					None
 				}
 			}
 			canvas::Event::Keyboard(keyboard::Event::KeyPressed {
@@ -96,51 +100,66 @@ impl canvas::Program<Message> for GlyphCanvas {
 				..
 			}) if state.focused => {
 				if let Some(command) = key_command(self.editor.mode, key, *physical_key, *modifiers, text.as_deref()) {
-					return Some(canvas::Action::publish(Message::EditorCommand(command)).and_capture());
+					Some(canvas::Action::publish(Message::EditorCommand(command)).and_capture())
+				} else {
+					None
 				}
 			}
 			canvas::Event::Window(window::Event::RedrawRequested(_now)) => {
 				let next_scroll = animate_scroll(state.scroll, state.target_scroll);
 				if vector_length(next_scroll - state.scroll) > 0.01 {
 					state.scroll = clamp_scroll(next_scroll, max_scroll);
-					return Some(canvas::Action::request_redraw());
+					Some(canvas::Action::request_redraw())
+				} else {
+					state.scroll = clamp_scroll(state.target_scroll, max_scroll);
+					None
 				}
-
-				state.scroll = clamp_scroll(state.target_scroll, max_scroll);
 			}
 			_ => {
 				if !cursor.is_over(bounds) && state.hovered_target.is_some() {
 					state.hovered_target = None;
-					return Some(canvas::Action::publish(Message::CanvasHovered(None)));
+					Some(canvas::Action::publish(Message::CanvasHovered(None)))
+				} else {
+					None
 				}
 			}
-		}
+		};
 
-		None
+		self.perf.record_canvas_update(started.elapsed());
+		action
 	}
 
 	fn draw(
 		&self, state: &Self::State, renderer: &iced::Renderer, _theme: &Theme, bounds: Rectangle,
 		_cursor: iced::mouse::Cursor,
 	) -> Vec<canvas::Geometry> {
+		let started = Instant::now();
 		let cached_scroll = (state.scroll.x.round() as i32, state.scroll.y.round() as i32);
+		let cache_miss = state.cached_scene_revision.get() != Some(self.scene_revision)
+			|| state.cached_scroll.get() != Some(cached_scroll);
 
-		if state.cached_scene_revision.get() != Some(self.scene_revision)
-			|| state.cached_scroll.get() != Some(cached_scroll)
-		{
+		if cache_miss {
 			state.scene_cache.clear();
 			state.cached_scene_revision.set(Some(self.scene_revision));
 			state.cached_scroll.set(Some(cached_scroll));
 		}
 
+		let mut static_build = None;
 		let static_layer = state.scene_cache.draw(renderer, bounds.size(), |frame| {
+			let build_started = Instant::now();
 			draw_static_scene(frame, bounds, self, state.scroll);
+			static_build = Some(build_started.elapsed());
 		});
 
+		let overlay_started = Instant::now();
 		let mut overlay = canvas::Frame::new(renderer, bounds.size());
 		draw_dynamic_overlay(&mut overlay, bounds, self, state.focused, state.scroll);
+		let overlay_elapsed = overlay_started.elapsed();
 
-		vec![static_layer, overlay.into_geometry()]
+		let geometry = vec![static_layer, overlay.into_geometry()];
+		self.perf
+			.record_canvas_draw(started.elapsed(), static_build, overlay_elapsed, cache_miss);
+		geometry
 	}
 
 	fn mouse_interaction(&self, _state: &Self::State, bounds: Rectangle, cursor: mouse::Cursor) -> mouse::Interaction {

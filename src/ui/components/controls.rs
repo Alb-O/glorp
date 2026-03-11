@@ -1,10 +1,10 @@
-use iced::widget::{checkbox, column, pick_list, scrollable, slider, text};
+use iced::widget::{checkbox, column, pick_list, slider, text};
 use iced::{Element, Length};
 
 use crate::types::{FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, WrapChoice};
 use crate::ui::{
-	control_row, panel_style, rounded_checkbox_style, rounded_pick_list_menu_style, rounded_pick_list_style,
-	rounded_slider_style,
+	control_row, panel_scrollable, panel_style, rounded_checkbox_style, rounded_pick_list_menu_style,
+	rounded_pick_list_style, rounded_slider_style,
 };
 
 /// Props for the controls tab.
@@ -24,7 +24,7 @@ pub(crate) struct ControlsTabProps {
 }
 
 pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Message> {
-	scrollable(
+	panel_scrollable(
 		column![
 			control_row(
 				"Preset",
@@ -106,7 +106,7 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 fn view_editor_help() -> Element<'static, Message> {
 	iced::widget::container(
 		text(
-			"Wheel or touchpad-scroll to pan the canvas.\nClick the canvas to focus.\nNormal: h/j/k/l or arrows move, i inserts before, a inserts after, x deletes.\nInsert: type, Enter/Tab insert text, Backspace/Delete edit, Esc returns to normal mode."
+			"Wheel or touchpad-scroll to pan the canvas.\nClick the canvas to focus.\nOpen the Perf tab to watch edit and render timings live while you type or scroll.\nNormal: h/j/k/l or arrows move, i inserts before, a inserts after, x deletes.\nInsert: type, Enter/Tab insert text, Backspace/Delete edit, Esc returns to normal mode."
 		)
 		.size(14)
 		.width(Length::Fill),

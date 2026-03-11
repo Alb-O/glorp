@@ -73,6 +73,7 @@
 mod app;
 mod canvas_view;
 mod editor;
+mod perf;
 mod scene;
 mod types;
 mod ui;
@@ -88,6 +89,7 @@ pub fn run() -> iced::Result {
 	};
 
 	iced::application(Playground::new, Playground::update, Playground::view)
+		.subscription(Playground::subscription)
 		.theme(app_theme)
 		.settings(settings)
 		.run()

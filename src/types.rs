@@ -1,6 +1,7 @@
 use iced::Font;
 use iced::Point;
 use iced::advanced::text::Shaping;
+use iced::time::Instant;
 use iced::widget::pane_grid;
 
 use std::fmt::{self, Display};
@@ -20,6 +21,7 @@ pub(crate) enum Message {
 	ShowBaselinesChanged(bool),
 	ShowHitboxesChanged(bool),
 	SelectSidebarTab(SidebarTab),
+	PerfTick(Instant),
 	CanvasHovered(Option<CanvasTarget>),
 	CanvasClicked {
 		target: Option<CanvasTarget>,
@@ -34,10 +36,11 @@ pub(crate) enum SidebarTab {
 	Controls,
 	Inspect,
 	Dump,
+	Perf,
 }
 
 impl SidebarTab {
-	pub(crate) const ALL: [Self; 3] = [Self::Controls, Self::Inspect, Self::Dump];
+	pub(crate) const ALL: [Self; 4] = [Self::Controls, Self::Inspect, Self::Dump, Self::Perf];
 }
 
 impl Display for SidebarTab {
@@ -46,6 +49,7 @@ impl Display for SidebarTab {
 			Self::Controls => "Controls",
 			Self::Inspect => "Inspect",
 			Self::Dump => "Dump",
+			Self::Perf => "Perf",
 		};
 
 		f.write_str(label)

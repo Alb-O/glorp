@@ -1,8 +1,8 @@
-use iced::widget::{column, container, scrollable, text};
+use iced::widget::{column, container, text};
 use iced::{Element, Font, Length, Theme};
 
 use crate::types::Message;
-use crate::ui::{CONTROL_RADIUS, panel_style};
+use crate::ui::{CONTROL_RADIUS, panel_scrollable, panel_style};
 
 /// Props for the inspect tab.
 pub(crate) struct InspectTabProps<'a> {
@@ -11,7 +11,7 @@ pub(crate) struct InspectTabProps<'a> {
 }
 
 pub(crate) fn view_inspect_tab(props: InspectTabProps<'_>) -> Element<'_, Message> {
-	scrollable(
+	panel_scrollable(
 		column![
 			text("Warnings").size(18),
 			view_warnings_panel(props.warnings),
@@ -61,7 +61,7 @@ fn view_warnings_panel<'a>(warnings: &'a [String]) -> Element<'a, Message> {
 
 fn view_interaction_panel(interaction_details: String) -> Element<'static, Message> {
 	container(
-		scrollable(
+		panel_scrollable(
 			text(interaction_details)
 				.font(Font::MONOSPACE)
 				.size(14)

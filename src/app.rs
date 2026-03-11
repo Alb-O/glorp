@@ -1,14 +1,17 @@
 use iced::widget::{pane_grid, responsive};
-use iced::{Element, Length, Task};
+use iced::{Element, Length, Subscription, Task, futures, stream};
 
 use std::fmt::Write as _;
+use std::time::{Duration, Instant};
 
 use crate::editor::EditorBuffer;
+use crate::perf::PerfMonitor;
 use crate::scene::{LayoutScene, make_font_system};
 use crate::types::{FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
 use crate::ui::{
-	CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, default_sidebar_ratio, is_stacked_shell,
-	view_canvas_pane, view_controls_tab, view_dump_tab, view_inspect_tab, view_sidebar, view_stacked_shell,
+	CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps, default_sidebar_ratio,
+	is_stacked_shell, view_canvas_pane, view_controls_tab, view_dump_tab, view_inspect_tab, view_perf_tab,
+	view_sidebar, view_stacked_shell,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +38,7 @@ pub(crate) struct Playground {
 	scene: LayoutScene,
 	font_system: cosmic_text::FontSystem,
 	chrome: pane_grid::State<ShellPane>,
+	perf: PerfMonitor,
 	scene_revision: u64,
 }
 
@@ -53,6 +57,7 @@ impl Playground {
 		let show_baselines = true;
 		let show_hitboxes = true;
 		let active_sidebar_tab = SidebarTab::Controls;
+		let perf = PerfMonitor::default();
 		let chrome = pane_grid::State::with_configuration(pane_grid::Configuration::Split {
 			axis: pane_grid::Axis::Vertical,
 			ratio: default_sidebar_ratio(),
@@ -92,10 +97,19 @@ impl Playground {
 				scene,
 				font_system,
 				chrome,
+				perf,
 				scene_revision: 1,
 			},
 			Task::none(),
 		)
+	}
+
+	pub(crate) fn subscription(&self) -> Subscription<Message> {
+		if self.active_sidebar_tab == SidebarTab::Perf {
+			Subscription::run(perf_tick_stream).map(Message::PerfTick)
+		} else {
+			Subscription::none()
+		}
 	}
 
 	pub(crate) fn update(&mut self, message: Message) -> Task<Message> {
@@ -147,29 +161,23 @@ impl Playground {
 			Message::SelectSidebarTab(tab) => {
 				self.active_sidebar_tab = tab;
 			}
+			Message::PerfTick(_now) => {}
 			Message::CanvasHovered(target) => {
 				self.hovered_target = target;
 			}
 			Message::CanvasClicked { target, position } => {
 				self.selected_target = target;
-				self.editor
-					.apply(crate::editor::EditorCommand::SelectClusterAt(position), &self.scene);
-				self.sync_selected_target();
+				self.apply_editor_command(crate::editor::EditorCommand::SelectClusterAt(position), false);
 			}
 			Message::PaneResized(event) => {
 				self.chrome.resize(event.split, event.ratio);
 			}
 			Message::EditorCommand(command) => {
-				let changed = self.editor.apply(command, &self.scene);
-				self.preset = SamplePreset::Custom;
-				if changed {
-					self.refresh_scene();
-				} else {
-					self.sync_selected_target();
-				}
+				self.apply_editor_command(command, true);
 			}
 		}
 
+		self.perf.flush_canvas_metrics();
 		Task::none()
 	}
 
@@ -223,6 +231,7 @@ impl Playground {
 			selected_target: self.selected_target,
 			editor: self.editor.view_state(),
 			scene_revision: self.scene_revision,
+			perf: self.perf.bridge(),
 			stacked,
 		})
 	}
@@ -246,10 +255,20 @@ impl Playground {
 				interaction_details: self.interaction_details(),
 			}),
 			SidebarTab::Dump => view_dump_tab(&self.scene.dump),
+			SidebarTab::Perf => view_perf_tab(PerfTabProps {
+				overview: self
+					.perf
+					.overview_text(&self.scene, self.editor.mode(), self.editor.text().len()),
+				graphs: self.perf.graphs(),
+				frame_pacing: self.perf.frame_pacing_text(),
+				hot_paths: self.perf.hot_paths_text(),
+				recent_activity: self.perf.recent_activity_text(),
+			}),
 		}
 	}
 
 	fn refresh_scene(&mut self) {
+		let started = Instant::now();
 		self.scene = LayoutScene::build(
 			&mut self.font_system,
 			self.editor.text().to_string(),
@@ -265,6 +284,26 @@ impl Playground {
 		self.hovered_target = None;
 		self.sync_selected_target();
 		self.scene_revision += 1;
+		self.perf.record_scene_build(started.elapsed());
+	}
+
+	fn apply_editor_command(&mut self, command: crate::editor::EditorCommand, mark_custom: bool) {
+		let command_started = Instant::now();
+		let apply_started = Instant::now();
+		let changed = self.editor.apply(command, &self.scene);
+		self.perf.record_editor_apply(apply_started.elapsed());
+
+		if mark_custom {
+			self.preset = SamplePreset::Custom;
+		}
+
+		if changed {
+			self.refresh_scene();
+		} else {
+			self.sync_selected_target();
+		}
+
+		self.perf.record_editor_command(command_started.elapsed());
 	}
 
 	fn sync_selected_target(&mut self) {
@@ -305,4 +344,18 @@ impl Playground {
 		);
 		details
 	}
+}
+
+fn perf_tick_stream() -> impl futures::Stream<Item = iced::time::Instant> {
+	stream::channel(1, async move |mut output| {
+		use futures::SinkExt;
+
+		loop {
+			std::thread::sleep(Duration::from_millis(100));
+
+			if output.send(iced::time::Instant::now()).await.is_err() {
+				break;
+			}
+		}
+	})
 }

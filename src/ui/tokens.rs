@@ -1,4 +1,4 @@
-use iced::widget::{button, container, row, text};
+use iced::widget::{button, container, row, scrollable, text};
 use iced::{Element, Length, Theme};
 
 use crate::types::{Message, SidebarTab};
@@ -7,6 +7,8 @@ pub(crate) const SIDEBAR_WIDTH: f32 = 380.0;
 const CONTROL_LABEL_WIDTH: f32 = 90.0;
 pub(crate) const CONTROL_RADIUS: f32 = 6.0;
 const CHECKBOX_RADIUS: f32 = 4.0;
+const PANEL_SCROLLBAR_WIDTH: f32 = 8.0;
+const PANEL_SCROLLBAR_GAP: f32 = 10.0;
 
 pub(crate) fn control_row<'a>(label: impl Into<String>, control: Element<'a, Message>) -> Element<'a, Message> {
 	row![text(label.into()).width(CONTROL_LABEL_WIDTH), control]
@@ -28,6 +30,18 @@ pub(crate) fn panel_style(theme: &Theme) -> container::Style {
 	}
 }
 
+pub(crate) fn panel_scrollable<'a>(content: impl Into<Element<'a, Message>>) -> iced::widget::Scrollable<'a, Message> {
+	scrollable(content)
+		.width(Length::Fill)
+		.direction(scrollable::Direction::Vertical(
+			scrollable::Scrollbar::new()
+				.width(PANEL_SCROLLBAR_WIDTH)
+				.scroller_width(PANEL_SCROLLBAR_WIDTH)
+				.spacing(PANEL_SCROLLBAR_GAP),
+		))
+		.style(panel_scrollable_style)
+}
+
 pub(crate) fn surface_style(theme: &Theme) -> container::Style {
 	let palette = theme.extended_palette();
 	container::Style {
@@ -39,6 +53,30 @@ pub(crate) fn surface_style(theme: &Theme) -> container::Style {
 		},
 		..Default::default()
 	}
+}
+
+pub(crate) fn panel_scrollable_style(
+	theme: &Theme, status: iced::widget::scrollable::Status,
+) -> iced::widget::scrollable::Style {
+	let palette = theme.extended_palette();
+	let mut style = iced::widget::scrollable::default(theme, status);
+	let rail = iced::widget::scrollable::Rail {
+		background: Some(palette.background.weak.color.scale_alpha(0.55).into()),
+		border: iced::Border {
+			radius: CONTROL_RADIUS.into(),
+			..style.vertical_rail.border
+		},
+		scroller: iced::widget::scrollable::Scroller {
+			background: palette.background.strongest.color.scale_alpha(0.9).into(),
+			border: iced::Border {
+				radius: CONTROL_RADIUS.into(),
+				..style.vertical_rail.scroller.border
+			},
+		},
+	};
+	style.vertical_rail = rail;
+	style.gap = Some(palette.background.base.color.into());
+	style
 }
 
 pub(crate) fn rounded_pick_list_style(
