@@ -27,10 +27,10 @@ pub(crate) mod components;
 pub(crate) mod tokens;
 
 pub(crate) use components::{
-	CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, view_canvas_pane, view_controls_tab,
-	view_dump_tab, view_inspect_tab, view_shell, view_sidebar,
+	CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, default_sidebar_ratio, is_stacked_shell,
+	view_canvas_pane, view_controls_tab, view_dump_tab, view_inspect_tab, view_sidebar, view_stacked_shell,
 };
 pub(crate) use tokens::{
-	CONTROL_RADIUS, SIDEBAR_WIDTH, control_row, panel_style, rounded_checkbox_style, rounded_pick_list_menu_style,
+	CONTROL_RADIUS, control_row, panel_style, rounded_checkbox_style, rounded_pick_list_menu_style,
 	rounded_pick_list_style, rounded_slider_style, surface_style, view_sidebar_tab,
 };

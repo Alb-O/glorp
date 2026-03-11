@@ -1,6 +1,7 @@
 use iced::Font;
 use iced::Point;
 use iced::advanced::text::Shaping;
+use iced::widget::pane_grid;
 
 use std::fmt::{self, Display};
 
@@ -24,6 +25,7 @@ pub(crate) enum Message {
 		target: Option<CanvasTarget>,
 		position: Point,
 	},
+	PaneResized(pane_grid::ResizeEvent),
 	EditorCommand(EditorCommand),
 }
 

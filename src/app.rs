@@ -1,4 +1,4 @@
-use iced::widget::responsive;
+use iced::widget::{pane_grid, responsive};
 use iced::{Element, Length, Task};
 
 use std::fmt::Write as _;
@@ -7,9 +7,15 @@ use crate::editor::EditorBuffer;
 use crate::scene::{LayoutScene, make_font_system};
 use crate::types::{FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
 use crate::ui::{
-	CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, view_canvas_pane, view_controls_tab,
-	view_dump_tab, view_inspect_tab, view_shell, view_sidebar,
+	CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, default_sidebar_ratio, is_stacked_shell,
+	view_canvas_pane, view_controls_tab, view_dump_tab, view_inspect_tab, view_sidebar, view_stacked_shell,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShellPane {
+	Sidebar,
+	Canvas,
+}
 
 pub(crate) struct Playground {
 	editor: EditorBuffer,
@@ -28,6 +34,7 @@ pub(crate) struct Playground {
 	selected_target: Option<crate::types::CanvasTarget>,
 	scene: LayoutScene,
 	font_system: cosmic_text::FontSystem,
+	chrome: pane_grid::State<ShellPane>,
 	scene_revision: u64,
 }
 
@@ -46,6 +53,12 @@ impl Playground {
 		let show_baselines = true;
 		let show_hitboxes = true;
 		let active_sidebar_tab = SidebarTab::Controls;
+		let chrome = pane_grid::State::with_configuration(pane_grid::Configuration::Split {
+			axis: pane_grid::Axis::Vertical,
+			ratio: default_sidebar_ratio(),
+			a: Box::new(pane_grid::Configuration::Pane(ShellPane::Sidebar)),
+			b: Box::new(pane_grid::Configuration::Pane(ShellPane::Canvas)),
+		});
 		let scene = LayoutScene::build(
 			&mut font_system,
 			editor.text().to_string(),
@@ -78,6 +91,7 @@ impl Playground {
 				selected_target: None,
 				scene,
 				font_system,
+				chrome,
 				scene_revision: 1,
 			},
 			Task::none(),
@@ -142,6 +156,9 @@ impl Playground {
 					.apply(crate::editor::EditorCommand::SelectClusterAt(position), &self.scene);
 				self.sync_selected_target();
 			}
+			Message::PaneResized(event) => {
+				self.chrome.resize(event.split, event.ratio);
+			}
 			Message::EditorCommand(command) => {
 				let changed = self.editor.apply(command, &self.scene);
 				self.preset = SamplePreset::Custom;
@@ -158,30 +175,56 @@ impl Playground {
 
 	pub(crate) fn view(&self) -> Element<'_, Message> {
 		responsive(|size| {
-			let stacked = size.width < 1120.0;
-			let sidebar = view_sidebar(SidebarProps {
-				active_tab: self.active_sidebar_tab,
-				editor_mode: self.editor.mode(),
-				editor_bytes: self.editor.text().len(),
-				body: self.view_sidebar_body(),
-				stacked,
-			});
-			let canvas = view_canvas_pane(CanvasPaneProps {
-				scene: self.scene.clone(),
-				show_baselines: self.show_baselines,
-				show_hitboxes: self.show_hitboxes,
-				hovered_target: self.hovered_target,
-				selected_target: self.selected_target,
-				editor: self.editor.view_state(),
-				scene_revision: self.scene_revision,
-				stacked,
-			});
+			if is_stacked_shell(size) {
+				let sidebar = self.view_sidebar(true);
+				let canvas = self.view_canvas(true);
+				return view_stacked_shell(sidebar, canvas);
+			}
 
-			view_shell(size, sidebar, canvas)
+			let grid = pane_grid(&self.chrome, |_, pane, _| {
+				pane_grid::Content::new(match pane {
+					ShellPane::Sidebar => self.view_sidebar(false),
+					ShellPane::Canvas => self.view_canvas(false),
+				})
+			})
+			.width(Length::Fill)
+			.height(Length::Fill)
+			.spacing(12)
+			.min_size(220)
+			.on_resize(12, Message::PaneResized);
+
+			iced::widget::container(grid)
+				.padding(16)
+				.width(Length::Fill)
+				.height(Length::Fill)
+				.into()
 		})
 		.width(Length::Fill)
 		.height(Length::Fill)
 		.into()
+	}
+
+	fn view_sidebar(&self, stacked: bool) -> Element<'_, Message> {
+		view_sidebar(SidebarProps {
+			active_tab: self.active_sidebar_tab,
+			editor_mode: self.editor.mode(),
+			editor_bytes: self.editor.text().len(),
+			body: self.view_sidebar_body(),
+			stacked,
+		})
+	}
+
+	fn view_canvas(&self, stacked: bool) -> Element<'static, Message> {
+		view_canvas_pane(CanvasPaneProps {
+			scene: self.scene.clone(),
+			show_baselines: self.show_baselines,
+			show_hitboxes: self.show_hitboxes,
+			hovered_target: self.hovered_target,
+			selected_target: self.selected_target,
+			editor: self.editor.view_state(),
+			scene_revision: self.scene_revision,
+			stacked,
+		})
 	}
 
 	fn view_sidebar_body(&self) -> Element<'_, Message> {

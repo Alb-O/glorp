@@ -1,13 +1,14 @@
-use iced::widget::{canvas, column, container, row};
+use iced::widget::{canvas, column, container};
 use iced::{Element, Length, Size};
 
 use crate::canvas_view::GlyphCanvas;
 use crate::editor::EditorViewState;
 use crate::scene::LayoutScene;
 use crate::types::{CanvasTarget, Message};
-use crate::ui::tokens::surface_style;
+use crate::ui::tokens::{SIDEBAR_WIDTH, surface_style};
 
 const STACK_LAYOUT_BREAKPOINT: f32 = 1120.0;
+const MIN_CANVAS_WIDTH: f32 = 620.0;
 
 /// Props for the canvas pane.
 pub(crate) struct CanvasPaneProps {
@@ -21,19 +22,21 @@ pub(crate) struct CanvasPaneProps {
 	pub(crate) stacked: bool,
 }
 
-/// Builds the responsive app shell from a sidebar element and a canvas element.
-/// This layer decides layout only.
-pub(crate) fn view_shell<'a>(
-	size: Size, sidebar: Element<'a, Message>, canvas: Element<'a, Message>,
-) -> Element<'a, Message> {
-	let stacked = size.width < STACK_LAYOUT_BREAKPOINT;
-	let content: Element<'a, Message> = if stacked {
-		column![canvas, sidebar].spacing(12).into()
-	} else {
-		row![sidebar, canvas].spacing(16).into()
-	};
+/// Returns whether the shell should collapse into a stacked layout.
+pub(crate) fn is_stacked_shell(size: Size) -> bool {
+	size.width < STACK_LAYOUT_BREAKPOINT
+}
 
-	container(content)
+/// The initial sidebar ratio for the wide `pane_grid` shell.
+pub(crate) fn default_sidebar_ratio() -> f32 {
+	SIDEBAR_WIDTH / (SIDEBAR_WIDTH + MIN_CANVAS_WIDTH)
+}
+
+/// Builds the stacked shell used below the pane-grid breakpoint.
+pub(crate) fn view_stacked_shell<'a>(
+	sidebar: Element<'a, Message>, canvas: Element<'a, Message>,
+) -> Element<'a, Message> {
+	container(column![canvas, sidebar].spacing(12))
 		.padding(16)
 		.width(Length::Fill)
 		.height(Length::Fill)

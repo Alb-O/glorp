@@ -2,7 +2,7 @@ use iced::widget::{column, container, row, text};
 use iced::{Element, Font, Length};
 
 use crate::types::{Message, SidebarTab};
-use crate::ui::{SIDEBAR_WIDTH, surface_style, view_sidebar_tab};
+use crate::ui::{surface_style, view_sidebar_tab};
 
 /// Props for the sidebar shell.
 ///
@@ -30,11 +30,7 @@ pub(crate) fn view_sidebar<'a>(props: SidebarProps<'a>) -> Element<'a, Message> 
 		.spacing(12)
 		.padding(16),
 	)
-	.width(if props.stacked {
-		Length::Fill
-	} else {
-		Length::Fixed(SIDEBAR_WIDTH)
-	})
+	.width(Length::Fill)
 	.height(if props.stacked {
 		Length::FillPortion(2)
 	} else {
