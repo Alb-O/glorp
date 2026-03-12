@@ -50,12 +50,12 @@ impl Playground {
 		let font = FontChoice::JetBrainsMono;
 		let shaping = ShapingChoice::Advanced;
 		let wrapping = WrapChoice::Word;
-		let render_mode = RenderMode::CanvasAndOutlines;
+		let render_mode = RenderMode::CanvasOnly;
 		let font_size = 24.0;
 		let line_height = 32.0;
 		let layout_width = 540.0;
-		let show_baselines = true;
-		let show_hitboxes = true;
+		let show_baselines = false;
+		let show_hitboxes = false;
 		let active_sidebar_tab = SidebarTab::Controls;
 		let perf = PerfMonitor::default();
 		let chrome = pane_grid::State::with_configuration(pane_grid::Configuration::Split {
