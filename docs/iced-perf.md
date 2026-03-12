@@ -18,6 +18,7 @@ That puts the text path much closer to upstream `iced` widget behavior:
 - `iced_widget-0.14.2/src/text_editor.rs` keeps a retained editor object and updates it incrementally.
 - `iced_graphics-0.14.0/src/text/editor.rs` does incremental buffer/editor updates and then `shape_as_needed(...)`.
 - `iced_wgpu-0.14.0/src/text.rs` applies transform and clip to retained text areas instead of rebuilding shaped text on scroll.
+- `iced_graphics-0.14.0/src/text/paragraph.rs` also keeps a retained paragraph and treats bounds-only changes as `Paragraph::resize(...)`, which calls `Buffer::set_size(...)` instead of rebuilding the whole paragraph text payload.
 
 ## What Is Already Fixed
 
@@ -32,6 +33,7 @@ These are no longer the main bottlenecks:
 - Inspection glyph data is no longer materialized eagerly on every edit in normal text mode. `LayoutScene::from_buffer(...)` now builds lightweight runs/clusters first, and `inspect_runs()` only constructs per-glyph inspection payload on demand unless outline mode requires it eagerly in `src/scene.rs`.
 - The canvas draw pass culls vector work to the visible viewport in `src/canvas_view.rs`.
 - Editor interaction no longer depends on `LayoutScene` as its state machine. Click selection now starts from retained-buffer hit testing, vertical and line-edge movement derive from retained-buffer layout, and scene refresh no longer repairs editor state after the fact in `src/editor.rs` and `src/app.rs`.
+- Drag-resize no longer rebuilds on every raw size sample. The app now coalesces resize reflow to roughly frame cadence and preserves canvas scroll across resize-only reflows in `src/app.rs`.
 
 ## Remaining Structural Costs
 
@@ -47,7 +49,30 @@ That is expected with the current canvas architecture:
 
 The expensive text layer is already off this path. What still pays here is overlay/debug geometry.
 
-### 2. Editor Core Is Better, But Still Custom
+### 2. Width Resize Is Inherently A Reflow Path
+
+The newer fullscreen editor shell exposed a different hot path: width changes.
+
+The important upstream behavior here is:
+
+- `iced_widget-0.14.2/src/pane_grid.rs` publishes `ResizeEvent` continuously while the divider is dragged. This is not a one-shot "resize finished" signal; it is per cursor move.
+- `iced_widget-0.14.2/src/sensor.rs` publishes `on_resize` whenever the child layout size changes on redraw.
+- `iced_graphics-0.14.0/src/text/paragraph.rs` handles bounds-only changes via `Paragraph::resize(...)`, which calls `buffer.set_size(...)` and then realigns.
+- `iced_graphics-0.14.0/src/text/editor.rs` likewise handles editor bounds changes by calling `buffer.set_size(...)` and then `shape_as_needed(...)`.
+
+That means upstream `iced` is already better than "throw away the paragraph/editor and rebuild from the full string", but width drag is still not free. A width change is a real text-layout event, because wrapping and line breaks can change.
+
+Our current repo behavior now reflects that distinction:
+
+- the visible text layer is already on the retained-paragraph path
+- the app records resize work separately as `resize.reflow` in `src/perf.rs`
+- the resize path is coalesced to frame cadence and keeps scroll position stable in `src/app.rs`
+
+That coalescing is only backpressure. It does not eliminate the underlying cost. It just avoids paying full relayout work for every raw drag sample.
+
+So the deeper follow-on is not "make resize cheap with better throttling." The deeper follow-on is to reduce how much state is tied to wrapping width in the first place, or to defer expensive derived work while the width is still in motion.
+
+### 3. Editor Core Is Better, But Still Custom
 
 The editor no longer depends on `LayoutScene` for interaction, but it still keeps a custom normal/insert model in `src/editor.rs`.
 
@@ -61,7 +86,7 @@ That means:
 
 This is much better than the old scene-driven split, but it is still not the same architecture as upstream `iced_widget-0.14.2/src/text_editor.rs` plus `iced_graphics-0.14.0/src/text/editor.rs`.
 
-### 3. Hit Testing Is Still Custom And Linear In The Overlay
+### 4. Hit Testing Is Still Custom And Linear In The Overlay
 
 `src/scene.rs` still does custom hover/click hit testing over runs, clusters, or lazily built glyph inspection data.
 
@@ -83,17 +108,37 @@ The current editor/scene split is the important shift:
 
 That means the old advice, "stop patching two retained text buffers and stop materializing whole-document glyph snapshots on every edit," is now implemented.
 
+The newest resize-specific change is more limited:
+
+- width now follows the live canvas viewport instead of a manual slider
+- raw resize samples are coalesced before reflow in `src/app.rs`
+- resize reflow preserves scroll instead of resetting the canvas viewport
+- Perf now reports `resize.reflow` separately from general `scene.build`
+
+That improves drag behavior and makes the cost visible, but it does not change the fact that width changes still drive retained-buffer relayout.
+
 ## Next Big Hill
 
-The next big hill is now the inspection overlay path, not the editor core.
+There are now two real hills:
 
-In practice that means moving more of the overlay off `iced::widget::canvas`, or otherwise restructuring it so scroll stops forcing cached geometry rebuilds in `src/canvas_view.rs`.
+1. The inspection overlay path.
+2. Width-driven reflow during editor resize.
 
-That is the highest-value next move because:
+The overlay path is still the clearest draw-time cost.
+
+The resize path is now the clearest layout-time cost.
+
+In practice that means:
+
+- moving more of the overlay off `iced::widget::canvas`, or otherwise restructuring it so scroll stops forcing cached geometry rebuilds in `src/canvas_view.rs`
+- reducing the amount of derived work that must rebuild on every width change in `src/app.rs` and `src/scene.rs`
+- potentially splitting "live drag viewport width" from "fully rebuilt inspection snapshot width" so divider motion can stay visually responsive while expensive inspection data catches up at a lower cadence
+
+Those are the highest-value next moves because:
 
 - the main text layer is already off canvas
 - editor interaction no longer depends on scene rebuild and repair
-- the remaining obvious runtime churn is scroll invalidating overlay geometry
+- the remaining obvious runtime churn is overlay cache invalidation on scroll plus retained-buffer relayout on width drag
 
 The next-best follow-on after that is deeper editor unification:
 
@@ -108,6 +153,7 @@ Today the app already records useful timings in `src/perf.rs`:
 
 - editor command/apply
 - scene build
+- resize reflow
 - canvas update/static/overlay/draw
 - frame pacing
 - canvas cache hit/miss rate
@@ -133,7 +179,7 @@ Build the scripted runtime mode first.
 That is the best first move because:
 
 - the app already has `PerfMonitor`
-- the main open questions are runtime questions: scroll invalidation, canvas cost, and editor/runtime desync
+- the main open questions are runtime questions: scroll invalidation, canvas cost, width-drag reflow, and editor/runtime desync
 - those questions need end-to-end data, not just isolated CPU timings
 
 External GUI automation is not the right first tool here. It is slower, noisier, and less deterministic than an in-process harness.
@@ -147,6 +193,7 @@ A reasonable shape is:
 - `liney --perf-scenario edit-tall --samples 200 --warmup 30`
 - `liney --perf-scenario scroll-text --samples 300`
 - `liney --perf-scenario scroll-outlines --samples 300`
+- `liney --perf-scenario resize-pane --samples 180`
 
 Each scenario should pin:
 
@@ -185,6 +232,7 @@ These will be useful for frequent regression checks, but they are not a substitu
 - the `iced` event loop
 - `wgpu` text rendering
 - canvas cache invalidation on scroll
+- pane drag event frequency and viewport resize churn
 - end-to-end frame pacing
 
 ### How To Use It
