@@ -75,12 +75,6 @@ impl LayoutScene {
 					.map(|face| face.post_script_name.clone())
 					.unwrap_or_else(|| format!("font#{:?}", glyph.font_id));
 
-				let cluster_text = run
-					.text
-					.get(glyph.start..glyph.end)
-					.map(debug_snippet)
-					.unwrap_or_else(|| "<invalid utf8 slice>".to_string());
-
 				let outline = swash_cache.as_mut().and_then(|cache| {
 					let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
 					cache
@@ -128,7 +122,6 @@ impl LayoutScene {
 				});
 
 				glyphs.push(GlyphInfo {
-					cluster: cluster_text,
 					cluster_range: (line_byte_offset + glyph.start)..(line_byte_offset + glyph.end),
 					x: glyph.x,
 					y: run.line_top + glyph.y,
@@ -407,7 +400,7 @@ impl LayoutScene {
 				Some(format!(
 					"  kind: glyph\n  run index: {run_index}\n  glyph index: {glyph_index}\n  source line: {}\n  cluster: {}\n  bytes: {:?}\n  font: {}\n  glyph id: {}\n  x/y: {:.1}, {:.1}\n  w/h: {:.1}, {:.1}\n  size: {:.1}\n  x/y offset: {:.3}, {:.3}\n  outline: {}",
 					run.line_index,
-					glyph.cluster,
+					self.debug_snippet(&glyph.cluster_range),
 					glyph.cluster_range,
 					glyph.font_name,
 					glyph.glyph_id,
@@ -422,6 +415,17 @@ impl LayoutScene {
 				))
 			}
 		}
+	}
+
+	pub(crate) fn cluster_preview(&self, cluster: &ClusterInfo) -> String {
+		self.debug_snippet(&cluster.byte_range)
+	}
+
+	fn debug_snippet(&self, range: &Range<usize>) -> String {
+		self.text
+			.get(range.clone())
+			.map(debug_snippet)
+			.unwrap_or_else(|| "<invalid utf8 slice>".to_string())
 	}
 }
 
@@ -447,7 +451,6 @@ pub(crate) struct ClusterInfo {
 	pub(crate) y: f32,
 	pub(crate) width: f32,
 	pub(crate) height: f32,
-	pub(crate) preview: String,
 }
 
 impl ClusterInfo {
@@ -458,7 +461,6 @@ impl ClusterInfo {
 
 #[derive(Debug, Clone)]
 pub(crate) struct GlyphInfo {
-	pub(crate) cluster: String,
 	pub(crate) cluster_range: Range<usize>,
 	pub(crate) x: f32,
 	pub(crate) y: f32,
@@ -512,7 +514,7 @@ fn contains_point(point: Point, x: f32, y: f32, width: f32, height: f32) -> bool
 	point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + height
 }
 
-fn build_clusters(text: &str, line_index: usize, run_index: usize, glyphs: &[GlyphInfo]) -> Vec<ClusterInfo> {
+fn build_clusters(_text: &str, _line_index: usize, run_index: usize, glyphs: &[GlyphInfo]) -> Vec<ClusterInfo> {
 	let mut clusters = Vec::new();
 	let mut current: Option<ClusterInfo> = None;
 
@@ -538,10 +540,6 @@ fn build_clusters(text: &str, line_index: usize, run_index: usize, glyphs: &[Gly
 					y: glyph.y,
 					width: glyph.width.max(1.0),
 					height: glyph.height.max(1.0),
-					preview: text
-						.get(glyph.cluster_range.clone())
-						.map(debug_snippet)
-						.unwrap_or_else(|| format!("<line {line_index}>")),
 				});
 			}
 		}
@@ -682,7 +680,10 @@ fn build_dump(
 				dump,
 				"  glyph {}: cluster={} bytes={:?} font={} glyph_id={} x={:.1} y={:.1} w={:.1} h={:.1} size={:.1} x_off={:.3} y_off={:.3} outline={}",
 				emitted - 1,
-				glyph.cluster,
+				text_value
+					.get(glyph.cluster_range.clone())
+					.map(debug_snippet)
+					.unwrap_or_else(|| "<invalid utf8 slice>".to_string()),
 				glyph.cluster_range,
 				glyph.font_name,
 				glyph.glyph_id,

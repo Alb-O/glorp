@@ -190,7 +190,7 @@ impl EditorBuffer {
 				format!(
 					"  mode: {}\n  cluster: {}\n  bytes: {:?}\n  run: {}\n  x/y: {:.1}, {:.1}\n  w/h: {:.1}, {:.1}",
 					self.mode,
-					cluster.preview,
+					scene.cluster_preview(cluster),
 					cluster.byte_range,
 					cluster.run_index,
 					cluster.x,
@@ -206,7 +206,8 @@ impl EditorBuffer {
 				scene
 					.cluster_before(self.caret)
 					.or_else(|| scene.cluster_at_or_after(self.caret))
-					.map(|index| scene.clusters()[index].preview.clone())
+					.and_then(|index| scene.cluster(index))
+					.map(|cluster| scene.cluster_preview(cluster))
 					.unwrap_or_else(|| "<none>".to_string())
 			),
 		}
@@ -459,7 +460,6 @@ mod tests {
 				y: (*run_index as f32) * 20.0,
 				width: 10.0,
 				height: 18.0,
-				preview: format!("{start}..{end}"),
 			})
 			.collect::<Vec<_>>();
 

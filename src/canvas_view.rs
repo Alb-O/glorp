@@ -172,6 +172,7 @@ impl canvas::Program<Message> for GlyphCanvas {
 
 fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas, scroll: Vector) {
 	let origin = scrolled_origin(scroll);
+	let visible_scene_bounds = visible_scene_bounds(bounds, scroll);
 	let text_area_size = Size::new(
 		canvas.scene.max_width.max(1.0),
 		canvas.scene.measured_height.max(bounds.height - origin.y - 24.0),
@@ -217,6 +218,10 @@ fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &Glyp
 	}
 
 	for run in &canvas.scene.runs {
+		if !run_intersects_viewport(run, visible_scene_bounds) {
+			continue;
+		}
+
 		if canvas.show_baselines {
 			let top_line = canvas::Path::line(
 				Point::new(origin.x, origin.y + run.line_top),
@@ -242,6 +247,10 @@ fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &Glyp
 		}
 
 		for glyph in &run.glyphs {
+			if !glyph_intersects_viewport(glyph, visible_scene_bounds) {
+				continue;
+			}
+
 			if canvas.show_hitboxes {
 				frame.stroke_rectangle(
 					Point::new(origin.x + glyph.x, origin.y + glyph.y),
@@ -494,12 +503,12 @@ fn key_command(
 	}
 }
 
-fn animate_scroll(current: Vector, target: Vector) -> Vector {
-	current + ((target - current) * 0.22)
-}
-
 fn clamp_scroll(scroll: Vector, max_scroll: Vector) -> Vector {
 	Vector::new(scroll.x.clamp(0.0, max_scroll.x), scroll.y.clamp(0.0, max_scroll.y))
+}
+
+fn animate_scroll(current: Vector, target: Vector) -> Vector {
+	current + ((target - current) * 0.22)
 }
 
 fn max_scroll(bounds: Rectangle, scene: &LayoutScene) -> Vector {
@@ -541,6 +550,25 @@ fn viewport_size(bounds: Rectangle) -> Size {
 
 fn scene_origin() -> Point {
 	Point::new(24.0, 28.0)
+}
+
+fn visible_scene_bounds(bounds: Rectangle, scroll: Vector) -> Rectangle {
+	Rectangle::new(Point::new(scroll.x, scroll.y), viewport_size(bounds))
+}
+
+fn run_intersects_viewport(run: &crate::scene::RunInfo, viewport: Rectangle) -> bool {
+	let run_bottom = run.line_top + run.line_height;
+	run_bottom >= viewport.y && run.line_top <= viewport.y + viewport.height
+}
+
+fn glyph_intersects_viewport(glyph: &crate::scene::GlyphInfo, viewport: Rectangle) -> bool {
+	let glyph_right = glyph.x + glyph.width.max(1.0);
+	let glyph_bottom = glyph.y + glyph.height.max(1.0);
+
+	glyph_right >= viewport.x
+		&& glyph.x <= viewport.x + viewport.width
+		&& glyph_bottom >= viewport.y
+		&& glyph.y <= viewport.y + viewport.height
 }
 
 #[cfg(test)]
