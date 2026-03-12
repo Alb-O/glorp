@@ -1,5 +1,8 @@
 use cosmic_text::{Attrs, Buffer, Command, FontSystem, Metrics, SwashCache};
-use iced::{Font, Point};
+use iced::advanced::graphics::text::Paragraph as IcedParagraph;
+use iced::advanced::text::{Alignment, LineHeight, Paragraph as _};
+use iced::alignment;
+use iced::{Font, Pixels, Point, Size};
 
 use std::fmt::Write as _;
 use std::ops::Range;
@@ -9,8 +12,8 @@ use crate::types::{CanvasTarget, FontChoice, RenderMode, ShapingChoice, WrapChoi
 #[derive(Debug, Clone)]
 pub(crate) struct LayoutScene {
 	pub(crate) text: String,
+	pub(crate) paragraph: IcedParagraph,
 	pub(crate) font_choice: FontChoice,
-	pub(crate) font: Font,
 	pub(crate) shaping: ShapingChoice,
 	pub(crate) wrapping: WrapChoice,
 	pub(crate) render_mode: RenderMode,
@@ -26,7 +29,6 @@ pub(crate) struct LayoutScene {
 	pub(crate) warnings: Vec<String>,
 	pub(crate) draw_canvas_text: bool,
 	pub(crate) draw_outlines: bool,
-	pub(crate) canvas_wraps: bool,
 }
 
 impl LayoutScene {
@@ -36,16 +38,12 @@ impl LayoutScene {
 		wrapping: WrapChoice, font_size: f32, line_height: f32, max_width: f32, render_mode: RenderMode,
 	) -> Self {
 		let draw_outlines = render_mode.draw_outlines();
+		let font = font_choice.to_iced_font();
+		let paragraph = build_paragraph(&text, font, shaping, wrapping, font_size, line_height, max_width);
 		let mut buffer = Buffer::new(font_system, Metrics::new(font_size, line_height));
 		buffer.set_size(font_system, Some(max_width), None);
 		buffer.set_wrap(font_system, wrapping.to_cosmic());
-		buffer.set_text(
-			font_system,
-			&text,
-			&to_attributes(font_choice.to_iced_font()),
-			shaping.to_cosmic(&text),
-			None,
-		);
+		buffer.set_text(font_system, &text, &to_attributes(font), shaping.to_cosmic(&text), None);
 
 		let mut swash_cache = draw_outlines.then(SwashCache::new);
 		let mut runs = Vec::new();
@@ -152,22 +150,14 @@ impl LayoutScene {
 			});
 		}
 
-		if matches!(render_mode, RenderMode::CanvasOnly | RenderMode::CanvasAndOutlines)
-			&& matches!(wrapping, WrapChoice::Glyph | WrapChoice::WordOrGlyph)
-		{
-			warnings.push(
-                "The blue overlay uses `canvas::Text`, which only exposes Iced's default wrapping behavior. Glyph-level wrapping is only reflected in the outline and dump.".to_string(),
-            );
-		}
-
 		if runs.is_empty() {
 			warnings.push("No layout runs were produced. Check the font choice and text content.".to_string());
 		}
 
 		Self {
 			text,
+			paragraph,
 			font_choice,
-			font: font_choice.to_iced_font(),
 			shaping,
 			wrapping,
 			render_mode,
@@ -183,7 +173,6 @@ impl LayoutScene {
 			warnings,
 			draw_canvas_text: render_mode.draw_canvas_text(),
 			draw_outlines,
-			canvas_wraps: !matches!(wrapping, WrapChoice::None),
 		}
 	}
 
@@ -508,6 +497,32 @@ pub(crate) fn make_font_system() -> FontSystem {
 	db.set_monospace_family("JetBrains Mono");
 	db.set_sans_serif_family("Noto Sans CJK SC");
 	font_system
+}
+
+fn build_paragraph(
+	text: &str, font: Font, shaping: ShapingChoice, wrapping: WrapChoice, font_size: f32, line_height: f32,
+	max_width: f32,
+) -> IcedParagraph {
+	let bounds = Size::new(
+		if matches!(wrapping, WrapChoice::None) {
+			f32::INFINITY
+		} else {
+			max_width
+		},
+		f32::INFINITY,
+	);
+
+	IcedParagraph::with_text(iced::advanced::text::Text {
+		content: text,
+		bounds,
+		size: Pixels(font_size),
+		line_height: LineHeight::Absolute(Pixels(line_height)),
+		font,
+		align_x: Alignment::Left,
+		align_y: alignment::Vertical::Top,
+		shaping: shaping.to_iced(),
+		wrapping: wrapping.to_iced(),
+	})
 }
 
 fn contains_point(point: Point, x: f32, y: f32, width: f32, height: f32) -> bool {

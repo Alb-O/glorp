@@ -1,3 +1,4 @@
+use iced::Vector;
 use iced::widget::{pane_grid, responsive};
 use iced::{Element, Length, Subscription, Task, futures, stream};
 
@@ -35,6 +36,7 @@ pub(crate) struct Playground {
 	active_sidebar_tab: SidebarTab,
 	hovered_target: Option<crate::types::CanvasTarget>,
 	selected_target: Option<crate::types::CanvasTarget>,
+	canvas_scroll: Vector,
 	scene: LayoutScene,
 	scene_dump: String,
 	font_system: cosmic_text::FontSystem,
@@ -95,6 +97,7 @@ impl Playground {
 				active_sidebar_tab,
 				hovered_target: None,
 				selected_target: None,
+				canvas_scroll: Vector::ZERO,
 				scene,
 				scene_dump: String::new(),
 				font_system,
@@ -170,6 +173,9 @@ impl Playground {
 			Message::CanvasHovered(target) => {
 				self.hovered_target = target;
 			}
+			Message::CanvasScrollChanged(scroll) => {
+				self.canvas_scroll = scroll;
+			}
 			Message::CanvasClicked { target, position } => {
 				self.selected_target = target;
 				self.apply_editor_command(crate::editor::EditorCommand::SelectClusterAt(position), false);
@@ -236,6 +242,7 @@ impl Playground {
 			selected_target: self.selected_target,
 			editor: self.editor.view_state(),
 			scene_revision: self.scene_revision,
+			scroll: self.canvas_scroll,
 			perf: self.perf.bridge(),
 			stacked,
 		})
@@ -287,6 +294,7 @@ impl Playground {
 		);
 		self.editor.sync_with_scene(&self.scene);
 		self.hovered_target = None;
+		self.canvas_scroll = Vector::ZERO;
 		self.sync_selected_target();
 		if matches!(self.active_sidebar_tab, SidebarTab::Dump) {
 			self.refresh_scene_dump();

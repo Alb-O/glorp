@@ -446,6 +446,10 @@ mod tests {
 	use crate::scene::{CaretMetrics, ClusterInfo, LayoutScene, RunInfo, make_font_system};
 	use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
 	use iced::Font;
+	use iced::advanced::graphics::text::Paragraph as IcedParagraph;
+	use iced::advanced::text::{Alignment, LineHeight, Paragraph as _};
+	use iced::alignment;
+	use iced::{Pixels, Size};
 
 	fn scene(clusters: &[(usize, usize, usize, f32)]) -> LayoutScene {
 		let cluster_infos = clusters
@@ -465,8 +469,18 @@ mod tests {
 
 		LayoutScene {
 			text: "abc\ndef".to_string(),
+			paragraph: IcedParagraph::with_text(iced::advanced::text::Text {
+				content: "abc\ndef",
+				bounds: Size::new(100.0, f32::INFINITY),
+				size: Pixels(16.0),
+				line_height: LineHeight::Absolute(Pixels(20.0)),
+				font: Font::MONOSPACE,
+				align_x: Alignment::Left,
+				align_y: alignment::Vertical::Top,
+				shaping: crate::types::ShapingChoice::Basic.to_iced(),
+				wrapping: WrapChoice::Word.to_iced(),
+			}),
 			font_choice: FontChoice::JetBrainsMono,
-			font: Font::MONOSPACE,
 			shaping: crate::types::ShapingChoice::Basic,
 			wrapping: WrapChoice::Word,
 			render_mode: RenderMode::CanvasAndOutlines,
@@ -504,7 +518,6 @@ mod tests {
 			warnings: Vec::new(),
 			draw_canvas_text: true,
 			draw_outlines: false,
-			canvas_wraps: true,
 		}
 	}
 

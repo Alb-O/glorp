@@ -1,8 +1,6 @@
 use std::cell::Cell;
 use std::time::Instant;
 
-use iced::advanced::text::{Alignment, LineHeight};
-use iced::alignment;
 use iced::keyboard::{self, key};
 use iced::widget::canvas;
 use iced::{Color, Font, Pixels, Point, Rectangle, Size, Theme, Vector, mouse, window};
@@ -21,6 +19,7 @@ pub(crate) struct GlyphCanvas {
 	pub(crate) selected_target: Option<CanvasTarget>,
 	pub(crate) editor: EditorViewState,
 	pub(crate) scene_revision: u64,
+	pub(crate) scroll: Vector,
 	pub(crate) perf: PerfBridge,
 }
 
@@ -42,6 +41,7 @@ impl canvas::Program<Message> for GlyphCanvas {
 		&self, state: &mut Self::State, event: &canvas::Event, bounds: Rectangle, cursor: mouse::Cursor,
 	) -> Option<canvas::Action<Message>> {
 		let started = Instant::now();
+		let previous_scroll = state.scroll;
 		let max_scroll = max_scroll(bounds, &self.scene);
 		state.target_scroll = clamp_scroll(state.target_scroll, max_scroll);
 		state.scroll = clamp_scroll(state.scroll, max_scroll);
@@ -109,10 +109,11 @@ impl canvas::Program<Message> for GlyphCanvas {
 				let next_scroll = animate_scroll(state.scroll, state.target_scroll);
 				if vector_length(next_scroll - state.scroll) > 0.01 {
 					state.scroll = clamp_scroll(next_scroll, max_scroll);
-					Some(canvas::Action::request_redraw())
+					Some(canvas::Action::publish(Message::CanvasScrollChanged(state.scroll)))
 				} else {
 					state.scroll = clamp_scroll(state.target_scroll, max_scroll);
-					None
+					(vector_length(state.scroll - previous_scroll) > 0.01)
+						.then_some(canvas::Action::publish(Message::CanvasScrollChanged(state.scroll)))
 				}
 			}
 			_ => {
@@ -134,7 +135,7 @@ impl canvas::Program<Message> for GlyphCanvas {
 		_cursor: iced::mouse::Cursor,
 	) -> Vec<canvas::Geometry> {
 		let started = Instant::now();
-		let cached_scroll = (state.scroll.x.round() as i32, state.scroll.y.round() as i32);
+		let cached_scroll = (self.scroll.x.round() as i32, self.scroll.y.round() as i32);
 		let cache_miss = state.cached_scene_revision.get() != Some(self.scene_revision)
 			|| state.cached_scroll.get() != Some(cached_scroll);
 
@@ -147,13 +148,13 @@ impl canvas::Program<Message> for GlyphCanvas {
 		let mut static_build = None;
 		let static_layer = state.scene_cache.draw(renderer, bounds.size(), |frame| {
 			let build_started = Instant::now();
-			draw_static_scene(frame, bounds, self, state.scroll);
+			draw_static_scene(frame, bounds, self, self.scroll);
 			static_build = Some(build_started.elapsed());
 		});
 
 		let overlay_started = Instant::now();
 		let mut overlay = canvas::Frame::new(renderer, bounds.size());
-		draw_dynamic_overlay(&mut overlay, bounds, self, state.focused, state.scroll);
+		draw_dynamic_overlay(&mut overlay, bounds, self, state.focused, self.scroll);
 		let overlay_elapsed = overlay_started.elapsed();
 
 		let geometry = vec![static_layer, overlay.into_geometry()];
@@ -173,50 +174,6 @@ impl canvas::Program<Message> for GlyphCanvas {
 fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas, scroll: Vector) {
 	let origin = scrolled_origin(scroll);
 	let visible_scene_bounds = visible_scene_bounds(bounds, scroll);
-	let text_area_size = Size::new(
-		canvas.scene.max_width.max(1.0),
-		canvas.scene.measured_height.max(bounds.height - origin.y - 24.0),
-	);
-
-	frame.fill_rectangle(Point::ORIGIN, bounds.size(), Color::from_rgb8(20, 24, 32));
-	frame.fill_rectangle(origin, text_area_size, Color::from_rgb8(28, 34, 46));
-	frame.stroke_rectangle(
-		origin,
-		Size::new(canvas.scene.max_width.max(1.0), canvas.scene.measured_height.max(1.0)),
-		canvas::Stroke::default()
-			.with_width(1.0)
-			.with_color(Color::from_rgba(0.8, 0.8, 0.9, 0.65)),
-	);
-
-	let guide = canvas::Path::line(Point::new(origin.x, 0.0), Point::new(origin.x, bounds.height));
-	frame.stroke(
-		&guide,
-		canvas::Stroke::default()
-			.with_width(1.0)
-			.with_color(Color::from_rgba(0.6, 0.7, 1.0, 0.18)),
-	);
-
-	if canvas.scene.draw_canvas_text {
-		let max_width = if canvas.scene.canvas_wraps {
-			canvas.scene.max_width
-		} else {
-			f32::INFINITY
-		};
-
-		frame.fill_text(canvas::Text {
-			content: canvas.scene.text.clone(),
-			position: origin,
-			max_width,
-			color: Color::from_rgba(0.4, 0.8, 1.0, 0.9),
-			size: Pixels(canvas.scene.font_size),
-			line_height: LineHeight::Absolute(Pixels(canvas.scene.line_height)),
-			font: canvas.scene.font,
-			align_x: Alignment::Left,
-			align_y: alignment::Vertical::Top,
-			shaping: canvas.scene.shaping.to_iced(),
-		});
-	}
-
 	for run in &canvas.scene.runs {
 		if !run_intersects_viewport(run, visible_scene_bounds) {
 			continue;
@@ -548,7 +505,7 @@ fn viewport_size(bounds: Rectangle) -> Size {
 	)
 }
 
-fn scene_origin() -> Point {
+pub(crate) fn scene_origin() -> Point {
 	Point::new(24.0, 28.0)
 }
 
@@ -575,13 +532,27 @@ fn glyph_intersects_viewport(glyph: &crate::scene::GlyphInfo, viewport: Rectangl
 mod tests {
 	use super::{clamp_scroll, max_scroll};
 	use crate::scene::LayoutScene;
+	use iced::advanced::graphics::text::Paragraph as IcedParagraph;
+	use iced::advanced::text::{Alignment, LineHeight, Paragraph as _};
+	use iced::alignment;
 	use iced::{Font, Rectangle, Vector};
+	use iced::{Pixels, Size};
 
 	fn scene(width: f32, height: f32) -> LayoutScene {
 		LayoutScene {
 			text: String::new(),
+			paragraph: IcedParagraph::with_text(iced::advanced::text::Text {
+				content: "",
+				bounds: Size::new(width, f32::INFINITY),
+				size: Pixels(16.0),
+				line_height: LineHeight::Absolute(Pixels(20.0)),
+				font: Font::MONOSPACE,
+				align_x: Alignment::Left,
+				align_y: alignment::Vertical::Top,
+				shaping: crate::types::ShapingChoice::Basic.to_iced(),
+				wrapping: crate::types::WrapChoice::Word.to_iced(),
+			}),
 			font_choice: crate::types::FontChoice::Monospace,
-			font: Font::MONOSPACE,
 			shaping: crate::types::ShapingChoice::Basic,
 			wrapping: crate::types::WrapChoice::Word,
 			render_mode: crate::types::RenderMode::CanvasOnly,
@@ -597,7 +568,6 @@ mod tests {
 			warnings: Vec::new(),
 			draw_canvas_text: true,
 			draw_outlines: false,
-			canvas_wraps: true,
 		}
 	}
 

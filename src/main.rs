@@ -7,7 +7,7 @@
 //! - edit text locally
 //! - shape and lay it out with `cosmic-text`
 //! - inspect runs and glyphs directly
-//! - compare that data against `canvas::Text`
+//! - compare that data against Iced's paragraph renderer
 //! - draw vendored glyph outlines from `swash`
 //!
 //! # Upstream map
@@ -37,12 +37,11 @@
 //!    - Why it matters: hover/click behavior still follows Iced's widget
 //!      runtime contracts.
 //!
-//! 2. `canvas::Text` renderer path
-//!    - Upstream: `iced_wgpu::geometry`, `iced_wgpu::text`,
-//!      `iced_graphics::text::cache`
-//!    - Affects: the blue `canvas::Text` overlay
-//!    - Why it matters: caching, clipping, atlas upload, and final GPU text
-//!      rendering are still upstream-owned.
+//! 2. Paragraph renderer path
+//!    - Upstream: `iced_graphics::text`, `iced_wgpu::text`
+//!    - Affects: the document text layer in `text_view`
+//!    - Why it matters: clipping, atlas upload, and final GPU text rendering
+//!      are still upstream-owned.
 //!
 //! 3. `cosmic-text` layout model
 //!    - Upstream: `cosmic_text::buffer`, `cosmic_text::layout`
@@ -60,7 +59,7 @@
 //!
 //! If we want to reduce upstream dependency in order of leverage:
 //!
-//! 1. `canvas::Text` renderer path
+//! 1. Paragraph renderer path
 //! 2. `cosmic-text` layout/run abstraction
 //! 3. `cosmic-text` font fallback policy
 //! 4. Canvas event/action API
@@ -75,6 +74,7 @@ mod canvas_view;
 mod editor;
 mod perf;
 mod scene;
+mod text_view;
 mod types;
 mod ui;
 

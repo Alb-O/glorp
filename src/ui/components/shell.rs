@@ -1,10 +1,11 @@
-use iced::widget::{canvas, column, container};
-use iced::{Element, Length, Size};
+use iced::widget::{Stack, canvas, column, container};
+use iced::{Element, Length, Size, Vector};
 
 use crate::canvas_view::GlyphCanvas;
 use crate::editor::EditorViewState;
 use crate::perf::PerfBridge;
 use crate::scene::LayoutScene;
+use crate::text_view::SceneTextLayer;
 use crate::types::{CanvasTarget, Message};
 use crate::ui::tokens::{SIDEBAR_WIDTH, surface_style};
 
@@ -20,6 +21,7 @@ pub(crate) struct CanvasPaneProps {
 	pub(crate) selected_target: Option<CanvasTarget>,
 	pub(crate) editor: EditorViewState,
 	pub(crate) scene_revision: u64,
+	pub(crate) scroll: Vector,
 	pub(crate) perf: PerfBridge,
 	pub(crate) stacked: bool,
 }
@@ -47,6 +49,10 @@ pub(crate) fn view_stacked_shell<'a>(
 
 /// Renders the canvas pane inside the shared app surface.
 pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
+	let text_layer = SceneTextLayer::new(props.scene.clone(), props.scroll)
+		.width(Length::Fill)
+		.height(Length::Fill);
+
 	let canvas_view = canvas(GlyphCanvas {
 		scene: props.scene,
 		show_baselines: props.show_baselines,
@@ -55,19 +61,24 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 		selected_target: props.selected_target,
 		editor: props.editor,
 		scene_revision: props.scene_revision,
+		scroll: props.scroll,
 		perf: props.perf,
 	})
 	.width(Length::Fill)
 	.height(Length::Fill);
 
-	container(canvas_view)
-		.padding(8)
-		.width(Length::Fill)
-		.height(if props.stacked {
-			Length::FillPortion(3)
-		} else {
-			Length::Fill
-		})
-		.style(surface_style)
-		.into()
+	container(
+		Stack::with_children([text_layer.into(), canvas_view.into()])
+			.width(Length::Fill)
+			.height(Length::Fill),
+	)
+	.padding(8)
+	.width(Length::Fill)
+	.height(if props.stacked {
+		Length::FillPortion(3)
+	} else {
+		Length::Fill
+	})
+	.style(surface_style)
+	.into()
 }

@@ -1,6 +1,8 @@
 use iced::Font;
 use iced::Point;
+use iced::Vector;
 use iced::advanced::text::Shaping;
+use iced::advanced::text::Wrapping;
 use iced::time::Instant;
 use iced::widget::pane_grid;
 
@@ -23,6 +25,7 @@ pub(crate) enum Message {
 	SelectSidebarTab(SidebarTab),
 	PerfTick(Instant),
 	CanvasHovered(Option<CanvasTarget>),
+	CanvasScrollChanged(Vector),
 	CanvasClicked {
 		target: Option<CanvasTarget>,
 		position: Point,
@@ -227,6 +230,15 @@ pub(crate) enum WrapChoice {
 impl WrapChoice {
 	pub(crate) const ALL: [WrapChoice; 4] = [Self::None, Self::Word, Self::Glyph, Self::WordOrGlyph];
 
+	pub(crate) fn to_iced(self) -> Wrapping {
+		match self {
+			WrapChoice::None => Wrapping::None,
+			WrapChoice::Word => Wrapping::Word,
+			WrapChoice::Glyph => Wrapping::Glyph,
+			WrapChoice::WordOrGlyph => Wrapping::WordOrGlyph,
+		}
+	}
+
 	pub(crate) fn to_cosmic(self) -> cosmic_text::Wrap {
 		match self {
 			WrapChoice::None => cosmic_text::Wrap::None,
@@ -270,7 +282,7 @@ impl RenderMode {
 impl Display for RenderMode {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			RenderMode::CanvasOnly => write!(f, "canvas::Text"),
+			RenderMode::CanvasOnly => write!(f, "Text"),
 			RenderMode::OutlinesOnly => write!(f, "Outlines"),
 			RenderMode::CanvasAndOutlines => write!(f, "Both"),
 		}
