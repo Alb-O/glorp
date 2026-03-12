@@ -1,0 +1,321 @@
+use cosmic_text::{Buffer, Cursor, LayoutGlyph};
+
+use std::ops::Range;
+use std::sync::Arc;
+
+use super::{EditorCaretGeometry, EditorSelectionRect};
+use crate::editor::text::line_byte_offsets;
+
+#[derive(Debug, Clone)]
+pub(super) struct BufferRunInfo {
+	cluster_range: Range<usize>,
+	line_height: f32,
+	line_top: f32,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct BufferClusterInfo {
+	pub(super) byte_range: Range<usize>,
+	pub(super) height: f32,
+	pub(super) run_index: usize,
+	pub(super) width: f32,
+	pub(super) x: f32,
+	pub(super) y: f32,
+}
+
+impl BufferClusterInfo {
+	pub(super) fn center_x(&self) -> f32 {
+		self.x + (self.width * 0.5)
+	}
+}
+
+impl EditorSelectionRect {
+	fn from_span(start: &BufferClusterInfo, end: &BufferClusterInfo) -> Self {
+		Self {
+			x: start.x,
+			y: start.y.min(end.y),
+			width: (end.x + end.width) - start.x,
+			height: start.height.max(end.height),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct BufferCaretMetrics {
+	pub(super) run_index: usize,
+	pub(super) x: f32,
+	pub(super) y: f32,
+	pub(super) height: f32,
+}
+
+#[derive(Debug, Clone)]
+pub(super) struct BufferLayoutSnapshot {
+	clusters: Vec<BufferClusterInfo>,
+	line_byte_offsets: Vec<usize>,
+	runs: Vec<BufferRunInfo>,
+}
+
+impl BufferLayoutSnapshot {
+	pub(super) fn new(buffer: &Buffer, text: &str) -> Self {
+		let line_byte_offsets = line_byte_offsets(text);
+		let mut runs = Vec::new();
+		let mut clusters = Vec::new();
+
+		for run in buffer.layout_runs() {
+			let line_byte_offset = line_byte_offsets[run.line_i];
+			let cluster_start = clusters.len();
+			clusters.extend(build_buffer_clusters(
+				runs.len(),
+				line_byte_offset,
+				run.line_top,
+				run.line_height,
+				run.glyphs,
+			));
+			let cluster_end = clusters.len();
+
+			runs.push(BufferRunInfo {
+				cluster_range: cluster_start..cluster_end,
+				line_height: run.line_height,
+				line_top: run.line_top,
+			});
+		}
+
+		Self {
+			clusters,
+			line_byte_offsets,
+			runs,
+		}
+	}
+
+	pub(super) fn clusters(&self) -> &[BufferClusterInfo] {
+		&self.clusters
+	}
+
+	pub(super) fn cluster(&self, index: usize) -> Option<&BufferClusterInfo> {
+		self.clusters.get(index)
+	}
+
+	pub(super) fn cluster_index_for_cursor(&self, cursor: Cursor) -> Option<usize> {
+		if self.clusters.is_empty() {
+			return None;
+		}
+
+		let line_offset = self.line_byte_offsets.get(cursor.line).copied().unwrap_or_default();
+		let byte = line_offset + cursor.index;
+
+		if cursor.affinity.before() {
+			self.clusters
+				.iter()
+				.enumerate()
+				.find(|(_, cluster)| cluster.byte_range.end == byte)
+				.map(|(index, _)| index)
+				.or_else(|| self.cluster_before(byte.saturating_add(1)))
+		} else {
+			self.cluster_at_or_after(byte)
+				.filter(|index| self.clusters[*index].byte_range.start <= byte)
+				.or_else(|| self.cluster_before(byte))
+		}
+	}
+
+	pub(super) fn cluster_at_or_after(&self, byte: usize) -> Option<usize> {
+		let index = self.clusters.partition_point(|cluster| cluster.byte_range.end <= byte);
+		(index < self.clusters.len()).then_some(index)
+	}
+
+	pub(super) fn cluster_before(&self, byte: usize) -> Option<usize> {
+		self.clusters
+			.partition_point(|cluster| cluster.byte_range.start < byte)
+			.checked_sub(1)
+	}
+
+	pub(super) fn first_cluster_in_run(&self, run_index: usize) -> Option<usize> {
+		self.runs
+			.get(run_index)
+			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.start))
+	}
+
+	pub(super) fn last_cluster_in_run(&self, run_index: usize) -> Option<usize> {
+		self.runs
+			.get(run_index)
+			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.end - 1))
+	}
+
+	pub(super) fn nearest_cluster_on_adjacent_run(
+		&self, run_index: usize, preferred_x: f32, direction: isize,
+	) -> Option<usize> {
+		let mut next = run_index as isize + direction;
+
+		while next >= 0 && next < self.runs.len() as isize {
+			if let Some(target) = self.nearest_cluster_in_run(next as usize, preferred_x) {
+				return Some(target);
+			}
+			next += direction;
+		}
+
+		None
+	}
+
+	fn nearest_cluster_in_run(&self, run_index: usize, preferred_x: f32) -> Option<usize> {
+		let run = self.runs.get(run_index)?;
+		if run.cluster_range.is_empty() {
+			return None;
+		}
+
+		self.clusters[run.cluster_range.clone()]
+			.iter()
+			.enumerate()
+			.min_by(|(_, a), (_, b)| {
+				(a.center_x() - preferred_x)
+					.abs()
+					.total_cmp(&(b.center_x() - preferred_x).abs())
+			})
+			.map(|(offset, _)| run.cluster_range.start + offset)
+	}
+
+	pub(super) fn nearest_cluster_at(&self, y: f32, preferred_x: f32) -> Option<usize> {
+		let run_index = self
+			.runs
+			.iter()
+			.enumerate()
+			.min_by(|(_, a), (_, b)| {
+				run_distance(a, y)
+					.total_cmp(&run_distance(b, y))
+					.then_with(|| a.line_top.total_cmp(&b.line_top))
+			})
+			.map(|(index, _)| index)?;
+		self.nearest_cluster_in_run(run_index, preferred_x)
+	}
+
+	pub(super) fn selection_rectangles(&self, range: &Range<usize>) -> Arc<[EditorSelectionRect]> {
+		let selected = self
+			.clusters
+			.iter()
+			.filter(|cluster| cluster.byte_range.end > range.start && cluster.byte_range.start < range.end)
+			.collect::<Vec<_>>();
+		if selected.is_empty() {
+			return Arc::from([]);
+		}
+
+		let mut rectangles = Vec::new();
+		let mut span_start = selected[0];
+		let mut span_end = selected[0];
+
+		for cluster in selected.into_iter().skip(1) {
+			let same_run = cluster.run_index == span_end.run_index;
+			let contiguous = cluster.byte_range.start <= span_end.byte_range.end;
+			if same_run && contiguous {
+				span_end = cluster;
+				continue;
+			}
+
+			rectangles.push(EditorSelectionRect::from_span(span_start, span_end));
+			span_start = cluster;
+			span_end = cluster;
+		}
+
+		rectangles.push(EditorSelectionRect::from_span(span_start, span_end));
+		rectangles.into()
+	}
+
+	pub(super) fn caret_metrics(&self, byte: usize, fallback_height: f32) -> BufferCaretMetrics {
+		if self.clusters.is_empty() {
+			return BufferCaretMetrics {
+				run_index: 0,
+				x: 0.0,
+				y: 0.0,
+				height: fallback_height.max(1.0),
+			};
+		}
+
+		if let Some(index) = self.cluster_at_or_after(byte) {
+			let cluster = &self.clusters[index];
+			if byte <= cluster.byte_range.start {
+				return BufferCaretMetrics {
+					run_index: cluster.run_index,
+					x: cluster.x,
+					y: cluster.y,
+					height: cluster.height.max(1.0),
+				};
+			}
+		}
+
+		if let Some(index) = self.cluster_before(byte) {
+			let cluster = &self.clusters[index];
+			return BufferCaretMetrics {
+				run_index: cluster.run_index,
+				x: cluster.x + cluster.width,
+				y: cluster.y,
+				height: cluster.height.max(1.0),
+			};
+		}
+
+		let run = &self.runs[0];
+		BufferCaretMetrics {
+			run_index: 0,
+			x: 0.0,
+			y: run.line_top,
+			height: run.line_height.max(1.0),
+		}
+	}
+
+	pub(super) fn caret_geometry(&self, byte: usize, fallback_height: f32) -> EditorCaretGeometry {
+		let metrics = self.caret_metrics(byte, fallback_height);
+		EditorCaretGeometry {
+			x: metrics.x,
+			y: metrics.y,
+			height: metrics.height,
+		}
+	}
+}
+
+fn build_buffer_clusters(
+	run_index: usize, line_byte_offset: usize, line_top: f32, line_height: f32, glyphs: &[LayoutGlyph],
+) -> Vec<BufferClusterInfo> {
+	let mut clusters = Vec::new();
+	let mut current: Option<BufferClusterInfo> = None;
+
+	for glyph in glyphs {
+		let byte_range = (line_byte_offset + glyph.start)..(line_byte_offset + glyph.end);
+		let glyph_y = line_top + glyph.y;
+		let glyph_height = glyph.line_height_opt.unwrap_or(line_height);
+
+		match current.as_mut() {
+			Some(cluster) if cluster.byte_range == byte_range => {
+				cluster.width = (glyph.x + glyph.w - cluster.x).max(cluster.width);
+				cluster.height = cluster.height.max(glyph_height);
+				cluster.y = cluster.y.min(glyph_y);
+			}
+			_ => {
+				if let Some(cluster) = current.take() {
+					clusters.push(cluster);
+				}
+
+				current = Some(BufferClusterInfo {
+					byte_range,
+					height: glyph_height.max(1.0),
+					run_index,
+					width: glyph.w.max(1.0),
+					x: glyph.x,
+					y: glyph_y,
+				});
+			}
+		}
+	}
+
+	if let Some(cluster) = current {
+		clusters.push(cluster);
+	}
+
+	clusters
+}
+
+fn run_distance(run: &BufferRunInfo, y: f32) -> f32 {
+	let run_bottom = run.line_top + run.line_height;
+	if y < run.line_top {
+		run.line_top - y
+	} else if y > run_bottom {
+		y - run_bottom
+	} else {
+		0.0
+	}
+}
