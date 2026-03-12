@@ -1,14 +1,11 @@
-use std::ops::Range;
-
-use super::{EditorMode, TextEdit};
+use super::{EditorMode, EditorSelection, TextEdit};
 
 const HISTORY_LIMIT: usize = 256;
 
 #[derive(Debug, Clone)]
 pub(super) struct EditorSnapshot {
 	pub(super) mode: EditorMode,
-	pub(super) selection: Option<Range<usize>>,
-	pub(super) caret: usize,
+	pub(super) selection: Option<EditorSelection>,
 	pub(super) preferred_x: Option<f32>,
 }
 

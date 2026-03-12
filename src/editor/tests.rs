@@ -37,11 +37,13 @@ fn insert_mode_backspace_keeps_caret_on_char_boundaries() {
 
 	editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
 	assert_eq!(editor.view_state().mode, EditorMode::Insert);
+	assert_eq!(editor.view_state().selection, Some("a".len().."aé".len()));
 
 	editor.apply(&mut font_system, EditorCommand::Backspace);
 	assert_eq!(editor.text(), "é");
 	assert_eq!(editor.buffer_text(), "é");
-	assert_eq!(editor.view_state().caret, 0);
+	assert_eq!(editor.view_state().selection_head, Some(0));
+	assert_eq!(editor.view_state().selection, Some(0.."é".len()));
 }
 
 #[test]
@@ -53,7 +55,8 @@ fn escape_from_insert_returns_to_normal_selection() {
 	editor.apply(&mut font_system, EditorCommand::ExitInsert);
 
 	assert_eq!(editor.view_state().mode, EditorMode::Normal);
-	assert_eq!(editor.view_state().selection, Some(1..2));
+	assert_eq!(editor.view_state().selection_head, Some(2));
+	assert_eq!(editor.view_state().selection, Some(2..3));
 }
 
 #[test]
@@ -64,17 +67,44 @@ fn undo_and_redo_restore_text_and_caret() {
 	editor.apply(&mut font_system, EditorCommand::InsertText("!".to_string()));
 
 	assert_eq!(editor.text(), "a!bc");
-	assert_eq!(editor.view_state().caret, 2);
+	assert_eq!(editor.view_state().selection_head, Some(2));
+	assert_eq!(editor.view_state().selection, Some(2..3));
 
 	editor.apply(&mut font_system, EditorCommand::Undo);
 	assert_eq!(editor.text(), "abc");
 	assert_eq!(editor.buffer_text(), "abc");
-	assert_eq!(editor.view_state().caret, 1);
+	assert_eq!(editor.view_state().selection_head, Some(1));
+	assert_eq!(editor.view_state().selection, Some(1..2));
 
 	editor.apply(&mut font_system, EditorCommand::Redo);
 	assert_eq!(editor.text(), "a!bc");
 	assert_eq!(editor.buffer_text(), "a!bc");
-	assert_eq!(editor.view_state().caret, 2);
+	assert_eq!(editor.view_state().selection_head, Some(2));
+	assert_eq!(editor.view_state().selection, Some(2..3));
+}
+
+#[test]
+fn enter_insert_and_escape_preserve_visible_selection() {
+	let (mut font_system, mut editor) = editor("abc");
+
+	editor.apply(&mut font_system, EditorCommand::MoveRight);
+	assert_eq!(editor.view_state().selection, Some(1..2));
+
+	editor.apply(&mut font_system, EditorCommand::EnterInsertBefore);
+	assert_eq!(editor.view_state().mode, EditorMode::Insert);
+	assert_eq!(editor.view_state().selection_head, Some(1));
+	assert_eq!(editor.view_state().selection, Some(1..2));
+
+	editor.apply(&mut font_system, EditorCommand::ExitInsert);
+	assert_eq!(editor.view_state().mode, EditorMode::Normal);
+	assert_eq!(editor.view_state().selection_head, Some(1));
+	assert_eq!(editor.view_state().selection, Some(1..2));
+
+	editor.apply(&mut font_system, EditorCommand::ExitInsert);
+
+	assert_eq!(editor.view_state().mode, EditorMode::Normal);
+	assert_eq!(editor.view_state().selection, Some(1..2));
+	assert_eq!(editor.view_state().selection_head, Some(1));
 }
 
 #[test]

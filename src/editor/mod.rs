@@ -50,9 +50,8 @@ pub(crate) struct EditorViewState {
 	#[cfg(test)]
 	pub(crate) selection: Option<Range<usize>>,
 	#[cfg(test)]
-	pub(crate) caret: usize,
+	pub(crate) selection_head: Option<usize>,
 	pub(crate) selection_rectangles: Arc<[EditorSelectionRect]>,
-	pub(crate) caret_geometry: EditorCaretGeometry,
 	pub(crate) viewport_target: Option<EditorSelectionRect>,
 }
 
@@ -64,11 +63,38 @@ pub(crate) struct EditorSelectionRect {
 	pub(crate) height: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct EditorCaretGeometry {
-	pub(crate) x: f32,
-	pub(crate) y: f32,
-	pub(crate) height: f32,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct EditorSelection {
+	range: Range<usize>,
+	head: usize,
+}
+
+impl EditorSelection {
+	fn new(range: Range<usize>, head: usize) -> Self {
+		Self { range, head }
+	}
+
+	fn clamped(&self, document_len: usize) -> Self {
+		let start = self.range.start.min(document_len);
+		let end = self.range.end.min(document_len).max(start);
+		let head = self.head.min(document_len);
+		Self {
+			range: start..end,
+			head,
+		}
+	}
+
+	fn range(&self) -> &Range<usize> {
+		&self.range
+	}
+
+	fn range_cloned(&self) -> Range<usize> {
+		self.range.clone()
+	}
+
+	fn head(&self) -> usize {
+		self.head
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -225,24 +251,34 @@ impl EditorBuffer {
 				format!(
 					"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}/{}",
 					self.mode(),
-					selection,
-					self.preview_range(selection),
+					selection.range(),
+					self.preview_range(selection.range()),
 					self.layout.view_state_ref().selection_rectangles.len(),
 					self.caret(),
-					self.pointer_anchor().unwrap_or(selection.start),
+					self.pointer_anchor().unwrap_or(selection.range().start),
 					undo_depth,
 					redo_depth,
 				)
 			}
-			EditorMode::Insert => format!(
-				"  mode: {}\n  caret byte: {}\n  caret x/y: {:.1}, {:.1}\n  caret height: {:.1}\n  undo/redo: {}/{}",
-				self.mode(),
-				self.caret(),
-				self.layout.view_state_ref().caret_geometry.x,
-				self.layout.view_state_ref().caret_geometry.y,
-				self.layout.view_state_ref().caret_geometry.height,
-				undo_depth,
-				redo_depth,
+			EditorMode::Insert => self.selection().map_or_else(
+				|| {
+					format!(
+						"  mode: {}\n  selection: none\n  undo/redo: {undo_depth}/{redo_depth}",
+						self.mode()
+					)
+				},
+				|selection| {
+					format!(
+						"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  head byte: {}\n  undo/redo: {}/{}",
+						self.mode(),
+						selection.range(),
+						self.preview_range(selection.range()),
+						self.layout.view_state_ref().selection_rectangles.len(),
+						selection.head(),
+						undo_depth,
+						redo_depth,
+					)
+				},
 			),
 		}
 	}
@@ -262,11 +298,11 @@ impl EditorBuffer {
 			.cluster(0)
 			.map(|cluster| cluster.byte_range.clone())
 		{
-			let caret = selection.start;
-			self.session.set_normal_selection(selection, caret, None, Some(caret));
+			let head = selection.start;
+			self.session
+				.set_normal_selection(EditorSelection::new(selection, head), None, Some(head));
 		} else {
 			self.set_selection(None);
-			self.set_caret(0);
 			self.clear_pointer_anchor();
 		}
 	}
@@ -277,8 +313,7 @@ impl EditorBuffer {
 		};
 
 		self.session.set_normal_selection(
-			cluster.byte_range.clone(),
-			cluster.byte_range.start,
+			EditorSelection::new(cluster.byte_range.clone(), cluster.byte_range.start),
 			Some(cluster.center_x()),
 			Some(cluster.byte_range.start),
 		);
@@ -329,23 +364,12 @@ impl EditorBuffer {
 	}
 
 	fn active_viewport_target(&self, layout: &BufferLayoutSnapshot) -> Option<EditorSelectionRect> {
-		match self.mode() {
-			EditorMode::Normal => self.active_selection(layout).map(|cluster| EditorSelectionRect {
-				x: cluster.x,
-				y: cluster.y,
-				width: cluster.width.max(1.0),
-				height: cluster.height.max(1.0),
-			}),
-			EditorMode::Insert => {
-				let caret = layout.caret_geometry(self.caret(), self.line_height());
-				Some(EditorSelectionRect {
-					x: caret.x,
-					y: caret.y,
-					width: 2.0,
-					height: caret.height.max(1.0),
-				})
-			}
-		}
+		self.active_selection(layout).map(|cluster| EditorSelectionRect {
+			x: cluster.x,
+			y: cluster.y,
+			width: cluster.width.max(1.0),
+			height: cluster.height.max(1.0),
+		})
 	}
 
 	fn refresh_view_state(&mut self) {
@@ -355,25 +379,24 @@ impl EditorBuffer {
 			#[cfg(test)]
 			selection: self.selection_range(),
 			#[cfg(test)]
-			caret: self.caret(),
+			selection_head: self.selection().map(EditorSelection::head),
 			selection_rectangles: self
 				.selection()
-				.map(|selection| layout.selection_rectangles(selection))
+				.map(|selection| layout.selection_rectangles(selection.range()))
 				.unwrap_or_else(|| Arc::from([])),
-			caret_geometry: layout.caret_geometry(self.caret(), self.line_height()),
 			viewport_target: self.active_viewport_target(&layout),
 		});
 	}
 
-	fn selection(&self) -> Option<&Range<usize>> {
+	fn selection(&self) -> Option<&EditorSelection> {
 		self.session.selection()
 	}
 
 	fn selection_range(&self) -> Option<Range<usize>> {
-		self.session.selection_cloned()
+		self.selection().map(EditorSelection::range_cloned)
 	}
 
-	fn set_selection(&mut self, selection: Option<Range<usize>>) {
+	fn set_selection(&mut self, selection: Option<EditorSelection>) {
 		self.session.set_selection(selection);
 	}
 
@@ -383,10 +406,6 @@ impl EditorBuffer {
 
 	fn caret(&self) -> usize {
 		self.session.caret()
-	}
-
-	fn set_caret(&mut self, caret: usize) {
-		self.session.set_caret(caret);
 	}
 
 	fn preferred_x(&self) -> Option<f32> {
@@ -410,11 +429,8 @@ impl EditorBuffer {
 	}
 
 	fn enter_insert_at(&mut self, caret: usize) {
-		self.session.enter_insert_at(caret);
-	}
-
-	fn line_height(&self) -> f32 {
-		self.layout.line_height()
+		let layout = self.layout_snapshot();
+		self.set_insert_head(&layout, caret);
 	}
 
 	fn buffer_hit(&self, point: Point) -> Option<cosmic_text::Cursor> {
@@ -424,5 +440,19 @@ impl EditorBuffer {
 	fn apply_buffer_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
 		let text = self.text().to_string();
 		self.layout.apply_edit(font_system, &text, edit);
+	}
+
+	fn insert_selection(&self, layout: &BufferLayoutSnapshot, head: usize) -> Option<EditorSelection> {
+		// Insert mode keeps showing the cluster at the insertion head so entering
+		// insert at a boundary does not visually jump to the previous cluster.
+		layout
+			.cluster_at_or_after(head)
+			.or_else(|| layout.cluster_before(head))
+			.and_then(|index| layout.cluster(index))
+			.map(|cluster| EditorSelection::new(cluster.byte_range.clone(), head))
+	}
+
+	fn set_insert_head(&mut self, layout: &BufferLayoutSnapshot, head: usize) {
+		self.session.enter_insert(self.insert_selection(layout, head));
 	}
 }

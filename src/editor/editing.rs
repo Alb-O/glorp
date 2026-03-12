@@ -1,6 +1,6 @@
 use cosmic_text::FontSystem;
 
-use super::{ApplyResult, EditorBuffer, EditorMode, TextEdit};
+use super::{ApplyResult, EditorBuffer, EditorMode, EditorSelection, TextEdit};
 use crate::editor::text::{clamp_char_boundary, next_char_boundary, previous_char_boundary};
 
 impl EditorBuffer {
@@ -49,9 +49,8 @@ impl EditorBuffer {
 				.cluster_at_or_after(selection.start)
 				.or_else(|| next_layout.cluster_before(selection.start))
 				.and_then(|index| next_layout.cluster(index))
-				.map(|cluster| cluster.byte_range.clone()),
+				.map(|cluster| EditorSelection::new(cluster.byte_range.clone(), cluster.byte_range.start)),
 		);
-		self.set_caret(clamp_char_boundary(self.text(), selection.start));
 		self.set_preferred_x(None);
 		self.record_history(text_edit.clone(), inverse, before);
 
@@ -75,7 +74,8 @@ impl EditorBuffer {
 					inserted: String::new(),
 				};
 				let inverse = self.apply_document_edit(font_system, &text_edit);
-				self.set_caret(previous);
+				let next_layout = self.layout_snapshot();
+				self.set_insert_head(&next_layout, previous);
 				self.set_preferred_x(None);
 				self.clear_pointer_anchor();
 				self.record_history(text_edit.clone(), inverse, before);
@@ -101,6 +101,8 @@ impl EditorBuffer {
 					inserted: String::new(),
 				};
 				let inverse = self.apply_document_edit(font_system, &text_edit);
+				let next_layout = self.layout_snapshot();
+				self.set_insert_head(&next_layout, self.caret());
 				self.set_preferred_x(None);
 				self.clear_pointer_anchor();
 				self.record_history(text_edit.clone(), inverse, before);
@@ -122,13 +124,14 @@ impl EditorBuffer {
 		}
 
 		let before = self.history_snapshot();
-		self.set_caret(clamp_char_boundary(self.text(), self.caret()));
+		let caret = clamp_char_boundary(self.text(), self.caret());
 		let text_edit = TextEdit {
-			range: self.caret()..self.caret(),
+			range: caret..caret,
 			inserted: text,
 		};
 		let inverse = self.apply_document_edit(font_system, &text_edit);
-		self.set_caret(self.caret() + text_edit.inserted.len());
+		let next_layout = self.layout_snapshot();
+		self.set_insert_head(&next_layout, caret + text_edit.inserted.len());
 		self.set_preferred_x(None);
 		self.clear_pointer_anchor();
 		self.record_history(text_edit.clone(), inverse, before);

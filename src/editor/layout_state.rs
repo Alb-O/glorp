@@ -7,7 +7,7 @@ use crate::scene::{SceneConfig, build_buffer};
 
 use super::layout::BufferLayoutSnapshot;
 use super::text::byte_to_cursor;
-use super::{EditorCaretGeometry, EditorMode, EditorViewState, TextEdit};
+use super::{EditorMode, EditorViewState, TextEdit};
 
 #[derive(Debug, Clone)]
 pub(super) struct EditorLayout {
@@ -26,13 +26,8 @@ impl EditorLayout {
 				#[cfg(test)]
 				selection: None,
 				#[cfg(test)]
-				caret: 0,
+				selection_head: None,
 				selection_rectangles: Arc::from([]),
-				caret_geometry: EditorCaretGeometry {
-					x: 0.0,
-					y: 0.0,
-					height: config.line_height.max(1.0),
-				},
 				viewport_target: None,
 			},
 		}
@@ -52,10 +47,6 @@ impl EditorLayout {
 
 	pub(super) fn set_view_state(&mut self, view_state: EditorViewState) {
 		self.view_state = view_state;
-	}
-
-	pub(super) fn line_height(&self) -> f32 {
-		self.config.line_height
 	}
 
 	pub(super) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) {
@@ -90,13 +81,8 @@ impl EditorLayout {
 			#[cfg(test)]
 			selection: None,
 			#[cfg(test)]
-			caret: 0,
+			selection_head: None,
 			selection_rectangles: Arc::from([]),
-			caret_geometry: EditorCaretGeometry {
-				x: 0.0,
-				y: 0.0,
-				height: config.line_height.max(1.0),
-			},
 			viewport_target: None,
 		};
 	}

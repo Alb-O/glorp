@@ -16,7 +16,7 @@ impl EditorBuffer {
 				}
 			}
 			EditorMode::Insert => {
-				self.set_caret(previous_char_boundary(self.text(), self.caret()).unwrap_or(0));
+				self.set_insert_head(layout, previous_char_boundary(self.text(), self.caret()).unwrap_or(0));
 				self.set_preferred_x(None);
 			}
 		}
@@ -35,7 +35,10 @@ impl EditorBuffer {
 				}
 			}
 			EditorMode::Insert => {
-				self.set_caret(next_char_boundary(self.text(), self.caret()).unwrap_or(self.text().len()));
+				self.set_insert_head(
+					layout,
+					next_char_boundary(self.text(), self.caret()).unwrap_or(self.text().len()),
+				);
 				self.set_preferred_x(None);
 			}
 		}
@@ -57,18 +60,21 @@ impl EditorBuffer {
 				self.set_preferred_x(Some(preferred_x));
 			}
 			EditorMode::Insert => {
-				let caret = layout.caret_metrics(self.caret(), self.line_height());
+				let caret = layout.caret_metrics(self.caret());
 				let preferred_x = self.preferred_x().unwrap_or(caret.x);
 				let Some(target) = layout.nearest_cluster_on_adjacent_run(caret.run_index, preferred_x, direction)
 				else {
 					return;
 				};
 				let cluster = &layout.clusters()[target];
-				self.set_caret(if preferred_x > cluster.center_x() {
-					cluster.byte_range.end
-				} else {
-					cluster.byte_range.start
-				});
+				self.set_insert_head(
+					layout,
+					if preferred_x > cluster.center_x() {
+						cluster.byte_range.end
+					} else {
+						cluster.byte_range.start
+					},
+				);
 				self.set_preferred_x(Some(preferred_x));
 			}
 		}
@@ -92,7 +98,7 @@ impl EditorBuffer {
 				}
 			}
 			EditorMode::Insert => {
-				let caret = layout.caret_metrics(self.caret(), self.line_height());
+				let caret = layout.caret_metrics(self.caret());
 				let target = if to_start {
 					layout
 						.first_cluster_in_run(caret.run_index)
@@ -105,20 +111,24 @@ impl EditorBuffer {
 						.unwrap_or(self.caret())
 				};
 
-				self.set_caret(target);
+				self.set_insert_head(layout, target);
 				self.set_preferred_x(None);
 			}
 		}
 	}
 
 	pub(super) fn exit_insert(&mut self) {
+		if matches!(self.mode(), EditorMode::Normal) {
+			self.set_preferred_x(None);
+			self.clear_pointer_anchor();
+			return;
+		}
+
 		let layout = self.layout_snapshot();
 		self.set_mode(EditorMode::Normal);
-		let selection = layout
-			.cluster_before(self.caret())
-			.or_else(|| layout.cluster_at_or_after(self.caret()))
-			.and_then(|index| layout.cluster(index))
-			.map(|cluster| cluster.byte_range.clone());
+		// Normal mode uses the same visible selection that insert mode showed, so
+		// Esc does not shift the cursor left as a separate reconciliation step.
+		let selection = self.insert_selection(&layout, self.caret());
 		self.set_selection(selection);
 		self.set_preferred_x(None);
 		self.clear_pointer_anchor();

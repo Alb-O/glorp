@@ -1,6 +1,6 @@
 use iced::Point;
 
-use super::{EditorBuffer, EditorMode};
+use super::{EditorBuffer, EditorMode, EditorSelection};
 use crate::editor::layout::BufferLayoutSnapshot;
 use crate::editor::text::{is_word_char, next_char, previous_char};
 
@@ -42,8 +42,7 @@ impl EditorBuffer {
 		let start = anchor.byte_range.start.min(target.byte_range.start);
 		let end = anchor.byte_range.end.max(target.byte_range.end);
 		self.set_mode(EditorMode::Normal);
-		self.set_selection(Some(start..end));
-		self.set_caret(target.byte_range.start);
+		self.set_selection(Some(EditorSelection::new(start..end, target.byte_range.start)));
 		self.set_preferred_x(Some(target.center_x()));
 	}
 
@@ -56,8 +55,7 @@ impl EditorBuffer {
 		};
 		let range = self.word_range(cluster.byte_range.clone());
 		self.set_mode(EditorMode::Normal);
-		self.set_selection(Some(range.clone()));
-		self.set_caret(range.start);
+		self.set_selection(Some(EditorSelection::new(range.clone(), range.start)));
 		self.set_preferred_x(Some(cluster.center_x()));
 		self.clear_pointer_anchor();
 	}

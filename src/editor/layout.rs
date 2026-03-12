@@ -3,7 +3,7 @@ use cosmic_text::{Buffer, Cursor, LayoutGlyph};
 use std::ops::Range;
 use std::sync::Arc;
 
-use super::{EditorCaretGeometry, EditorSelectionRect};
+use super::EditorSelectionRect;
 use crate::editor::text::line_byte_offsets;
 
 #[derive(Debug, Clone)]
@@ -47,8 +47,6 @@ impl EditorSelectionRect {
 pub(super) struct BufferCaretMetrics {
 	pub(super) run_index: usize,
 	pub(super) x: f32,
-	pub(super) y: f32,
-	pub(super) height: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -236,14 +234,9 @@ impl BufferLayoutSnapshot {
 		rectangles.into()
 	}
 
-	pub(super) fn caret_metrics(&self, byte: usize, fallback_height: f32) -> BufferCaretMetrics {
+	pub(super) fn caret_metrics(&self, byte: usize) -> BufferCaretMetrics {
 		if self.clusters.is_empty() {
-			return BufferCaretMetrics {
-				run_index: 0,
-				x: 0.0,
-				y: 0.0,
-				height: fallback_height.max(1.0),
-			};
+			return BufferCaretMetrics { run_index: 0, x: 0.0 };
 		}
 
 		if let Some(index) = self.cluster_at_or_after(byte) {
@@ -252,8 +245,6 @@ impl BufferLayoutSnapshot {
 				return BufferCaretMetrics {
 					run_index: cluster.run_index,
 					x: cluster.x,
-					y: cluster.y,
-					height: cluster.height.max(1.0),
 				};
 			}
 		}
@@ -263,27 +254,10 @@ impl BufferLayoutSnapshot {
 			return BufferCaretMetrics {
 				run_index: cluster.run_index,
 				x: cluster.x + cluster.width,
-				y: cluster.y,
-				height: cluster.height.max(1.0),
 			};
 		}
 
-		let run = &self.runs[0];
-		BufferCaretMetrics {
-			run_index: 0,
-			x: 0.0,
-			y: run.line_top,
-			height: run.line_height.max(1.0),
-		}
-	}
-
-	pub(super) fn caret_geometry(&self, byte: usize, fallback_height: f32) -> EditorCaretGeometry {
-		let metrics = self.caret_metrics(byte, fallback_height);
-		EditorCaretGeometry {
-			x: metrics.x,
-			y: metrics.y,
-			height: metrics.height,
-		}
+		BufferCaretMetrics { run_index: 0, x: 0.0 }
 	}
 }
 

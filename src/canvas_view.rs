@@ -327,20 +327,6 @@ fn draw_dynamic_overlay(
 		);
 	}
 
-	if matches!(canvas.editor.mode, crate::editor::EditorMode::Insert) {
-		let caret = canvas.editor.caret_geometry;
-		let path = canvas::Path::line(
-			Point::new(origin.x + caret.x, origin.y + caret.y),
-			Point::new(origin.x + caret.x, origin.y + caret.y + caret.height),
-		);
-		frame.stroke(
-			&path,
-			canvas::Stroke::default()
-				.with_width(2.0)
-				.with_color(Color::from_rgba(0.98, 0.92, 0.7, 0.95)),
-		);
-	}
-
 	if canvas.show_inspector_overlays {
 		if let Some(target) = canvas.hovered_target {
 			draw_target_overlay(frame, canvas, origin, target, false);

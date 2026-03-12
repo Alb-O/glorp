@@ -67,7 +67,13 @@ fn apply_motion(
 fn apply_enter_insert(editor: &mut EditorBuffer, before: bool) -> ApplyResult {
 	let caret = editor
 		.selection()
-		.map(|selection| if before { selection.start } else { selection.end })
+		.map(|selection| {
+			if before {
+				selection.range().start
+			} else {
+				selection.range().end
+			}
+		})
 		.unwrap_or_else(|| if before { 0 } else { editor.document.len() });
 	editor.enter_insert_at(caret);
 	ApplyResult { text_edit: None }
