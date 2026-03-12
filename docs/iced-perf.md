@@ -1,88 +1,201 @@
 # Iced Perf Notes
 
-Performance notes from comparing this repo's custom canvas editor against cached `iced-0.14` text widgets. Check $CARGO_HOME to find cached Iced src.
+Notes from comparing this repo's custom canvas editor against cached `iced-0.14` text widgets under `$CARGO_HOME`.
 
-Currently:
+The old biggest problem was rebuilding too much scene state on every edit. That is no longer the main story.
 
-- `LayoutScene::build` no longer extracts outlines unless outline rendering is enabled.
-- Dump text is now generated lazily when the Dump tab is active instead of on every scene rebuild.
-- Per-glyph and per-cluster debug preview strings were removed from the hot path and are now derived lazily from `scene.text`.
-- Cluster range and caret-adjacent lookups now use binary-search/`partition_point` helpers instead of repeated linear scans.
-- The static canvas pass now culls runs and glyphs against the visible viewport before drawing baselines, hitboxes, and outlines.
-- The document text layer now renders through a persistent `iced` paragraph widget instead of `canvas::Text`.
-- Canvas scroll state is mirrored into app state so the paragraph layer and inspection overlay share one viewport.
-- Text edits now apply through a retained `cosmic-text::Buffer` instead of rebuilding that buffer from the full string on every mutation.
-- `LayoutScene` snapshots are now cheap to clone because text, runs, clusters, and warnings are shared instead of deep-cloned per view pass.
-- The paragraph used by the text layer now lives in widget state, so the stacked view no longer clones a paragraph object alongside each scene snapshot.
+## Current Shape
 
-Architectural constraint:
+The app now has three distinct layers:
 
-- `iced::widget::canvas` cache reuse is tied to the geometry built inside `Program::draw`.
-- The program only receives `&Renderer`, not `&mut Renderer`, so it cannot re-apply a fresh translation to already cached geometry.
-- That means true scroll-decoupled cache reuse is not available in the current canvas architecture, even though `iced` text widgets achieve it in their non-canvas renderer paths.
+- A retained `cosmic-text::Buffer` is the source of truth for text layout and edit shaping in `src/scene.rs`.
+- The visible document text is drawn through a retained `iced` paragraph in `src/text_view.rs`, not through `canvas::Text`.
+- The inspection overlay still lives in `iced::widget::canvas` in `src/canvas_view.rs`.
 
-Smooth scrolling remains a requirement, so the animated scroll path stays in place. That means rounded scroll changes still invalidate the current canvas cache.
+That puts the text path much closer to upstream `iced` widget behavior:
 
-## 1. Buffer Rebuilds On Every Edit
+- `iced_widget-0.14.2/src/text_editor.rs` keeps a retained editor object and updates it incrementally.
+- `iced_graphics-0.14.0/src/text/editor.rs` does incremental buffer/editor updates and then `shape_as_needed(...)`.
+- `iced_wgpu-0.14.0/src/text.rs` applies transform and clip to retained text areas instead of rebuilding shaped text on scroll.
 
-Source: `src/app.rs`, `src/scene.rs`, Cargo cache `iced_widget-0.14.2/src/text_editor.rs`, `iced_graphics-0.14.0/src/text/editor.rs`
+## What Is Already Fixed
 
-The old main cost center was rebuilding both the layout buffer and the derived scene on every text mutation.
+These are no longer the main bottlenecks:
 
-`iced` keeps a persistent editor object, mutates it in place, updates bounds/font/wrap incrementally, and then calls `shape_as_needed` in `iced_widget-0.14.2/src/text_editor.rs:621` and `iced_graphics-0.14.0/src/text/editor.rs:546`.
+- Text edits no longer rebuild the `cosmic-text::Buffer` from the full string. `LayoutSceneModel` keeps a retained buffer and applies edits in place in `src/scene.rs`.
+- The document text layer no longer uses `canvas::Text`. It uses `renderer.fill_paragraph(...)` in `src/text_view.rs`.
+- Scene clones are cheap. The shared text, runs, clusters, warnings, and inspection cache backing are all reference-counted in `src/scene.rs`.
+- Dump generation is lazy and only happens when the Dump tab is active in `src/app.rs`.
+- Cluster range lookup and several caret-adjacent lookups use binary-search style helpers instead of repeated linear scans in `src/scene.rs`.
+- Inspection glyph data is no longer materialized eagerly on every edit in normal text mode. `LayoutScene::from_buffer(...)` now builds lightweight runs/clusters first, and `inspect_runs()` only constructs per-glyph inspection payload on demand unless outline mode requires it eagerly in `src/scene.rs`.
+- The canvas draw pass culls vector work to the visible viewport in `src/canvas_view.rs`.
 
-Status: largely addressed. Text edits now mutate a retained `cosmic-text::Buffer` in place, but the app still rebuilds the full inspectable `LayoutScene` snapshot after each edit.
+## Remaining Structural Costs
 
-## 2. Scroll Still Invalidates Cached Canvas Geometry
+### 1. Canvas Scroll Still Invalidates Overlay Cache
 
-Source: `src/canvas_view.rs`, `src/text_view.rs`, Cargo cache `iced_widget-0.14.2/src/text_editor.rs`, `iced_wgpu-0.14.0/src/text.rs`
+The overlay cache still clears whenever rounded scroll changes in `src/canvas_view.rs`.
 
-The canvas cache still clears whenever rounded scroll changes in `src/canvas_view.rs:138`, because the cached inspection geometry is built in scrolled canvas space.
+That is expected with the current canvas architecture:
 
-The document text no longer pays that cost. It now renders through a retained `iced` paragraph layer in `src/text_view.rs`, which keeps paragraph state outside the canvas cache and just changes origin/clip on scroll, matching the upstream text-widget path in `iced_wgpu-0.14.0/src/text.rs:617`.
+- `iced::widget::canvas` cache reuse is tied to geometry built inside `Program::draw`.
+- The canvas program only gets `&Renderer`, not `&mut Renderer`.
+- So the overlay cannot cheaply re-translate already cached geometry the way the non-canvas text path can.
 
-Status: partially addressed. The expensive text layer is scroll-decoupled now, but the cached canvas inspection pass still invalidates on scroll because its geometry is still keyed by scroll position.
+The expensive text layer is already off this path. What still pays here is overlay/debug geometry.
 
-## 3. The `canvas::Text` Bottleneck Is Removed
+### 2. The Editor Model Is Still Split In Two
 
-Source: `src/text_view.rs`, Cargo cache `iced_widget-0.14.2/src/text_editor.rs`, `iced_widget-0.14.2/src/text_input.rs`
+This is now the biggest hill.
 
-The document layer now uses `renderer.fill_paragraph(...)` through a custom widget instead of `frame.fill_text(...)`.
+The app still keeps:
 
-Regular editable widgets use `renderer.fill_editor(...)` or `renderer.fill_paragraph(...)` with persistent buffers in `iced_widget-0.14.2/src/text_editor.rs:1011` and `iced_widget-0.14.2/src/text_input.rs:616`.
+- a retained `cosmic-text::Buffer` in `src/scene.rs`
+- a separate custom `EditorBuffer` in `src/editor.rs`
+- a synchronization step after each scene refresh in `src/app.rs`
 
-Status: addressed. The remaining bottlenecks are elsewhere.
+That split is not just a cleanliness problem. It is likely the source of the current behavior bugs:
 
-## 4. Offscreen Work Is Still Paid For
+- cursor and selection can drift from the shaped layout
+- line-relative movement is derived from scene clusters instead of native editor state
+- edits happen through one model and navigation/selection happens through another
 
-Source: `src/canvas_view.rs`, `src/scene.rs`, Cargo cache `iced_graphics-0.14.0/src/text/editor.rs`
+Upstream `iced` does not mirror editor state this way. Its text editor path keeps one retained editor/buffer object and drives movement, selection, shaping, and rendering from the same core state in `iced_widget-0.14.2/src/text_editor.rs` and `iced_graphics-0.14.0/src/text/editor.rs`.
 
-The overlay canvas still iterates visible runs and glyphs in `src/canvas_view.rs`, and `LayoutScene::build` extracts outlines for every glyph when outline rendering is enabled in `src/scene.rs:50`.
+### 3. Hit Testing Is Still Custom And Linear
 
-`iced` avoids whole-document work in comparable paths. For example, syntax highlighting only advances through visible lines in `iced_graphics-0.14.0/src/text/editor.rs:643`.
+`src/scene.rs` still does custom hover/click hit testing over runs, clusters, or lazily built glyph inspection data.
 
-Status: partially addressed. Outline extraction is gated by render mode, the overlay culls vector work to the visible viewport, and the whole-document text draw has moved off canvas. The remaining offscreen cost is in the overlay/debug path and whole-document scene snapshot rebuilds.
+This is much less important than the old whole-document rebuild issue, but it still means:
 
-## 5. Hit Testing And Caret Lookup Are Linear Scans
+- first glyph-target hover in non-outline mode can trigger lazy inspection-glyph construction
+- pointer interactions still walk custom scene data instead of using a native editor/paragraph hit-test primitive
 
-Source: `src/scene.rs`, Cargo cache `iced_widget-0.14.2/src/text_input.rs`
+## What Changed Most Recently
 
-Hover, click, cluster lookup, and caret lookup all walk glyph or cluster collections in `src/scene.rs:207`, `src/scene.rs:265`, and `src/scene.rs:339`.
+The current scene split in `src/scene.rs` is the important shift:
 
-`iced` leans on paragraph/editor primitives for hit testing and grapheme positioning instead of custom scans, as seen in `iced_widget-0.14.2/src/text_input.rs:1623`.
+- hot-path scene refresh now builds only aggregate metrics, lightweight run metadata, and cluster geometry
+- glyph inspection runs are backed by the retained buffer and built lazily through `inspect_runs()`
+- outline mode remains eager because the canvas outline renderer genuinely needs outline paths immediately
 
-Status: partially addressed. Cluster range and caret-adjacent lookups now use binary-search style helpers, but hover/click hit testing still scans runs and glyphs.
+That means the old advice, "stop materializing whole-document glyph snapshots on every edit," is now implemented.
 
-## 6. Debug And Inspection Data Sit On The Hot Path
+## Next Big Hill
 
-Source: `src/scene.rs`
+The next big hill is to stop running a separate custom editor model beside the retained text buffer.
 
-`LayoutScene` still materializes glyph, cluster, and optional outline data for the entire document on each refreshed snapshot.
+In practice that means pushing toward one retained editor core that owns:
 
-That is useful for inspection, but it means edit-time work still includes inspection-oriented data production that typical `iced` text widgets do not do on every mutation.
+- caret
+- selection
+- line movement
+- edit application
+- hit testing or hit-test inputs
 
-Status: largely addressed. Dump generation is lazy, font reporting was reduced to a cheap count in hot paths, preview strings are now derived lazily, and outlines are only built when needed for outline rendering.
+and then deriving the inspection view from that, instead of keeping `EditorBuffer` and `LayoutScene` in lockstep after the fact.
 
-## Next Likely Step
+That is the highest-value next move because it should improve both:
 
-The next meaningful improvement is to stop materializing a whole-document run/glyph/cluster snapshot on every edit. Keep the retained buffer as the source of truth, and derive inspection data lazily or only for visible ranges, closer to how `iced_graphics::text::Editor` only advances comparable work through the visible window.
+- correctness: cursor desync, stale line movement, and scene/editor mismatch bugs
+- performance: less post-edit reconciliation and less custom scene-driven editor logic
+
+If that is too large for one pass, the next-best pure perf project is to move more of the inspection overlay off `canvas` so scroll no longer forces cached geometry rebuilds for the overlay path.
+
+## Automated CLI Perf Metrics And Tests
+
+We want automated CLI perf checks that stay close to real runtime behavior.
+
+Today the app already records useful timings in `src/perf.rs`:
+
+- editor command/apply
+- scene build
+- canvas update/static/overlay/draw
+- frame pacing
+- canvas cache hit/miss rate
+
+The missing piece is export and automation. Those metrics only exist inside the interactive UI today.
+
+### Recommendation
+
+Use a two-tier setup:
+
+1. An in-process scripted runtime perf mode for end-to-end truth.
+2. Small headless microbenchmarks for CPU-only hot paths.
+
+That split matches the code:
+
+- `scene.rs` and `editor.rs` are good headless benchmark targets.
+- `canvas_view.rs`, `text_view.rs`, cache invalidation, and frame pacing need the real `iced` runtime.
+
+### What To Build First
+
+Build the scripted runtime mode first.
+
+That is the best first move because:
+
+- the app already has `PerfMonitor`
+- the main open questions are runtime questions: scroll invalidation, canvas cost, and editor/runtime desync
+- those questions need end-to-end data, not just isolated CPU timings
+
+External GUI automation is not the right first tool here. It is slower, noisier, and less deterministic than an in-process harness.
+
+### Runtime Harness Shape
+
+Add a perf CLI mode that launches the normal app, runs a fixed scenario, prints JSON, and exits.
+
+A reasonable shape is:
+
+- `liney --perf-scenario edit-tall --samples 200 --warmup 30`
+- `liney --perf-scenario scroll-text --samples 300`
+- `liney --perf-scenario scroll-outlines --samples 300`
+
+Each scenario should pin:
+
+- preset
+- font
+- shaping
+- wrapping
+- render mode
+- layout width
+- window size
+
+and then drive the same sequence of app messages every run.
+
+The JSON output should include:
+
+- scenario metadata
+- build profile
+- sample and warmup counts
+- avg / p95 / max for each existing metric
+- frame pacing summary
+- cache hit/miss summary
+- environment notes such as platform, window size, and renderer/backend when available
+
+### Headless Benchmarks
+
+Add a second layer of cheap deterministic measurements around:
+
+- `LayoutSceneModel::apply_text_edit(...)`
+- full scene rebuild
+- lazy `inspect_runs()` materialization
+- representative editor command sequences
+
+These will be useful for frequent regression checks, but they are not a substitute for the runtime harness because they do not measure:
+
+- the `iced` event loop
+- `wgpu` text rendering
+- canvas cache invalidation on scroll
+- end-to-end frame pacing
+
+### How To Use It
+
+Use headless perf checks as the fast regression layer. Use the scripted runtime command as the realistic layer.
+
+The runtime harness should be:
+
+- easy to run locally during perf work
+- optional in normal CI
+- run in a dedicated perf job or scheduled run on stable hardware when numbers need to be comparable
+
+Do not use generic `cargo test` wall-clock assertions as the main perf gate. They are too sensitive to host noise, display setup, and font differences.
