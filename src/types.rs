@@ -1,5 +1,4 @@
 use iced::Font;
-use iced::Point;
 use iced::Size;
 use iced::Vector;
 use iced::advanced::text::Shaping;
@@ -9,10 +8,21 @@ use iced::widget::pane_grid;
 
 use std::fmt::{self, Display};
 
-use crate::editor::EditorCommand;
+use crate::editor::{EditorIntent, EditorPointerIntent};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Message {
+	Controls(ControlsMessage),
+	Sidebar(SidebarMessage),
+	Canvas(CanvasEvent),
+	Editor(EditorIntent),
+	Perf(PerfMessage),
+	Viewport(ViewportMessage),
+	Shell(ShellMessage),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ControlsMessage {
 	LoadPreset(SamplePreset),
 	FontSelected(FontChoice),
 	ShapingSelected(ShapingChoice),
@@ -22,21 +32,37 @@ pub(crate) enum Message {
 	LineHeightChanged(f32),
 	ShowBaselinesChanged(bool),
 	ShowHitboxesChanged(bool),
-	SelectSidebarTab(SidebarTab),
-	PerfTick(Instant),
-	CanvasViewportResized(Size),
-	ResizeTick(Instant),
-	CanvasHovered(Option<CanvasTarget>),
-	CanvasScrollChanged(Vector),
-	CanvasPressed {
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SidebarMessage {
+	SelectTab(SidebarTab),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum CanvasEvent {
+	Hovered(Option<CanvasTarget>),
+	ScrollChanged(Vector),
+	PointerSelectionStarted {
 		target: Option<CanvasTarget>,
-		position: Point,
-		double_click: bool,
+		intent: EditorPointerIntent,
 	},
-	CanvasDragged(Point),
-	CanvasReleased,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PerfMessage {
+	Tick(Instant),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum ViewportMessage {
+	CanvasResized(Size),
+	ResizeTick(Instant),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ShellMessage {
 	PaneResized(pane_grid::ResizeEvent),
-	EditorCommand(EditorCommand),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

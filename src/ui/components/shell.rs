@@ -3,10 +3,10 @@ use iced::{Element, Length, Size, Vector};
 
 use crate::canvas_view::GlyphCanvas;
 use crate::editor::EditorViewState;
-use crate::perf::PerfBridge;
+use crate::perf::CanvasPerfSink;
 use crate::scene::LayoutScene;
 use crate::text_view::SceneTextLayer;
-use crate::types::{CanvasTarget, Message};
+use crate::types::{CanvasTarget, Message, ViewportMessage};
 use crate::ui::tokens::{SIDEBAR_WIDTH, surface_style};
 
 const STACK_LAYOUT_BREAKPOINT: f32 = 1120.0;
@@ -24,7 +24,7 @@ pub(crate) struct CanvasPaneProps {
 	pub(crate) editor: EditorViewState,
 	pub(crate) scene_revision: u64,
 	pub(crate) scroll: Vector,
-	pub(crate) perf: PerfBridge,
+	pub(crate) perf: CanvasPerfSink,
 	pub(crate) stacked: bool,
 }
 
@@ -77,7 +77,7 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 				.width(Length::Fill)
 				.height(Length::Fill),
 		)
-		.on_resize(Message::CanvasViewportResized),
+		.on_resize(|size| Message::Viewport(ViewportMessage::CanvasResized(size))),
 	)
 	.padding(8)
 	.width(Length::Fill)

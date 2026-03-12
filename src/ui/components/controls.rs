@@ -1,7 +1,7 @@
 use iced::widget::{checkbox, column, pick_list, slider, text};
 use iced::{Element, Length};
 
-use crate::types::{FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, WrapChoice};
+use crate::types::{ControlsMessage, FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, WrapChoice};
 use crate::ui::{
 	control_row, panel_scrollable, panel_style, rounded_checkbox_style, rounded_pick_list_menu_style,
 	rounded_pick_list_style, rounded_slider_style,
@@ -27,66 +27,80 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 		column![
 			control_row(
 				"Preset",
-				pick_list(SamplePreset::ALL, Some(props.preset), Message::LoadPreset)
-					.style(rounded_pick_list_style)
-					.menu_style(rounded_pick_list_menu_style)
-					.width(Length::Fill)
-					.into(),
+				pick_list(SamplePreset::ALL, Some(props.preset), |preset| {
+					Message::Controls(ControlsMessage::LoadPreset(preset))
+				})
+				.style(rounded_pick_list_style)
+				.menu_style(rounded_pick_list_menu_style)
+				.width(Length::Fill)
+				.into(),
 			),
 			control_row(
 				"Font",
-				pick_list(FontChoice::ALL, Some(props.font), Message::FontSelected)
-					.style(rounded_pick_list_style)
-					.menu_style(rounded_pick_list_menu_style)
-					.width(Length::Fill)
-					.into(),
+				pick_list(FontChoice::ALL, Some(props.font), |font| {
+					Message::Controls(ControlsMessage::FontSelected(font))
+				})
+				.style(rounded_pick_list_style)
+				.menu_style(rounded_pick_list_menu_style)
+				.width(Length::Fill)
+				.into(),
 			),
 			control_row(
 				"Shaping",
-				pick_list(ShapingChoice::ALL, Some(props.shaping), Message::ShapingSelected)
-					.style(rounded_pick_list_style)
-					.menu_style(rounded_pick_list_menu_style)
-					.width(Length::Fill)
-					.into(),
+				pick_list(ShapingChoice::ALL, Some(props.shaping), |shaping| {
+					Message::Controls(ControlsMessage::ShapingSelected(shaping))
+				})
+				.style(rounded_pick_list_style)
+				.menu_style(rounded_pick_list_menu_style)
+				.width(Length::Fill)
+				.into(),
 			),
 			control_row(
 				"Wrap",
-				pick_list(WrapChoice::ALL, Some(props.wrapping), Message::WrappingSelected)
-					.style(rounded_pick_list_style)
-					.menu_style(rounded_pick_list_menu_style)
-					.width(Length::Fill)
-					.into(),
+				pick_list(WrapChoice::ALL, Some(props.wrapping), |wrapping| {
+					Message::Controls(ControlsMessage::WrappingSelected(wrapping))
+				})
+				.style(rounded_pick_list_style)
+				.menu_style(rounded_pick_list_menu_style)
+				.width(Length::Fill)
+				.into(),
 			),
 			control_row(
 				"Render",
-				pick_list(RenderMode::ALL, Some(props.render_mode), Message::RenderModeSelected)
-					.style(rounded_pick_list_style)
-					.menu_style(rounded_pick_list_menu_style)
-					.width(Length::Fill)
-					.into(),
+				pick_list(RenderMode::ALL, Some(props.render_mode), |render_mode| {
+					Message::Controls(ControlsMessage::RenderModeSelected(render_mode))
+				})
+				.style(rounded_pick_list_style)
+				.menu_style(rounded_pick_list_menu_style)
+				.width(Length::Fill)
+				.into(),
 			),
 			control_row(
 				format!("Size {:.0}", props.font_size),
-				slider(10.0..=48.0, props.font_size, Message::FontSizeChanged)
-					.style(rounded_slider_style)
-					.width(Length::Fill)
-					.into(),
+				slider(10.0..=48.0, props.font_size, |font_size| {
+					Message::Controls(ControlsMessage::FontSizeChanged(font_size))
+				})
+				.style(rounded_slider_style)
+				.width(Length::Fill)
+				.into(),
 			),
 			control_row(
 				format!("Line {:.0}", props.line_height),
-				slider(12.0..=72.0, props.line_height, Message::LineHeightChanged)
-					.style(rounded_slider_style)
-					.width(Length::Fill)
-					.into(),
+				slider(12.0..=72.0, props.line_height, |line_height| {
+					Message::Controls(ControlsMessage::LineHeightChanged(line_height))
+				})
+				.style(rounded_slider_style)
+				.width(Length::Fill)
+				.into(),
 			),
 			checkbox(props.show_baselines)
 				.label("Show baselines and line tops")
 				.style(rounded_checkbox_style)
-				.on_toggle(Message::ShowBaselinesChanged),
+				.on_toggle(|show_baselines| Message::Controls(ControlsMessage::ShowBaselinesChanged(show_baselines))),
 			checkbox(props.show_hitboxes)
 				.label("Show glyph hitboxes")
 				.style(rounded_checkbox_style)
-				.on_toggle(Message::ShowHitboxesChanged),
+				.on_toggle(|show_hitboxes| Message::Controls(ControlsMessage::ShowHitboxesChanged(show_hitboxes))),
 			text("Canvas editor").size(18),
 			view_editor_help(),
 		]

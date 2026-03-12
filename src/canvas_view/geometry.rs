@@ -1,0 +1,137 @@
+use std::time::Duration;
+
+use iced::{Point, Rectangle, Size, Vector, mouse};
+
+use crate::scene::{GlyphInfo, LayoutScene, RunInfo};
+
+pub(super) const DOUBLE_CLICK_INTERVAL: Duration = Duration::from_millis(300);
+pub(super) const DOUBLE_CLICK_DISTANCE: f32 = 8.0;
+
+pub(crate) fn scene_origin() -> Point {
+	Point::new(24.0, 28.0)
+}
+
+pub(crate) fn scene_viewport_size(bounds: Size) -> Size {
+	Size::new(
+		(bounds.width - scene_origin().x - 24.0).max(1.0),
+		(bounds.height - scene_origin().y - 36.0).max(1.0),
+	)
+}
+
+pub(super) fn viewport_size(bounds: Rectangle) -> Size {
+	scene_viewport_size(bounds.size())
+}
+
+pub(super) fn clamp_scroll(scroll: Vector, max_scroll: Vector) -> Vector {
+	Vector::new(scroll.x.clamp(0.0, max_scroll.x), scroll.y.clamp(0.0, max_scroll.y))
+}
+
+pub(super) fn animate_scroll(current: Vector, target: Vector) -> Vector {
+	current + ((target - current) * 0.22)
+}
+
+pub(super) fn max_scroll(bounds: Rectangle, scene: &LayoutScene, layout_width: f32) -> Vector {
+	let viewport = viewport_size(bounds);
+	Vector::new(
+		(scene_content_width(scene, layout_width) - viewport.width).max(0.0),
+		(scene.measured_height - viewport.height).max(0.0),
+	)
+}
+
+pub(super) fn scroll_delta(delta: mouse::ScrollDelta) -> Vector {
+	match delta {
+		mouse::ScrollDelta::Lines { x, y } => -Vector::new(x, y) * 60.0,
+		mouse::ScrollDelta::Pixels { x, y } => -Vector::new(x, y),
+	}
+}
+
+pub(super) fn vector_length(vector: Vector) -> f32 {
+	(vector.x * vector.x + vector.y * vector.y).sqrt()
+}
+
+pub(super) fn point_distance(a: Point, b: Point) -> f32 {
+	let dx = a.x - b.x;
+	let dy = a.y - b.y;
+	(dx * dx + dy * dy).sqrt()
+}
+
+pub(super) fn to_scene_local(position: Point, scroll: Vector) -> Point {
+	Point::new(
+		position.x - scene_origin().x + scroll.x,
+		position.y - scene_origin().y + scroll.y,
+	)
+}
+
+pub(super) fn scrolled_origin(scroll: Vector) -> Point {
+	Point::new(scene_origin().x - scroll.x, scene_origin().y - scroll.y)
+}
+
+pub(super) fn visible_scene_bounds(bounds: Rectangle, scroll: Vector) -> Rectangle {
+	Rectangle::new(Point::new(scroll.x, scroll.y), viewport_size(bounds))
+}
+
+pub(super) fn run_intersects_viewport(run: &RunInfo, viewport: Rectangle) -> bool {
+	let run_bottom = run.line_top + run.line_height;
+	run_bottom >= viewport.y && run.line_top <= viewport.y + viewport.height
+}
+
+pub(super) fn glyph_intersects_viewport(glyph: &GlyphInfo, viewport: Rectangle) -> bool {
+	let glyph_right = glyph.x + glyph.width.max(1.0);
+	let glyph_bottom = glyph.y + glyph.height.max(1.0);
+
+	glyph_right >= viewport.x
+		&& glyph.x <= viewport.x + viewport.width
+		&& glyph_bottom >= viewport.y
+		&& glyph.y <= viewport.y + viewport.height
+}
+
+fn scene_content_width(scene: &LayoutScene, layout_width: f32) -> f32 {
+	if matches!(scene.wrapping, crate::types::WrapChoice::None) {
+		scene.measured_width.max(layout_width)
+	} else {
+		layout_width
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{clamp_scroll, max_scroll};
+	use crate::scene::LayoutScene;
+	use iced::{Rectangle, Vector};
+	use std::sync::Arc;
+
+	fn scene(width: f32, height: f32) -> LayoutScene {
+		LayoutScene::new_for_test(
+			Arc::<str>::from(""),
+			crate::types::FontChoice::Monospace,
+			crate::types::ShapingChoice::Basic,
+			crate::types::WrapChoice::Word,
+			crate::types::RenderMode::CanvasOnly,
+			16.0,
+			20.0,
+			width,
+			width,
+			height,
+			0,
+			0,
+			Vec::new(),
+			Vec::new(),
+		)
+	}
+
+	#[test]
+	fn canvas_scroll_is_clamped_to_scene_extent() {
+		let scene = scene(1200.0, 1600.0);
+		let bounds = Rectangle {
+			x: 0.0,
+			y: 0.0,
+			width: 900.0,
+			height: 700.0,
+		};
+
+		let max = max_scroll(bounds, &scene, scene.max_width);
+		assert!(max.x > 0.0);
+		assert!(max.y > 0.0);
+		assert_eq!(clamp_scroll(Vector::new(-10.0, 2000.0), max), Vector::new(0.0, max.y));
+	}
+}

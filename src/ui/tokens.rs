@@ -176,7 +176,7 @@ pub(crate) fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'sta
 					.center_x(Length::Fill)
 					.center_y(Length::Fill),
 			)
-			.on_press(Message::SelectSidebarTab(tab))
+			.on_press(Message::Sidebar(crate::types::SidebarMessage::SelectTab(tab)))
 			.width(Length::Fill)
 			.height(Length::Fill)
 			.style(move |theme: &Theme, status| {
