@@ -11,6 +11,9 @@ Currently:
 - The static canvas pass now culls runs and glyphs against the visible viewport before drawing baselines, hitboxes, and outlines.
 - The document text layer now renders through a persistent `iced` paragraph widget instead of `canvas::Text`.
 - Canvas scroll state is mirrored into app state so the paragraph layer and inspection overlay share one viewport.
+- Text edits now apply through a retained `cosmic-text::Buffer` instead of rebuilding that buffer from the full string on every mutation.
+- `LayoutScene` snapshots are now cheap to clone because text, runs, clusters, and warnings are shared instead of deep-cloned per view pass.
+- The paragraph used by the text layer now lives in widget state, so the stacked view no longer clones a paragraph object alongside each scene snapshot.
 
 Architectural constraint:
 
@@ -20,15 +23,15 @@ Architectural constraint:
 
 Smooth scrolling remains a requirement, so the animated scroll path stays in place. That means rounded scroll changes still invalidate the current canvas cache.
 
-## 1. Full Scene Rebuilds On Every Edit
+## 1. Buffer Rebuilds On Every Edit
 
 Source: `src/app.rs`, `src/scene.rs`, Cargo cache `iced_widget-0.14.2/src/text_editor.rs`, `iced_graphics-0.14.0/src/text/editor.rs`
 
-The main cost center is full layout rebuild on every text mutation. `refresh_scene` rebuilds the entire `LayoutScene` from the current string in `src/app.rs:270` and `src/scene.rs:32`.
+The old main cost center was rebuilding both the layout buffer and the derived scene on every text mutation.
 
 `iced` keeps a persistent editor object, mutates it in place, updates bounds/font/wrap incrementally, and then calls `shape_as_needed` in `iced_widget-0.14.2/src/text_editor.rs:621` and `iced_graphics-0.14.0/src/text/editor.rs:546`.
 
-Status: still open. The current code trims rebuild cost, but text edits still rebuild the whole scene from scratch.
+Status: largely addressed. Text edits now mutate a retained `cosmic-text::Buffer` in place, but the app still rebuilds the full inspectable `LayoutScene` snapshot after each edit.
 
 ## 2. Scroll Still Invalidates Overlay Geometry
 
@@ -58,7 +61,7 @@ The overlay canvas still iterates visible runs and glyphs in `src/canvas_view.rs
 
 `iced` avoids whole-document work in comparable paths. For example, syntax highlighting only advances through visible lines in `iced_graphics-0.14.0/src/text/editor.rs:643`.
 
-Status: partially addressed. Outline extraction is gated by render mode, the overlay culls vector work to the visible viewport, and the whole-document text draw has moved off canvas. The remaining offscreen cost is in the overlay/debug path and full scene rebuilds.
+Status: partially addressed. Outline extraction is gated by render mode, the overlay culls vector work to the visible viewport, and the whole-document text draw has moved off canvas. The remaining offscreen cost is in the overlay/debug path and whole-document scene snapshot rebuilds.
 
 ## 5. Hit Testing And Caret Lookup Are Linear Scans
 
@@ -74,12 +77,12 @@ Status: partially addressed. Cluster range and caret-adjacent lookups now use bi
 
 Source: `src/scene.rs`
 
-`LayoutScene::build` always computes `fonts_seen`, preview strings, dump text, and optional outline command vectors in `src/scene.rs:47`.
+`LayoutScene` still materializes glyph, cluster, and optional outline data for the entire document on each refreshed snapshot.
 
-That is useful for inspection, but it means edit-time work includes debug-oriented data production that typical `iced` text widgets do not do on every mutation.
+That is useful for inspection, but it means edit-time work still includes inspection-oriented data production that typical `iced` text widgets do not do on every mutation.
 
 Status: largely addressed. Dump generation is lazy, font reporting was reduced to a cheap count in hot paths, preview strings are now derived lazily, and outlines are only built when needed for outline rendering.
 
 ## Next Likely Step
 
-The next meaningful improvement is to stop rebuilding the whole `LayoutScene` on every edit and instead keep a persistent layout/buffer that can update incrementally, closer to `iced_graphics::text::Editor`.
+The next meaningful improvement is to stop materializing a whole-document run/glyph/cluster snapshot on every edit. Keep the retained buffer as the source of truth, and derive inspection data lazily or only for visible ranges, closer to how `iced_graphics::text::Editor` only advances comparable work through the visible window.

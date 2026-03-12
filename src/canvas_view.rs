@@ -174,7 +174,7 @@ impl canvas::Program<Message> for GlyphCanvas {
 fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas, scroll: Vector) {
 	let origin = scrolled_origin(scroll);
 	let visible_scene_bounds = visible_scene_bounds(bounds, scroll);
-	for run in &canvas.scene.runs {
+	for run in canvas.scene.runs.iter() {
 		if !run_intersects_viewport(run, visible_scene_bounds) {
 			continue;
 		}
@@ -532,26 +532,12 @@ fn glyph_intersects_viewport(glyph: &crate::scene::GlyphInfo, viewport: Rectangl
 mod tests {
 	use super::{clamp_scroll, max_scroll};
 	use crate::scene::LayoutScene;
-	use iced::advanced::graphics::text::Paragraph as IcedParagraph;
-	use iced::advanced::text::{Alignment, LineHeight, Paragraph as _};
-	use iced::alignment;
-	use iced::{Font, Rectangle, Vector};
-	use iced::{Pixels, Size};
+	use iced::{Rectangle, Vector};
+	use std::sync::Arc;
 
 	fn scene(width: f32, height: f32) -> LayoutScene {
 		LayoutScene {
-			text: String::new(),
-			paragraph: IcedParagraph::with_text(iced::advanced::text::Text {
-				content: "",
-				bounds: Size::new(width, f32::INFINITY),
-				size: Pixels(16.0),
-				line_height: LineHeight::Absolute(Pixels(20.0)),
-				font: Font::MONOSPACE,
-				align_x: Alignment::Left,
-				align_y: alignment::Vertical::Top,
-				shaping: crate::types::ShapingChoice::Basic.to_iced(),
-				wrapping: crate::types::WrapChoice::Word.to_iced(),
-			}),
+			text: Arc::<str>::from(""),
 			font_choice: crate::types::FontChoice::Monospace,
 			shaping: crate::types::ShapingChoice::Basic,
 			wrapping: crate::types::WrapChoice::Word,
@@ -563,9 +549,9 @@ mod tests {
 			measured_height: height,
 			glyph_count: 0,
 			font_count: 0,
-			runs: Vec::new(),
-			clusters: Vec::new(),
-			warnings: Vec::new(),
+			runs: Vec::new().into(),
+			clusters: Vec::new().into(),
+			warnings: Vec::new().into(),
 			draw_canvas_text: true,
 			draw_outlines: false,
 		}

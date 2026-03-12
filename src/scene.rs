@@ -1,18 +1,98 @@
-use cosmic_text::{Attrs, Buffer, Command, FontSystem, Metrics, SwashCache};
-use iced::advanced::graphics::text::Paragraph as IcedParagraph;
-use iced::advanced::text::{Alignment, LineHeight, Paragraph as _};
+use cosmic_text::{Attrs, Buffer, Command, Cursor, Edit as _, Editor as CosmicEditor, FontSystem, Metrics, SwashCache};
+use iced::advanced::text::{Alignment, LineHeight};
 use iced::alignment;
 use iced::{Font, Pixels, Point, Size};
 
 use std::fmt::Write as _;
 use std::ops::Range;
+use std::sync::Arc;
 
+use crate::editor::TextEdit;
 use crate::types::{CanvasTarget, FontChoice, RenderMode, ShapingChoice, WrapChoice};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SceneConfig {
+	pub(crate) font_choice: FontChoice,
+	pub(crate) shaping: ShapingChoice,
+	pub(crate) wrapping: WrapChoice,
+	pub(crate) render_mode: RenderMode,
+	pub(crate) font_size: f32,
+	pub(crate) line_height: f32,
+	pub(crate) max_width: f32,
+}
+
+impl SceneConfig {
+	pub(crate) fn font(self) -> Font {
+		self.font_choice.to_iced_font()
+	}
+}
+
+#[derive(Debug)]
+pub(crate) struct LayoutSceneModel {
+	text: String,
+	buffer: Buffer,
+	config: SceneConfig,
+	scene: LayoutScene,
+}
+
+impl LayoutSceneModel {
+	pub(crate) fn new(font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) -> Self {
+		let text = text.into();
+		let buffer = build_buffer(font_system, &text, config);
+		let scene = LayoutScene::from_buffer(font_system, &text, &buffer, config);
+
+		Self {
+			text,
+			buffer,
+			config,
+			scene,
+		}
+	}
+
+	pub(crate) fn scene(&self) -> &LayoutScene {
+		&self.scene
+	}
+
+	pub(crate) fn rebuild(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) {
+		self.text.clear();
+		self.text.push_str(text);
+		self.buffer = build_buffer(font_system, &self.text, config);
+		self.config = config;
+		self.scene = LayoutScene::from_buffer(font_system, &self.text, &self.buffer, config);
+	}
+
+	pub(crate) fn apply_text_edit(
+		&mut self, font_system: &mut FontSystem, edit: &TextEdit, expected_text: &str, config: SceneConfig,
+	) {
+		if self.config != config {
+			self.rebuild(font_system, expected_text, config);
+			return;
+		}
+
+		let start = byte_to_cursor(&self.text, edit.range.start);
+		let end = byte_to_cursor(&self.text, edit.range.end);
+		let mut editor = CosmicEditor::new(&mut self.buffer);
+
+		editor.set_cursor(start);
+		if start != end {
+			editor.delete_range(start, end);
+			editor.set_cursor(start);
+		}
+		if !edit.inserted.is_empty() {
+			let _ = editor.insert_at(start, &edit.inserted, None);
+		}
+
+		self.text.replace_range(edit.range.clone(), &edit.inserted);
+		debug_assert_eq!(self.text, expected_text);
+
+		self.buffer.shape_until_scroll(font_system, false);
+		self.scene = LayoutScene::from_buffer(font_system, &self.text, &self.buffer, config);
+	}
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct LayoutScene {
-	pub(crate) text: String,
-	pub(crate) paragraph: IcedParagraph,
+	pub(crate) text: Arc<str>,
 	pub(crate) font_choice: FontChoice,
 	pub(crate) shaping: ShapingChoice,
 	pub(crate) wrapping: WrapChoice,
@@ -24,9 +104,9 @@ pub(crate) struct LayoutScene {
 	pub(crate) measured_height: f32,
 	pub(crate) glyph_count: usize,
 	pub(crate) font_count: usize,
-	pub(crate) runs: Vec<RunInfo>,
-	pub(crate) clusters: Vec<ClusterInfo>,
-	pub(crate) warnings: Vec<String>,
+	pub(crate) runs: Arc<[RunInfo]>,
+	pub(crate) clusters: Arc<[ClusterInfo]>,
+	pub(crate) warnings: Arc<[String]>,
 	pub(crate) draw_canvas_text: bool,
 	pub(crate) draw_outlines: bool,
 }
@@ -37,14 +117,22 @@ impl LayoutScene {
 		font_system: &mut FontSystem, text: String, font_choice: FontChoice, shaping: ShapingChoice,
 		wrapping: WrapChoice, font_size: f32, line_height: f32, max_width: f32, render_mode: RenderMode,
 	) -> Self {
-		let draw_outlines = render_mode.draw_outlines();
-		let font = font_choice.to_iced_font();
-		let paragraph = build_paragraph(&text, font, shaping, wrapping, font_size, line_height, max_width);
-		let mut buffer = Buffer::new(font_system, Metrics::new(font_size, line_height));
-		buffer.set_size(font_system, Some(max_width), None);
-		buffer.set_wrap(font_system, wrapping.to_cosmic());
-		buffer.set_text(font_system, &text, &to_attributes(font), shaping.to_cosmic(&text), None);
+		let config = SceneConfig {
+			font_choice,
+			shaping,
+			wrapping,
+			render_mode,
+			font_size,
+			line_height,
+			max_width,
+		};
 
+		let model = LayoutSceneModel::new(font_system, text, config);
+		model.scene
+	}
+
+	fn from_buffer(font_system: &mut FontSystem, text: &str, buffer: &Buffer, config: SceneConfig) -> Self {
+		let draw_outlines = config.render_mode.draw_outlines();
 		let mut swash_cache = draw_outlines.then(SwashCache::new);
 		let mut runs = Vec::new();
 		let mut warnings = Vec::new();
@@ -53,7 +141,7 @@ impl LayoutScene {
 		let mut measured_height: f32 = 0.0;
 		let mut glyph_count = 0usize;
 		let mut clusters = Vec::new();
-		let line_byte_offsets = line_byte_offsets(&text);
+		let line_byte_offsets = line_byte_offsets(text);
 
 		for run in buffer.layout_runs() {
 			let line_byte_offset = line_byte_offsets[run.line_i];
@@ -135,7 +223,7 @@ impl LayoutScene {
 			}
 
 			let cluster_start = clusters.len();
-			clusters.extend(build_clusters(&text, run.line_i, runs.len(), &glyphs));
+			clusters.extend(build_clusters(runs.len(), &glyphs));
 			let cluster_end = clusters.len();
 
 			runs.push(RunInfo {
@@ -155,24 +243,44 @@ impl LayoutScene {
 		}
 
 		Self {
-			text,
-			paragraph,
-			font_choice,
-			shaping,
-			wrapping,
-			render_mode,
-			font_size,
-			line_height,
-			max_width,
+			text: Arc::<str>::from(text),
+			font_choice: config.font_choice,
+			shaping: config.shaping,
+			wrapping: config.wrapping,
+			render_mode: config.render_mode,
+			font_size: config.font_size,
+			line_height: config.line_height,
+			max_width: config.max_width,
 			measured_width,
 			measured_height,
 			glyph_count,
 			font_count: font_ids.len(),
-			runs,
-			clusters,
-			warnings,
-			draw_canvas_text: render_mode.draw_canvas_text(),
+			runs: runs.into(),
+			clusters: clusters.into(),
+			warnings: warnings.into(),
+			draw_canvas_text: config.render_mode.draw_canvas_text(),
 			draw_outlines,
+		}
+	}
+
+	pub(crate) fn text_spec(&self) -> iced::advanced::text::Text<&str> {
+		iced::advanced::text::Text {
+			content: &self.text,
+			bounds: Size::new(
+				if matches!(self.wrapping, WrapChoice::None) {
+					f32::INFINITY
+				} else {
+					self.max_width
+				},
+				f32::INFINITY,
+			),
+			size: Pixels(self.font_size),
+			line_height: LineHeight::Absolute(Pixels(self.line_height)),
+			font: self.font_choice.to_iced_font(),
+			align_x: Alignment::Left,
+			align_y: alignment::Vertical::Top,
+			shaping: self.shaping.to_iced(),
+			wrapping: self.wrapping.to_iced(),
 		}
 	}
 
@@ -499,37 +607,53 @@ pub(crate) fn make_font_system() -> FontSystem {
 	font_system
 }
 
-fn build_paragraph(
-	text: &str, font: Font, shaping: ShapingChoice, wrapping: WrapChoice, font_size: f32, line_height: f32,
-	max_width: f32,
-) -> IcedParagraph {
-	let bounds = Size::new(
-		if matches!(wrapping, WrapChoice::None) {
-			f32::INFINITY
-		} else {
-			max_width
-		},
-		f32::INFINITY,
-	);
+pub(crate) fn scene_config(
+	font_choice: FontChoice, shaping: ShapingChoice, wrapping: WrapChoice, render_mode: RenderMode, font_size: f32,
+	line_height: f32, max_width: f32,
+) -> SceneConfig {
+	SceneConfig {
+		font_choice,
+		shaping,
+		wrapping,
+		render_mode,
+		font_size,
+		line_height,
+		max_width,
+	}
+}
 
-	IcedParagraph::with_text(iced::advanced::text::Text {
-		content: text,
-		bounds,
-		size: Pixels(font_size),
-		line_height: LineHeight::Absolute(Pixels(line_height)),
-		font,
-		align_x: Alignment::Left,
-		align_y: alignment::Vertical::Top,
-		shaping: shaping.to_iced(),
-		wrapping: wrapping.to_iced(),
-	})
+fn build_buffer(font_system: &mut FontSystem, text: &str, config: SceneConfig) -> Buffer {
+	let mut buffer = Buffer::new(font_system, Metrics::new(config.font_size, config.line_height));
+	buffer.set_size(font_system, Some(config.max_width), None);
+	buffer.set_wrap(font_system, config.wrapping.to_cosmic());
+	buffer.set_text(
+		font_system,
+		text,
+		&to_attributes(config.font()),
+		config.shaping.to_cosmic(text),
+		None,
+	);
+	buffer
+}
+
+fn byte_to_cursor(text: &str, byte: usize) -> Cursor {
+	let mut clamped = byte.min(text.len());
+	while clamped > 0 && !text.is_char_boundary(clamped) {
+		clamped -= 1;
+	}
+
+	let line_offsets = line_byte_offsets(text);
+	let line = line_offsets
+		.partition_point(|offset| *offset <= clamped)
+		.saturating_sub(1);
+	Cursor::new(line, clamped - line_offsets[line])
 }
 
 fn contains_point(point: Point, x: f32, y: f32, width: f32, height: f32) -> bool {
 	point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + height
 }
 
-fn build_clusters(_text: &str, _line_index: usize, run_index: usize, glyphs: &[GlyphInfo]) -> Vec<ClusterInfo> {
+fn build_clusters(run_index: usize, glyphs: &[GlyphInfo]) -> Vec<ClusterInfo> {
 	let mut clusters = Vec::new();
 	let mut current: Option<ClusterInfo> = None;
 
@@ -739,4 +863,55 @@ fn line_byte_offsets(text: &str) -> Vec<usize> {
 	}
 
 	offsets
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{LayoutScene, LayoutSceneModel, make_font_system, scene_config};
+	use crate::editor::TextEdit;
+	use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
+
+	#[test]
+	fn incremental_scene_edit_matches_full_rebuild_for_unicode_replace() {
+		let original = "ab🙂\nçd\n最後";
+		let replace_start = original.find('🙂').expect("emoji start");
+		let replace_end = original.find('d').expect("ascii end") + 'd'.len_utf8();
+		let edit = TextEdit {
+			range: replace_start..replace_end,
+			inserted: "X\n漢字".to_string(),
+		};
+		let mut expected = original.to_string();
+		expected.replace_range(edit.range.clone(), &edit.inserted);
+		let config = scene_config(
+			FontChoice::SansSerif,
+			ShapingChoice::Advanced,
+			WrapChoice::Word,
+			RenderMode::CanvasOnly,
+			22.0,
+			30.0,
+			320.0,
+		);
+
+		let mut incremental_font_system = make_font_system();
+		let mut model = LayoutSceneModel::new(&mut incremental_font_system, original, config);
+		model.apply_text_edit(&mut incremental_font_system, &edit, &expected, config);
+
+		let mut rebuilt_font_system = make_font_system();
+		let rebuilt = LayoutScene::build(
+			&mut rebuilt_font_system,
+			expected.clone(),
+			config.font_choice,
+			config.shaping,
+			config.wrapping,
+			config.font_size,
+			config.line_height,
+			config.max_width,
+			config.render_mode,
+		);
+
+		assert_eq!(model.scene().dump_text(), rebuilt.dump_text());
+		assert_eq!(model.scene().glyph_count, rebuilt.glyph_count);
+		assert_eq!(model.scene().measured_width, rebuilt.measured_width);
+		assert_eq!(model.scene().measured_height, rebuilt.measured_height);
+	}
 }

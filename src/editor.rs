@@ -54,6 +54,18 @@ pub(crate) enum EditorCommand {
 	InsertText(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TextEdit {
+	pub(crate) range: Range<usize>,
+	pub(crate) inserted: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ApplyResult {
+	pub(crate) changed: bool,
+	pub(crate) text_edit: Option<TextEdit>,
+}
+
 impl EditorBuffer {
 	pub(crate) fn new(text: impl Into<String>) -> Self {
 		Self {
@@ -89,7 +101,7 @@ impl EditorBuffer {
 		}
 	}
 
-	pub(crate) fn apply(&mut self, command: EditorCommand, scene: &LayoutScene) -> bool {
+	pub(crate) fn apply(&mut self, command: EditorCommand, scene: &LayoutScene) -> ApplyResult {
 		match command {
 			EditorCommand::SelectClusterAt(point) => {
 				if let Some(cluster_index) = scene.hit_test_cluster(point) {
@@ -99,31 +111,52 @@ impl EditorBuffer {
 					self.caret = 0;
 					self.preferred_x = None;
 				}
-				false
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
 			}
 			EditorCommand::MoveLeft => {
 				self.move_left(scene);
-				false
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
 			}
 			EditorCommand::MoveRight => {
 				self.move_right(scene);
-				false
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
 			}
 			EditorCommand::MoveUp => {
 				self.move_vertical(scene, -1);
-				false
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
 			}
 			EditorCommand::MoveDown => {
 				self.move_vertical(scene, 1);
-				false
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
 			}
 			EditorCommand::MoveLineStart => {
 				self.move_line_edge(scene, true);
-				false
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
 			}
 			EditorCommand::MoveLineEnd => {
 				self.move_line_edge(scene, false);
-				false
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
 			}
 			EditorCommand::EnterInsertBefore => {
 				self.mode = EditorMode::Insert;
@@ -132,7 +165,10 @@ impl EditorBuffer {
 					.map(|cluster| cluster.byte_range.start)
 					.unwrap_or(0);
 				self.preferred_x = None;
-				false
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
 			}
 			EditorCommand::EnterInsertAfter => {
 				self.mode = EditorMode::Insert;
@@ -141,11 +177,17 @@ impl EditorBuffer {
 					.map(|cluster| cluster.byte_range.end)
 					.unwrap_or(self.text.len());
 				self.preferred_x = None;
-				false
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
 			}
 			EditorCommand::ExitInsert => {
 				self.exit_insert(scene);
-				false
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
 			}
 			EditorCommand::Backspace => self.backspace(scene),
 			EditorCommand::DeleteForward => self.delete_forward(scene),
@@ -328,9 +370,12 @@ impl EditorBuffer {
 			.map(|cluster| cluster.byte_range.clone());
 	}
 
-	fn delete_selection(&mut self, scene: &LayoutScene) -> bool {
+	fn delete_selection(&mut self, scene: &LayoutScene) -> ApplyResult {
 		let Some(selection) = self.current_selection(scene).map(|cluster| cluster.byte_range.clone()) else {
-			return false;
+			return ApplyResult {
+				changed: false,
+				text_edit: None,
+			};
 		};
 
 		self.text.replace_range(selection.clone(), "");
@@ -342,43 +387,72 @@ impl EditorBuffer {
 			.map(|cluster| cluster.byte_range.clone());
 		self.caret = clamp_char_boundary(&self.text, selection.start);
 		self.preferred_x = None;
-		true
+		ApplyResult {
+			changed: true,
+			text_edit: Some(TextEdit {
+				range: selection,
+				inserted: String::new(),
+			}),
+		}
 	}
 
-	fn backspace(&mut self, scene: &LayoutScene) -> bool {
+	fn backspace(&mut self, scene: &LayoutScene) -> ApplyResult {
 		match self.mode {
 			EditorMode::Normal => self.delete_selection(scene),
 			EditorMode::Insert => {
 				let Some(previous) = previous_char_boundary(&self.text, self.caret) else {
-					return false;
+					return ApplyResult {
+						changed: false,
+						text_edit: None,
+					};
 				};
 
+				let range = previous..self.caret;
 				self.text.replace_range(previous..self.caret, "");
 				self.caret = previous;
 				self.preferred_x = None;
-				true
+				ApplyResult {
+					changed: true,
+					text_edit: Some(TextEdit {
+						range,
+						inserted: String::new(),
+					}),
+				}
 			}
 		}
 	}
 
-	fn delete_forward(&mut self, scene: &LayoutScene) -> bool {
+	fn delete_forward(&mut self, scene: &LayoutScene) -> ApplyResult {
 		match self.mode {
 			EditorMode::Normal => self.delete_selection(scene),
 			EditorMode::Insert => {
 				let Some(next) = next_char_boundary(&self.text, self.caret) else {
-					return false;
+					return ApplyResult {
+						changed: false,
+						text_edit: None,
+					};
 				};
 
+				let range = self.caret..next;
 				self.text.replace_range(self.caret..next, "");
 				self.preferred_x = None;
-				true
+				ApplyResult {
+					changed: true,
+					text_edit: Some(TextEdit {
+						range,
+						inserted: String::new(),
+					}),
+				}
 			}
 		}
 	}
 
-	fn insert_text(&mut self, text: String) -> bool {
+	fn insert_text(&mut self, text: String) -> ApplyResult {
 		if text.is_empty() {
-			return false;
+			return ApplyResult {
+				changed: false,
+				text_edit: None,
+			};
 		}
 
 		if !matches!(self.mode, EditorMode::Insert) {
@@ -386,10 +460,14 @@ impl EditorBuffer {
 		}
 
 		self.caret = clamp_char_boundary(&self.text, self.caret);
+		let range = self.caret..self.caret;
 		self.text.insert_str(self.caret, &text);
 		self.caret += text.len();
 		self.preferred_x = None;
-		true
+		ApplyResult {
+			changed: true,
+			text_edit: Some(TextEdit { range, inserted: text }),
+		}
 	}
 
 	fn select_cluster(&mut self, scene: &LayoutScene, cluster_index: usize) {
@@ -445,11 +523,7 @@ mod tests {
 	use super::{EditorBuffer, EditorCommand, EditorMode};
 	use crate::scene::{CaretMetrics, ClusterInfo, LayoutScene, RunInfo, make_font_system};
 	use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
-	use iced::Font;
-	use iced::advanced::graphics::text::Paragraph as IcedParagraph;
-	use iced::advanced::text::{Alignment, LineHeight, Paragraph as _};
-	use iced::alignment;
-	use iced::{Pixels, Size};
+	use std::sync::Arc;
 
 	fn scene(clusters: &[(usize, usize, usize, f32)]) -> LayoutScene {
 		let cluster_infos = clusters
@@ -468,18 +542,7 @@ mod tests {
 			.collect::<Vec<_>>();
 
 		LayoutScene {
-			text: "abc\ndef".to_string(),
-			paragraph: IcedParagraph::with_text(iced::advanced::text::Text {
-				content: "abc\ndef",
-				bounds: Size::new(100.0, f32::INFINITY),
-				size: Pixels(16.0),
-				line_height: LineHeight::Absolute(Pixels(20.0)),
-				font: Font::MONOSPACE,
-				align_x: Alignment::Left,
-				align_y: alignment::Vertical::Top,
-				shaping: crate::types::ShapingChoice::Basic.to_iced(),
-				wrapping: WrapChoice::Word.to_iced(),
-			}),
+			text: Arc::<str>::from("abc\ndef"),
 			font_choice: FontChoice::JetBrainsMono,
 			shaping: crate::types::ShapingChoice::Basic,
 			wrapping: WrapChoice::Word,
@@ -513,9 +576,10 @@ mod tests {
 						..cluster_infos.len(),
 					glyphs: Vec::new(),
 				},
-			],
-			clusters: cluster_infos,
-			warnings: Vec::new(),
+			]
+			.into(),
+			clusters: cluster_infos.into(),
+			warnings: Vec::new().into(),
 			draw_canvas_text: true,
 			draw_outlines: false,
 		}
@@ -602,7 +666,7 @@ mod tests {
 			Some("é")
 		);
 
-		assert!(editor.apply(EditorCommand::DeleteSelection, &scene));
+		assert!(editor.apply(EditorCommand::DeleteSelection, &scene).changed);
 		assert_eq!(editor.text(), "🙂\n");
 	}
 }

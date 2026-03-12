@@ -5,9 +5,9 @@ use iced::{Element, Length, Subscription, Task, futures, stream};
 use std::fmt::Write as _;
 use std::time::{Duration, Instant};
 
-use crate::editor::EditorBuffer;
+use crate::editor::{ApplyResult, EditorBuffer};
 use crate::perf::PerfMonitor;
-use crate::scene::{LayoutScene, make_font_system};
+use crate::scene::{LayoutSceneModel, make_font_system, scene_config};
 use crate::types::{FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
 use crate::ui::{
 	CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps, default_sidebar_ratio,
@@ -37,7 +37,7 @@ pub(crate) struct Playground {
 	hovered_target: Option<crate::types::CanvasTarget>,
 	selected_target: Option<crate::types::CanvasTarget>,
 	canvas_scroll: Vector,
-	scene: LayoutScene,
+	scene: LayoutSceneModel,
 	scene_dump: String,
 	font_system: cosmic_text::FontSystem,
 	chrome: pane_grid::State<ShellPane>,
@@ -67,19 +67,21 @@ impl Playground {
 			a: Box::new(pane_grid::Configuration::Pane(ShellPane::Sidebar)),
 			b: Box::new(pane_grid::Configuration::Pane(ShellPane::Canvas)),
 		});
-		let scene = LayoutScene::build(
+		let scene = LayoutSceneModel::new(
 			&mut font_system,
-			editor.text().to_string(),
-			font,
-			shaping,
-			wrapping,
-			font_size,
-			line_height,
-			layout_width,
-			render_mode,
+			editor.text(),
+			scene_config(
+				font,
+				shaping,
+				wrapping,
+				render_mode,
+				font_size,
+				line_height,
+				layout_width,
+			),
 		);
 		let mut editor = editor;
-		editor.sync_with_scene(&scene);
+		editor.sync_with_scene(scene.scene());
 
 		(
 			Self {
@@ -235,7 +237,7 @@ impl Playground {
 
 	fn view_canvas(&self, stacked: bool) -> Element<'static, Message> {
 		view_canvas_pane(CanvasPaneProps {
-			scene: self.scene.clone(),
+			scene: self.scene.scene().clone(),
 			show_baselines: self.show_baselines,
 			show_hitboxes: self.show_hitboxes,
 			hovered_target: self.hovered_target,
@@ -263,14 +265,14 @@ impl Playground {
 				show_hitboxes: self.show_hitboxes,
 			}),
 			SidebarTab::Inspect => view_inspect_tab(InspectTabProps {
-				warnings: &self.scene.warnings,
+				warnings: &self.scene.scene().warnings,
 				interaction_details: self.interaction_details(),
 			}),
 			SidebarTab::Dump => view_dump_tab(&self.scene_dump),
 			SidebarTab::Perf => view_perf_tab(PerfTabProps {
 				overview: self
 					.perf
-					.overview_text(&self.scene, self.editor.mode(), self.editor.text().len()),
+					.overview_text(self.scene.scene(), self.editor.mode(), self.editor.text().len()),
 				graphs: self.perf.graphs(),
 				frame_pacing: self.perf.frame_pacing_text(),
 				hot_paths: self.perf.hot_paths_text(),
@@ -281,18 +283,20 @@ impl Playground {
 
 	fn refresh_scene(&mut self) {
 		let started = Instant::now();
-		self.scene = LayoutScene::build(
+		self.scene.rebuild(
 			&mut self.font_system,
-			self.editor.text().to_string(),
-			self.font,
-			self.shaping,
-			self.wrapping,
-			self.font_size,
-			self.line_height,
-			self.layout_width,
-			self.render_mode,
+			self.editor.text(),
+			scene_config(
+				self.font,
+				self.shaping,
+				self.wrapping,
+				self.render_mode,
+				self.font_size,
+				self.line_height,
+				self.layout_width,
+			),
 		);
-		self.editor.sync_with_scene(&self.scene);
+		self.editor.sync_with_scene(self.scene.scene());
 		self.hovered_target = None;
 		self.canvas_scroll = Vector::ZERO;
 		self.sync_selected_target();
@@ -306,21 +310,21 @@ impl Playground {
 	}
 
 	fn refresh_scene_dump(&mut self) {
-		self.scene_dump = self.scene.dump_text();
+		self.scene_dump = self.scene.scene().dump_text();
 	}
 
 	fn apply_editor_command(&mut self, command: crate::editor::EditorCommand, mark_custom: bool) {
 		let command_started = Instant::now();
 		let apply_started = Instant::now();
-		let changed = self.editor.apply(command, &self.scene);
+		let result = self.editor.apply(command, self.scene.scene());
 		self.perf.record_editor_apply(apply_started.elapsed());
 
 		if mark_custom {
 			self.preset = SamplePreset::Custom;
 		}
 
-		if changed {
-			self.refresh_scene();
+		if result.changed {
+			self.refresh_scene_after_edit(result);
 		} else {
 			self.sync_selected_target();
 		}
@@ -334,8 +338,8 @@ impl Playground {
 			.view_state()
 			.selection
 			.as_ref()
-			.and_then(|selection| self.scene.cluster_index_for_range(selection))
-			.and_then(|index| self.scene.cluster(index))
+			.and_then(|selection| self.scene.scene().cluster_index_for_range(selection))
+			.and_then(|index| self.scene.scene().cluster(index))
 			.map(|cluster| crate::types::CanvasTarget::Glyph {
 				run_index: cluster.run_index,
 				glyph_index: cluster.glyph_start,
@@ -345,13 +349,14 @@ impl Playground {
 	fn interaction_details(&self) -> String {
 		let mut details = String::new();
 		let _ = writeln!(details, "editor");
-		let _ = writeln!(details, "{}", self.editor.selection_details(&self.scene));
+		let _ = writeln!(details, "{}", self.editor.selection_details(self.scene.scene()));
 		let _ = writeln!(details);
 		let _ = writeln!(details, "hover");
 		let _ = writeln!(
 			details,
 			"{}",
 			self.scene
+				.scene()
 				.target_details(self.hovered_target)
 				.unwrap_or_else(|| "  none".to_string())
 		);
@@ -361,10 +366,43 @@ impl Playground {
 			details,
 			"{}",
 			self.scene
+				.scene()
 				.target_details(self.selected_target)
 				.unwrap_or_else(|| "  none".to_string())
 		);
 		details
+	}
+
+	fn refresh_scene_after_edit(&mut self, result: ApplyResult) {
+		let started = Instant::now();
+		let config = scene_config(
+			self.font,
+			self.shaping,
+			self.wrapping,
+			self.render_mode,
+			self.font_size,
+			self.line_height,
+			self.layout_width,
+		);
+
+		if let Some(edit) = result.text_edit.as_ref() {
+			self.scene
+				.apply_text_edit(&mut self.font_system, edit, self.editor.text(), config);
+		} else {
+			self.scene.rebuild(&mut self.font_system, self.editor.text(), config);
+		}
+
+		self.editor.sync_with_scene(self.scene.scene());
+		self.hovered_target = None;
+		self.canvas_scroll = Vector::ZERO;
+		self.sync_selected_target();
+		if matches!(self.active_sidebar_tab, SidebarTab::Dump) {
+			self.refresh_scene_dump();
+		} else {
+			self.scene_dump.clear();
+		}
+		self.scene_revision += 1;
+		self.perf.record_scene_build(started.elapsed());
 	}
 }
 

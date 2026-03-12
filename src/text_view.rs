@@ -1,6 +1,7 @@
 use iced::advanced::Widget;
 use iced::advanced::layout;
 use iced::advanced::renderer;
+use iced::advanced::text::Paragraph as _;
 use iced::advanced::text::Renderer as _;
 use iced::advanced::widget::Tree;
 use iced::advanced::{Layout, Renderer as _, mouse};
@@ -15,6 +16,12 @@ const TEXT_BACKGROUND: Color = Color::from_rgb8(28, 34, 46);
 const TEXT_COLOR: Color = Color::from_rgba(0.4, 0.8, 1.0, 0.9);
 const GUIDE_COLOR: Color = Color::from_rgba(0.6, 0.7, 1.0, 0.18);
 const BORDER_COLOR: Color = Color::from_rgba(0.8, 0.8, 0.9, 0.65);
+
+#[derive(Debug)]
+struct ParagraphState {
+	paragraph: iced::advanced::graphics::text::Paragraph,
+	text: std::sync::Arc<str>,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneTextLayer {
@@ -46,11 +53,25 @@ impl SceneTextLayer {
 }
 
 impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
+	fn tag(&self) -> iced::advanced::widget::tree::Tag {
+		iced::advanced::widget::tree::Tag::of::<ParagraphState>()
+	}
+
+	fn state(&self) -> iced::advanced::widget::tree::State {
+		iced::advanced::widget::tree::State::new(ParagraphState {
+			paragraph: iced::advanced::graphics::text::Paragraph::with_text(self.scene.text_spec()),
+			text: self.scene.text.clone(),
+		})
+	}
+
 	fn size(&self) -> Size<Length> {
 		Size::new(self.width, self.height)
 	}
 
-	fn layout(&mut self, _tree: &mut Tree, _renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+	fn layout(&mut self, tree: &mut Tree, _renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+		let state = tree.state.downcast_mut::<ParagraphState>();
+		sync_paragraph_state(&self.scene, state);
+
 		layout::Node::new(limits.resolve(
 			self.width,
 			self.height,
@@ -59,9 +80,10 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 	}
 
 	fn draw(
-		&self, _tree: &Tree, renderer: &mut iced::Renderer, _theme: &Theme, _style: &renderer::Style,
+		&self, tree: &Tree, renderer: &mut iced::Renderer, _theme: &Theme, _style: &renderer::Style,
 		layout: Layout<'_>, _cursor: mouse::Cursor, _viewport: &Rectangle,
 	) {
+		let state = tree.state.downcast_ref::<ParagraphState>();
 		let bounds = layout.bounds();
 		let origin = Point::new(
 			bounds.x + scene_origin().x - self.scroll.x,
@@ -117,7 +139,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 		);
 
 		if self.scene.draw_canvas_text {
-			renderer.fill_paragraph(&self.scene.paragraph, origin, TEXT_COLOR, bounds);
+			renderer.fill_paragraph(&state.paragraph, origin, TEXT_COLOR, bounds);
 		}
 	}
 }
@@ -126,4 +148,35 @@ impl<'a> From<SceneTextLayer> for Element<'a, Message> {
 	fn from(widget: SceneTextLayer) -> Self {
 		Element::new(widget)
 	}
+}
+
+fn sync_paragraph(scene: &LayoutScene, paragraph: &mut iced::advanced::graphics::text::Paragraph) {
+	let text = scene.text_spec();
+	match paragraph.compare(iced::advanced::text::Text {
+		content: (),
+		bounds: text.bounds,
+		size: text.size,
+		line_height: text.line_height,
+		font: text.font,
+		align_x: text.align_x,
+		align_y: text.align_y,
+		shaping: text.shaping,
+		wrapping: text.wrapping,
+	}) {
+		iced::advanced::text::Difference::None => {}
+		iced::advanced::text::Difference::Bounds => paragraph.resize(text.bounds),
+		iced::advanced::text::Difference::Shape => {
+			*paragraph = iced::advanced::graphics::text::Paragraph::with_text(text);
+		}
+	}
+}
+
+fn sync_paragraph_state(scene: &LayoutScene, state: &mut ParagraphState) {
+	if state.text != scene.text {
+		state.paragraph = iced::advanced::graphics::text::Paragraph::with_text(scene.text_spec());
+		state.text = scene.text.clone();
+		return;
+	}
+
+	sync_paragraph(scene, &mut state.paragraph);
 }
