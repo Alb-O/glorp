@@ -1,9 +1,12 @@
-use super::{EditorBuffer, EditorCommand, EditorEffect, EditorMode};
+use super::{
+	EditorEditIntent, EditorEngine, EditorHistoryIntent, EditorIntent, EditorMode, EditorModeIntent, EditorMotion,
+	EditorPointerIntent, TextEdit,
+};
 use crate::scene::{LayoutScene, make_font_system, scene_config};
 use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
 use iced::Point;
 
-fn editor(text: &str) -> (cosmic_text::FontSystem, EditorBuffer) {
+fn editor(text: &str) -> (cosmic_text::FontSystem, EditorEngine) {
 	let mut font_system = make_font_system();
 	let config = scene_config(
 		FontChoice::SansSerif,
@@ -14,8 +17,28 @@ fn editor(text: &str) -> (cosmic_text::FontSystem, EditorBuffer) {
 		32.0,
 		400.0,
 	);
-	let editor = EditorBuffer::new(&mut font_system, text, config);
+	let editor = EditorEngine::new(&mut font_system, text, config);
 	(font_system, editor)
+}
+
+fn motion(intent: EditorMotion) -> EditorIntent {
+	EditorIntent::Motion(intent)
+}
+
+fn mode(intent: EditorModeIntent) -> EditorIntent {
+	EditorIntent::Mode(intent)
+}
+
+fn edit(intent: EditorEditIntent) -> EditorIntent {
+	EditorIntent::Edit(intent)
+}
+
+fn history(intent: EditorHistoryIntent) -> EditorIntent {
+	EditorIntent::History(intent)
+}
+
+fn pointer(intent: EditorPointerIntent) -> EditorIntent {
+	EditorIntent::Pointer(intent)
 }
 
 #[test]
@@ -24,10 +47,10 @@ fn normal_mode_moves_by_visual_cluster() {
 
 	assert_eq!(editor.view_state().selection, Some(0..1));
 
-	editor.apply(&mut font_system, EditorCommand::MoveRight);
+	editor.apply(&mut font_system, motion(EditorMotion::Right));
 	assert_eq!(editor.view_state().selection, Some(1..2));
 
-	editor.apply(&mut font_system, EditorCommand::MoveDown);
+	editor.apply(&mut font_system, motion(EditorMotion::Down));
 	assert_eq!(editor.view_state().selection, Some(3..4));
 }
 
@@ -35,11 +58,11 @@ fn normal_mode_moves_by_visual_cluster() {
 fn insert_mode_backspace_keeps_caret_on_char_boundaries() {
 	let (mut font_system, mut editor) = editor("aé");
 
-	editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
 	assert_eq!(editor.view_state().mode, EditorMode::Insert);
 	assert_eq!(editor.view_state().selection, Some("a".len().."aé".len()));
 
-	editor.apply(&mut font_system, EditorCommand::Backspace);
+	editor.apply(&mut font_system, edit(EditorEditIntent::Backspace));
 	assert_eq!(editor.text(), "é");
 	assert_eq!(editor.buffer_text(), "é");
 	assert_eq!(editor.view_state().selection_head, Some(0));
@@ -50,9 +73,9 @@ fn insert_mode_backspace_keeps_caret_on_char_boundaries() {
 fn escape_from_insert_returns_to_normal_selection() {
 	let (mut font_system, mut editor) = editor("abc");
 
-	editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
-	editor.apply(&mut font_system, EditorCommand::MoveRight);
-	editor.apply(&mut font_system, EditorCommand::ExitInsert);
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+	editor.apply(&mut font_system, motion(EditorMotion::Right));
+	editor.apply(&mut font_system, mode(EditorModeIntent::ExitInsert));
 
 	assert_eq!(editor.view_state().mode, EditorMode::Normal);
 	assert_eq!(editor.view_state().selection_head, Some(2));
@@ -63,20 +86,20 @@ fn escape_from_insert_returns_to_normal_selection() {
 fn undo_and_redo_restore_text_and_caret() {
 	let (mut font_system, mut editor) = editor("abc");
 
-	editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
-	editor.apply(&mut font_system, EditorCommand::InsertText("!".to_string()));
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+	editor.apply(&mut font_system, edit(EditorEditIntent::InsertText("!".to_string())));
 
 	assert_eq!(editor.text(), "a!bc");
 	assert_eq!(editor.view_state().selection_head, Some(2));
 	assert_eq!(editor.view_state().selection, Some(2..3));
 
-	editor.apply(&mut font_system, EditorCommand::Undo);
+	editor.apply(&mut font_system, history(EditorHistoryIntent::Undo));
 	assert_eq!(editor.text(), "abc");
 	assert_eq!(editor.buffer_text(), "abc");
 	assert_eq!(editor.view_state().selection_head, Some(1));
 	assert_eq!(editor.view_state().selection, Some(1..2));
 
-	editor.apply(&mut font_system, EditorCommand::Redo);
+	editor.apply(&mut font_system, history(EditorHistoryIntent::Redo));
 	assert_eq!(editor.text(), "a!bc");
 	assert_eq!(editor.buffer_text(), "a!bc");
 	assert_eq!(editor.view_state().selection_head, Some(2));
@@ -87,20 +110,20 @@ fn undo_and_redo_restore_text_and_caret() {
 fn enter_insert_and_escape_preserve_visible_selection() {
 	let (mut font_system, mut editor) = editor("abc");
 
-	editor.apply(&mut font_system, EditorCommand::MoveRight);
+	editor.apply(&mut font_system, motion(EditorMotion::Right));
 	assert_eq!(editor.view_state().selection, Some(1..2));
 
-	editor.apply(&mut font_system, EditorCommand::EnterInsertBefore);
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertBefore));
 	assert_eq!(editor.view_state().mode, EditorMode::Insert);
 	assert_eq!(editor.view_state().selection_head, Some(1));
 	assert_eq!(editor.view_state().selection, Some(1..2));
 
-	editor.apply(&mut font_system, EditorCommand::ExitInsert);
+	editor.apply(&mut font_system, mode(EditorModeIntent::ExitInsert));
 	assert_eq!(editor.view_state().mode, EditorMode::Normal);
 	assert_eq!(editor.view_state().selection_head, Some(1));
 	assert_eq!(editor.view_state().selection, Some(1..2));
 
-	editor.apply(&mut font_system, EditorCommand::ExitInsert);
+	editor.apply(&mut font_system, mode(EditorModeIntent::ExitInsert));
 
 	assert_eq!(editor.view_state().mode, EditorMode::Normal);
 	assert_eq!(editor.view_state().selection, Some(1..2));
@@ -120,9 +143,9 @@ fn reset_rebuilds_document_session_and_layout_together() {
 		400.0,
 	);
 
-	let _ = editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
-	let _ = editor.apply(&mut font_system, EditorCommand::InsertText("!".to_string()));
-	let _ = editor.apply(&mut font_system, EditorCommand::MoveRight);
+	let _ = editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+	let _ = editor.apply(&mut font_system, edit(EditorEditIntent::InsertText("!".to_string())));
+	let _ = editor.apply(&mut font_system, motion(EditorMotion::Right));
 
 	assert_eq!(editor.history_depths(), (1, 0));
 
@@ -159,7 +182,7 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 		32.0,
 		400.0,
 	);
-	let mut editor = EditorBuffer::new(&mut font_system, text, config);
+	let mut editor = EditorEngine::new(&mut font_system, text, config);
 
 	assert_eq!(
 		editor
@@ -170,7 +193,7 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 		Some("🙂")
 	);
 
-	editor.apply(&mut font_system, EditorCommand::MoveDown);
+	editor.apply(&mut font_system, motion(EditorMotion::Down));
 	assert_eq!(
 		editor
 			.view_state()
@@ -182,39 +205,58 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 
 	assert!(
 		editor
-			.apply(&mut font_system, EditorCommand::DeleteSelection)
-			.document_changed()
+			.apply(&mut font_system, edit(EditorEditIntent::DeleteSelection))
+			.document_changed
 	);
 	assert_eq!(editor.text(), "🙂\n");
 	assert_eq!(editor.buffer_text(), "🙂\n");
 }
 
 #[test]
-fn motion_returns_only_a_view_effect() {
+fn motion_intents_report_view_without_document_change() {
 	let (mut font_system, mut editor) = editor("abc");
 
-	let update = editor.apply(&mut font_system, EditorCommand::MoveRight);
+	let outcome = editor.apply(&mut font_system, motion(EditorMotion::Right));
 
-	assert_eq!(update.effects(), &[EditorEffect::ViewChanged]);
+	assert!(!outcome.document_changed);
+	assert!(outcome.view_changed);
+	assert!(outcome.selection_changed);
+	assert!(!outcome.mode_changed);
+	assert!(!outcome.requires_scene_rebuild);
+	assert_eq!(outcome.text_edit, None);
 }
 
 #[test]
-fn text_insert_returns_document_and_view_effects() {
+fn text_edit_intents_report_document_and_view_outcome() {
 	let (mut font_system, mut editor) = editor("abc");
 
-	let _ = editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
-	let update = editor.apply(&mut font_system, EditorCommand::InsertText("!".to_string()));
+	let _ = editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+	let outcome = editor.apply(&mut font_system, edit(EditorEditIntent::InsertText("!".to_string())));
 
+	assert!(outcome.document_changed);
+	assert!(outcome.view_changed);
+	assert!(outcome.selection_changed);
+	assert!(!outcome.mode_changed);
+	assert!(outcome.requires_scene_rebuild);
 	assert_eq!(
-		update.effects(),
-		&[
-			EditorEffect::DocumentChanged(super::TextEdit {
-				range: 1..1,
-				inserted: "!".to_string(),
-			}),
-			EditorEffect::ViewChanged,
-		]
+		outcome.text_edit,
+		Some(TextEdit {
+			range: 1..1,
+			inserted: "!".to_string(),
+		})
 	);
+}
+
+#[test]
+fn mode_transition_sets_mode_changed_and_viewport_target() {
+	let (mut font_system, mut editor) = editor("abc");
+
+	let outcome = editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+
+	assert!(outcome.mode_changed);
+	assert!(outcome.view_changed);
+	assert!(!outcome.document_changed);
+	assert!(outcome.viewport_target.is_some());
 }
 
 #[test]
@@ -223,7 +265,7 @@ fn live_selection_rectangles_track_wrapped_width_changes() {
 	let (mut font_system, mut editor) = editor(text);
 
 	for _ in 0..14 {
-		editor.apply(&mut font_system, EditorCommand::MoveRight);
+		editor.apply(&mut font_system, motion(EditorMotion::Right));
 	}
 
 	let before = editor
@@ -263,16 +305,16 @@ fn drag_selection_spans_multiple_wrapped_rectangles() {
 
 	editor.apply(
 		&mut font_system,
-		EditorCommand::BeginPointerSelection {
+		pointer(EditorPointerIntent::BeginSelection {
 			position: Point::new(start.x + 2.0, start.y + 2.0),
 			select_word: false,
-		},
+		}),
 	);
 	editor.apply(
 		&mut font_system,
-		EditorCommand::DragPointerSelection(Point::new(90.0, 120.0)),
+		pointer(EditorPointerIntent::DragSelection(Point::new(90.0, 120.0))),
 	);
-	editor.apply(&mut font_system, EditorCommand::EndPointerSelection);
+	editor.apply(&mut font_system, pointer(EditorPointerIntent::EndSelection));
 
 	let view = editor.view_state();
 	assert!(view.selection_rectangles.len() >= 2);
@@ -344,7 +386,7 @@ fn double_click_selects_a_full_word() {
 	let (mut font_system, mut editor) = editor("alpha beta gamma");
 
 	for _ in 0..11 {
-		editor.apply(&mut font_system, EditorCommand::MoveRight);
+		editor.apply(&mut font_system, motion(EditorMotion::Right));
 	}
 
 	let rect = editor
@@ -356,10 +398,10 @@ fn double_click_selects_a_full_word() {
 
 	editor.apply(
 		&mut font_system,
-		EditorCommand::BeginPointerSelection {
+		pointer(EditorPointerIntent::BeginSelection {
 			position: Point::new(rect.x + 2.0, rect.y + 2.0),
 			select_word: true,
-		},
+		}),
 	);
 
 	let selection = editor

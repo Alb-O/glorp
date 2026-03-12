@@ -1,10 +1,10 @@
 use iced::Point;
 
-use super::{EditorBuffer, EditorMode, EditorSelection};
+use super::{EditorEngine, EditorMode, EditorSelection};
 use crate::editor::layout::BufferLayoutSnapshot;
 use crate::editor::text::{is_word_char, next_char, previous_char};
 
-impl EditorBuffer {
+impl EditorEngine {
 	pub(super) fn pointer_cluster_index(&self, layout: &BufferLayoutSnapshot, point: Point) -> Option<usize> {
 		self.buffer_hit(point)
 			.and_then(|cursor| layout.cluster_index_for_cursor(cursor))

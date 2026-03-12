@@ -1,8 +1,8 @@
-use super::{EditorBuffer, EditorMode};
+use super::{EditorEngine, EditorMode};
 use crate::editor::layout::BufferLayoutSnapshot;
 use crate::editor::text::{next_char_boundary, previous_char_boundary};
 
-impl EditorBuffer {
+impl EditorEngine {
 	pub(super) fn move_left(&mut self, layout: &BufferLayoutSnapshot) {
 		self.clear_pointer_anchor();
 		match self.mode() {

@@ -1,11 +1,11 @@
 use cosmic_text::FontSystem;
 
-use super::{ApplyResult, EditorBuffer, EditorMode, EditorSelection, TextEdit};
+use super::{ApplyResult, EditorEngine, EditorMode, EditorSelection, TextEdit};
 use crate::editor::text::{clamp_char_boundary, next_char_boundary, previous_char_boundary};
 
-impl EditorBuffer {
+impl EditorEngine {
 	pub(super) fn undo(&mut self, font_system: &mut FontSystem) -> ApplyResult {
-		let Some(entry) = self.document.undo() else {
+		let Some(entry) = self.state.document.undo() else {
 			return ApplyResult { text_edit: None };
 		};
 
@@ -18,7 +18,7 @@ impl EditorBuffer {
 	}
 
 	pub(super) fn redo(&mut self, font_system: &mut FontSystem) -> ApplyResult {
-		let Some(entry) = self.document.redo() else {
+		let Some(entry) = self.state.document.redo() else {
 			return ApplyResult { text_edit: None };
 		};
 

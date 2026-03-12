@@ -23,9 +23,7 @@ impl EditorLayout {
 			config,
 			view_state: EditorViewState {
 				mode: EditorMode::Normal,
-				#[cfg(test)]
 				selection: None,
-				#[cfg(test)]
 				selection_head: None,
 				selection_rectangles: Arc::from([]),
 				viewport_target: None,
@@ -78,9 +76,7 @@ impl EditorLayout {
 		self.buffer = Arc::new(build_buffer(font_system, text, config));
 		self.view_state = EditorViewState {
 			mode: EditorMode::Normal,
-			#[cfg(test)]
 			selection: None,
-			#[cfg(test)]
 			selection_head: None,
 			selection_rectangles: Arc::from([]),
 			viewport_target: None,

@@ -1,17 +1,10 @@
 use cosmic_text::FontSystem;
 
-use crate::editor::{EditorBuffer, EditorCommand, EditorMode, EditorViewState};
+use crate::editor::{EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorViewState};
 use crate::scene::{LayoutScene, LayoutSceneModel, SceneConfig, make_font_system};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct SessionUpdate {
-	pub(super) document_changed: bool,
-	pub(super) view_changed: bool,
-	pub(super) scene_needs_rebuild: bool,
-}
-
 pub(super) struct SceneSession {
-	editor: EditorBuffer,
+	editor: EditorEngine,
 	scene: LayoutSceneModel,
 	font_system: FontSystem,
 }
@@ -19,7 +12,7 @@ pub(super) struct SceneSession {
 impl SceneSession {
 	pub(super) fn new(text: &str, config: SceneConfig) -> Self {
 		let mut font_system = make_font_system();
-		let editor = EditorBuffer::new(&mut font_system, text, config);
+		let editor = EditorEngine::new(&mut font_system, text, config);
 		let scene = LayoutSceneModel::new(&mut font_system, editor.text(), editor.buffer(), config);
 
 		Self {
@@ -63,14 +56,8 @@ impl SceneSession {
 			.rebuild(&mut self.font_system, self.editor.text(), self.editor.buffer(), config);
 	}
 
-	pub(super) fn apply_editor_command(&mut self, command: EditorCommand) -> SessionUpdate {
-		let update = self.editor.apply(&mut self.font_system, command);
-
-		SessionUpdate {
-			document_changed: update.document_changed(),
-			view_changed: update.view_changed(),
-			scene_needs_rebuild: update.document_changed(),
-		}
+	pub(super) fn apply_editor_intent(&mut self, intent: EditorIntent) -> EditorOutcome {
+		self.editor.apply(&mut self.font_system, intent)
 	}
 
 	pub(super) fn rebuild(&mut self, config: SceneConfig) {
