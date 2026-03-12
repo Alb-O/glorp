@@ -73,6 +73,15 @@ impl ResizeCoalescer {
 	fn has_pending(&self) -> bool {
 		self.pending_width.is_some()
 	}
+
+	fn mark_applied(&mut self, width: f32, now: Instant) {
+		self.applied_width = width;
+		self.last_applied_at = Some(now);
+
+		if self.pending_width.is_some_and(|pending| (pending - width).abs() < 0.5) {
+			self.pending_width = None;
+		}
+	}
 }
 
 pub(crate) struct Playground {
@@ -212,16 +221,17 @@ impl Playground {
 				self.refresh_scene();
 			}
 			Message::CanvasViewportResized(size) => {
-				if let Some(layout_width) = self
-					.resize_coalescer
-					.observe(scene_viewport_size(size).width, Instant::now())
-				{
-					self.apply_resize_layout_width(layout_width);
+				let layout_width = scene_viewport_size(size).width;
+				let now = Instant::now();
+				self.apply_live_layout_width(layout_width);
+
+				if let Some(layout_width) = self.resize_coalescer.observe(layout_width, now) {
+					self.apply_resize_scene_width(layout_width);
 				}
 			}
 			Message::ResizeTick(now) => {
 				if let Some(layout_width) = self.resize_coalescer.flush(now) {
-					self.apply_resize_layout_width(layout_width);
+					self.apply_resize_scene_width(layout_width);
 				}
 			}
 			Message::ShowBaselinesChanged(show_baselines) => {
@@ -305,6 +315,7 @@ impl Playground {
 	fn view_canvas(&self, stacked: bool) -> Element<'static, Message> {
 		view_canvas_pane(CanvasPaneProps {
 			scene: self.scene.scene().clone(),
+			layout_width: self.layout_width,
 			show_baselines: self.show_baselines,
 			show_hitboxes: self.show_hitboxes,
 			hovered_target: self.hovered_target,
@@ -435,7 +446,16 @@ impl Playground {
 		)
 	}
 
-	fn apply_resize_layout_width(&mut self, layout_width: f32) {
+	fn apply_live_layout_width(&mut self, layout_width: f32) {
+		if (self.layout_width - layout_width).abs() < 0.5 {
+			return;
+		}
+
+		self.layout_width = layout_width;
+		self.editor.sync_buffer_width(&mut self.font_system, layout_width);
+	}
+
+	fn apply_resize_scene_width(&mut self, layout_width: f32) {
 		self.layout_width = layout_width;
 		let duration = self.rebuild_scene();
 		self.finish_scene_refresh(false);
@@ -449,6 +469,7 @@ impl Playground {
 		self.editor.sync_buffer_config(&mut self.font_system, config);
 		self.scene
 			.rebuild(&mut self.font_system, self.editor.text(), self.editor.buffer(), config);
+		self.resize_coalescer.mark_applied(config.max_width, Instant::now());
 		started.elapsed()
 	}
 

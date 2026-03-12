@@ -13,6 +13,7 @@ use crate::types::{CanvasTarget, Message};
 #[derive(Debug, Clone)]
 pub(crate) struct GlyphCanvas {
 	pub(crate) scene: LayoutScene,
+	pub(crate) layout_width: f32,
 	pub(crate) show_baselines: bool,
 	pub(crate) show_hitboxes: bool,
 	pub(crate) hovered_target: Option<CanvasTarget>,
@@ -42,7 +43,7 @@ impl canvas::Program<Message> for GlyphCanvas {
 	) -> Option<canvas::Action<Message>> {
 		let started = Instant::now();
 		let previous_scroll = state.scroll;
-		let max_scroll = max_scroll(bounds, &self.scene);
+		let max_scroll = max_scroll(bounds, &self.scene, self.layout_width);
 		state.target_scroll = clamp_scroll(state.target_scroll, max_scroll);
 		state.scroll = clamp_scroll(state.scroll, max_scroll);
 
@@ -183,7 +184,7 @@ fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &Glyp
 		if canvas.show_baselines {
 			let top_line = canvas::Path::line(
 				Point::new(origin.x, origin.y + run.line_top),
-				Point::new(origin.x + canvas.scene.max_width, origin.y + run.line_top),
+				Point::new(origin.x + canvas.layout_width, origin.y + run.line_top),
 			);
 			frame.stroke(
 				&top_line,
@@ -194,7 +195,7 @@ fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &Glyp
 
 			let baseline = canvas::Path::line(
 				Point::new(origin.x, origin.y + run.baseline),
-				Point::new(origin.x + canvas.scene.max_width, origin.y + run.baseline),
+				Point::new(origin.x + canvas.layout_width, origin.y + run.baseline),
 			);
 			frame.stroke(
 				&baseline,
@@ -331,7 +332,7 @@ fn draw_dynamic_overlay(
 	if focused {
 		frame.stroke_rectangle(
 			origin,
-			Size::new(canvas.scene.max_width.max(1.0), canvas.scene.measured_height.max(1.0)),
+			Size::new(canvas.layout_width.max(1.0), canvas.scene.measured_height.max(1.0)),
 			canvas::Stroke::default()
 				.with_width(1.0)
 				.with_color(Color::from_rgba(0.96, 0.92, 0.7, 0.85)),
@@ -363,7 +364,7 @@ fn draw_target_overlay(
 			frame.fill_rectangle(
 				Point::new(origin.x, origin.y + run.line_top),
 				Size::new(
-					canvas.scene.max_width.max(run.line_width).max(1.0),
+					canvas.layout_width.max(run.line_width).max(1.0),
 					run.line_height.max(1.0),
 				),
 				if selected {
@@ -485,12 +486,20 @@ fn animate_scroll(current: Vector, target: Vector) -> Vector {
 	current + ((target - current) * 0.22)
 }
 
-fn max_scroll(bounds: Rectangle, scene: &LayoutScene) -> Vector {
+fn max_scroll(bounds: Rectangle, scene: &LayoutScene, layout_width: f32) -> Vector {
 	let viewport = viewport_size(bounds);
 	Vector::new(
-		(scene.max_width - viewport.width).max(0.0),
+		(scene_content_width(scene, layout_width) - viewport.width).max(0.0),
 		(scene.measured_height - viewport.height).max(0.0),
 	)
+}
+
+fn scene_content_width(scene: &LayoutScene, layout_width: f32) -> f32 {
+	if matches!(scene.wrapping, crate::types::WrapChoice::None) {
+		scene.measured_width.max(layout_width)
+	} else {
+		layout_width
+	}
 }
 
 fn scroll_delta(delta: mouse::ScrollDelta) -> Vector {
@@ -585,7 +594,7 @@ mod tests {
 			height: 700.0,
 		};
 
-		let max = max_scroll(bounds, &scene);
+		let max = max_scroll(bounds, &scene, scene.max_width);
 		assert!(max.x > 0.0);
 		assert!(max.y > 0.0);
 		assert_eq!(clamp_scroll(Vector::new(-10.0, 2000.0), max), Vector::new(0.0, max.y));

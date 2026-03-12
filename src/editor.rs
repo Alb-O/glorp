@@ -103,8 +103,23 @@ impl EditorBuffer {
 			return;
 		}
 
+		if self.width_only_config_change(config) {
+			self.resize_buffer(font_system, config.max_width);
+			self.config = config;
+			return;
+		}
+
 		self.config = config;
 		self.buffer = Arc::new(build_buffer(font_system, &self.text, config));
+	}
+
+	pub(crate) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) {
+		if (self.config.max_width - width).abs() < 0.5 {
+			return;
+		}
+
+		self.resize_buffer(font_system, width);
+		self.config.max_width = width;
 	}
 
 	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
@@ -564,6 +579,21 @@ impl EditorBuffer {
 			let _ = editor.insert_at(start, &edit.inserted, None);
 		}
 
+		buffer.shape_until_scroll(font_system, false);
+	}
+
+	fn width_only_config_change(&self, config: SceneConfig) -> bool {
+		self.config.font_choice == config.font_choice
+			&& self.config.shaping == config.shaping
+			&& self.config.wrapping == config.wrapping
+			&& self.config.render_mode == config.render_mode
+			&& (self.config.font_size - config.font_size).abs() < f32::EPSILON
+			&& (self.config.line_height - config.line_height).abs() < f32::EPSILON
+	}
+
+	fn resize_buffer(&mut self, font_system: &mut FontSystem, width: f32) {
+		let buffer = Arc::make_mut(&mut self.buffer);
+		buffer.set_size(font_system, Some(width), None);
 		buffer.shape_until_scroll(font_system, false);
 	}
 }

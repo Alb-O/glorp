@@ -1,7 +1,5 @@
 use cosmic_text::{Attrs, Buffer, Command, FontSystem, LayoutGlyph, Metrics, SwashCache, fontdb};
-use iced::advanced::text::{Alignment, LineHeight};
-use iced::alignment;
-use iced::{Font, Pixels, Point, Size};
+use iced::{Font, Point};
 
 use std::fmt::Write as _;
 use std::ops::Range;
@@ -202,27 +200,6 @@ impl LayoutScene {
 			draw_canvas_text: config.render_mode.draw_canvas_text(),
 			draw_outlines,
 			inspect,
-		}
-	}
-
-	pub(crate) fn text_spec(&self) -> iced::advanced::text::Text<&str> {
-		iced::advanced::text::Text {
-			content: &self.text,
-			bounds: Size::new(
-				if matches!(self.wrapping, WrapChoice::None) {
-					f32::INFINITY
-				} else {
-					self.max_width
-				},
-				f32::INFINITY,
-			),
-			size: Pixels(self.font_size),
-			line_height: LineHeight::Absolute(Pixels(self.line_height)),
-			font: self.font_choice.to_iced_font(),
-			align_x: Alignment::Left,
-			align_y: alignment::Vertical::Top,
-			shaping: self.shaping.to_iced(),
-			wrapping: self.wrapping.to_iced(),
 		}
 	}
 

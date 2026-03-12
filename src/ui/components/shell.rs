@@ -15,6 +15,7 @@ const MIN_CANVAS_WIDTH: f32 = 620.0;
 /// Props for the canvas pane.
 pub(crate) struct CanvasPaneProps {
 	pub(crate) scene: LayoutScene,
+	pub(crate) layout_width: f32,
 	pub(crate) show_baselines: bool,
 	pub(crate) show_hitboxes: bool,
 	pub(crate) hovered_target: Option<CanvasTarget>,
@@ -49,12 +50,13 @@ pub(crate) fn view_stacked_shell<'a>(
 
 /// Renders the canvas pane inside the shared app surface.
 pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
-	let text_layer = SceneTextLayer::new(props.scene.clone(), props.scroll)
+	let text_layer = SceneTextLayer::new(props.scene.clone(), props.layout_width, props.scroll)
 		.width(Length::Fill)
 		.height(Length::Fill);
 
 	let canvas_view = canvas(GlyphCanvas {
 		scene: props.scene,
+		layout_width: props.layout_width,
 		show_baselines: props.show_baselines,
 		show_hitboxes: props.show_hitboxes,
 		hovered_target: props.hovered_target,
