@@ -541,20 +541,20 @@ mod tests {
 			})
 			.collect::<Vec<_>>();
 
-		LayoutScene {
-			text: Arc::<str>::from("abc\ndef"),
-			font_choice: FontChoice::JetBrainsMono,
-			shaping: crate::types::ShapingChoice::Basic,
-			wrapping: WrapChoice::Word,
-			render_mode: RenderMode::CanvasAndOutlines,
-			font_size: 16.0,
-			line_height: 20.0,
-			max_width: 100.0,
-			measured_width: 100.0,
-			measured_height: 40.0,
-			glyph_count: cluster_infos.len(),
-			font_count: 1,
-			runs: vec![
+		LayoutScene::new_for_test(
+			Arc::<str>::from("abc\ndef"),
+			FontChoice::JetBrainsMono,
+			crate::types::ShapingChoice::Basic,
+			WrapChoice::Word,
+			RenderMode::CanvasAndOutlines,
+			16.0,
+			20.0,
+			100.0,
+			100.0,
+			40.0,
+			cluster_infos.len(),
+			1,
+			vec![
 				RunInfo {
 					line_index: 0,
 					rtl: false,
@@ -563,7 +563,7 @@ mod tests {
 					line_height: 20.0,
 					line_width: 40.0,
 					cluster_range: 0..clusters.iter().filter(|(run_index, _, _, _)| *run_index == 0).count(),
-					glyphs: Vec::new(),
+					glyph_count: clusters.iter().filter(|(run_index, _, _, _)| *run_index == 0).count(),
 				},
 				RunInfo {
 					line_index: 1,
@@ -574,15 +574,11 @@ mod tests {
 					line_width: 40.0,
 					cluster_range: clusters.iter().filter(|(run_index, _, _, _)| *run_index == 0).count()
 						..cluster_infos.len(),
-					glyphs: Vec::new(),
+					glyph_count: clusters.iter().filter(|(run_index, _, _, _)| *run_index == 1).count(),
 				},
-			]
-			.into(),
-			clusters: cluster_infos.into(),
-			warnings: Vec::new().into(),
-			draw_canvas_text: true,
-			draw_outlines: false,
-		}
+			],
+			cluster_infos,
+		)
 	}
 
 	#[test]

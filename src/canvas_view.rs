@@ -174,7 +174,8 @@ impl canvas::Program<Message> for GlyphCanvas {
 fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas, scroll: Vector) {
 	let origin = scrolled_origin(scroll);
 	let visible_scene_bounds = visible_scene_bounds(bounds, scroll);
-	for run in canvas.scene.runs.iter() {
+	let inspect_runs = (canvas.show_hitboxes || canvas.scene.draw_outlines).then(|| canvas.scene.inspect_runs());
+	for (run_index, run) in canvas.scene.runs.iter().enumerate() {
 		if !run_intersects_viewport(run, visible_scene_bounds) {
 			continue;
 		}
@@ -203,7 +204,15 @@ fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &Glyp
 			);
 		}
 
-		for glyph in &run.glyphs {
+		let Some(glyphs) = inspect_runs
+			.as_ref()
+			.and_then(|runs| runs.get(run_index))
+			.map(|run| &run.glyphs)
+		else {
+			continue;
+		};
+
+		for glyph in glyphs {
 			if !glyph_intersects_viewport(glyph, visible_scene_bounds) {
 				continue;
 			}
@@ -365,15 +374,23 @@ fn draw_target_overlay(
 			);
 		}
 		CanvasTarget::Glyph { run_index, glyph_index } => {
-			let Some(run) = canvas.scene.runs.get(run_index) else {
+			let (glyph_origin, glyph_size) = if let Some(glyph) = canvas.scene.glyph(run_index, glyph_index) {
+				(
+					Point::new(origin.x + glyph.x, origin.y + glyph.y),
+					Size::new(glyph.width.max(1.0), glyph.height.max(1.0)),
+				)
+			} else if let Some(cluster) = canvas
+				.scene
+				.cluster_index_for_target(target)
+				.and_then(|index| canvas.scene.cluster(index))
+			{
+				(
+					Point::new(origin.x + cluster.x, origin.y + cluster.y),
+					Size::new(cluster.width.max(1.0), cluster.height.max(1.0)),
+				)
+			} else {
 				return;
 			};
-			let Some(glyph) = run.glyphs.get(glyph_index) else {
-				return;
-			};
-
-			let glyph_origin = Point::new(origin.x + glyph.x, origin.y + glyph.y);
-			let glyph_size = Size::new(glyph.width.max(1.0), glyph.height.max(1.0));
 
 			frame.fill_rectangle(
 				glyph_origin,
@@ -388,7 +405,7 @@ fn draw_target_overlay(
 			if canvas.show_hitboxes {
 				frame.stroke_rectangle(
 					glyph_origin,
-					Size::new(glyph.width.max(0.5), glyph.height.max(0.5)),
+					Size::new(glyph_size.width.max(0.5), glyph_size.height.max(0.5)),
 					canvas::Stroke::default().with_width(1.0).with_color(if selected {
 						Color::from_rgba(1.0, 0.9, 0.2, 0.95)
 					} else {
@@ -536,25 +553,22 @@ mod tests {
 	use std::sync::Arc;
 
 	fn scene(width: f32, height: f32) -> LayoutScene {
-		LayoutScene {
-			text: Arc::<str>::from(""),
-			font_choice: crate::types::FontChoice::Monospace,
-			shaping: crate::types::ShapingChoice::Basic,
-			wrapping: crate::types::WrapChoice::Word,
-			render_mode: crate::types::RenderMode::CanvasOnly,
-			font_size: 16.0,
-			line_height: 20.0,
-			max_width: width,
-			measured_width: width,
-			measured_height: height,
-			glyph_count: 0,
-			font_count: 0,
-			runs: Vec::new().into(),
-			clusters: Vec::new().into(),
-			warnings: Vec::new().into(),
-			draw_canvas_text: true,
-			draw_outlines: false,
-		}
+		LayoutScene::new_for_test(
+			Arc::<str>::from(""),
+			crate::types::FontChoice::Monospace,
+			crate::types::ShapingChoice::Basic,
+			crate::types::WrapChoice::Word,
+			crate::types::RenderMode::CanvasOnly,
+			16.0,
+			20.0,
+			width,
+			width,
+			height,
+			0,
+			0,
+			Vec::new(),
+			Vec::new(),
+		)
 	}
 
 	#[test]
