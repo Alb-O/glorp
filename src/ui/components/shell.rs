@@ -1,4 +1,4 @@
-use iced::widget::{Stack, canvas, column, container};
+use iced::widget::{Stack, canvas, column, container, sensor};
 use iced::{Element, Length, Size, Vector};
 
 use crate::canvas_view::GlyphCanvas;
@@ -68,9 +68,12 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	.height(Length::Fill);
 
 	container(
-		Stack::with_children([text_layer.into(), canvas_view.into()])
-			.width(Length::Fill)
-			.height(Length::Fill),
+		sensor(
+			Stack::with_children([text_layer.into(), canvas_view.into()])
+				.width(Length::Fill)
+				.height(Length::Fill),
+		)
+		.on_resize(Message::CanvasViewportResized),
 	)
 	.padding(8)
 	.width(Length::Fill)

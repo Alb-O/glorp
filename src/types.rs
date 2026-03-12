@@ -1,5 +1,6 @@
 use iced::Font;
 use iced::Point;
+use iced::Size;
 use iced::Vector;
 use iced::advanced::text::Shaping;
 use iced::advanced::text::Wrapping;
@@ -19,11 +20,11 @@ pub(crate) enum Message {
 	RenderModeSelected(RenderMode),
 	FontSizeChanged(f32),
 	LineHeightChanged(f32),
-	LayoutWidthChanged(f32),
 	ShowBaselinesChanged(bool),
 	ShowHitboxesChanged(bool),
 	SelectSidebarTab(SidebarTab),
 	PerfTick(Instant),
+	CanvasViewportResized(Size),
 	CanvasHovered(Option<CanvasTarget>),
 	CanvasScrollChanged(Vector),
 	CanvasClicked {

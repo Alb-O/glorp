@@ -18,7 +18,6 @@ pub(crate) struct ControlsTabProps {
 	pub(crate) render_mode: RenderMode,
 	pub(crate) font_size: f32,
 	pub(crate) line_height: f32,
-	pub(crate) layout_width: f32,
 	pub(crate) show_baselines: bool,
 	pub(crate) show_hitboxes: bool,
 }
@@ -76,13 +75,6 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 			control_row(
 				format!("Line {:.0}", props.line_height),
 				slider(12.0..=72.0, props.line_height, Message::LineHeightChanged)
-					.style(rounded_slider_style)
-					.width(Length::Fill)
-					.into(),
-			),
-			control_row(
-				format!("Width {:.0}", props.layout_width),
-				slider(180.0..=900.0, props.layout_width, Message::LayoutWidthChanged)
 					.style(rounded_slider_style)
 					.width(Length::Fill)
 					.into(),

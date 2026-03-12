@@ -5,6 +5,7 @@ use iced::{Element, Length, Subscription, Task, futures, stream};
 use std::fmt::Write as _;
 use std::time::{Duration, Instant};
 
+use crate::canvas_view::scene_viewport_size;
 use crate::editor::{ApplyResult, EditorBuffer};
 use crate::perf::PerfMonitor;
 use crate::scene::{LayoutSceneModel, make_font_system, scene_config};
@@ -149,7 +150,12 @@ impl Playground {
 				self.line_height = line_height;
 				self.refresh_scene();
 			}
-			Message::LayoutWidthChanged(layout_width) => {
+			Message::CanvasViewportResized(size) => {
+				let layout_width = scene_viewport_size(size).width;
+				if (self.layout_width - layout_width).abs() < 0.5 {
+					return Task::none();
+				}
+
 				self.layout_width = layout_width;
 				self.refresh_scene();
 			}
@@ -256,7 +262,6 @@ impl Playground {
 				render_mode: self.render_mode,
 				font_size: self.font_size,
 				line_height: self.line_height,
-				layout_width: self.layout_width,
 				show_baselines: self.show_baselines,
 				show_hitboxes: self.show_hitboxes,
 			}),

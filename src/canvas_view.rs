@@ -515,11 +515,15 @@ fn scrolled_origin(scroll: Vector) -> Point {
 	Point::new(scene_origin().x - scroll.x, scene_origin().y - scroll.y)
 }
 
-fn viewport_size(bounds: Rectangle) -> Size {
+pub(crate) fn scene_viewport_size(bounds: Size) -> Size {
 	Size::new(
 		(bounds.width - scene_origin().x - 24.0).max(1.0),
 		(bounds.height - scene_origin().y - 36.0).max(1.0),
 	)
+}
+
+fn viewport_size(bounds: Rectangle) -> Size {
+	scene_viewport_size(bounds.size())
 }
 
 pub(crate) fn scene_origin() -> Point {
