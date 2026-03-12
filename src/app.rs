@@ -283,29 +283,9 @@ impl Playground {
 
 	fn refresh_scene(&mut self) {
 		let started = Instant::now();
-		self.scene.rebuild(
-			&mut self.font_system,
-			self.editor.text(),
-			scene_config(
-				self.font,
-				self.shaping,
-				self.wrapping,
-				self.render_mode,
-				self.font_size,
-				self.line_height,
-				self.layout_width,
-			),
-		);
-		self.editor.sync_with_scene(self.scene.scene());
-		self.hovered_target = None;
-		self.canvas_scroll = Vector::ZERO;
-		self.sync_selected_target();
-		if matches!(self.active_sidebar_tab, SidebarTab::Dump) {
-			self.refresh_scene_dump();
-		} else {
-			self.scene_dump.clear();
-		}
-		self.scene_revision += 1;
+		let config = self.current_scene_config();
+		self.scene.rebuild(&mut self.font_system, self.editor.text(), config);
+		self.finish_scene_refresh();
 		self.perf.record_scene_build(started.elapsed());
 	}
 
@@ -375,15 +355,7 @@ impl Playground {
 
 	fn refresh_scene_after_edit(&mut self, result: ApplyResult) {
 		let started = Instant::now();
-		let config = scene_config(
-			self.font,
-			self.shaping,
-			self.wrapping,
-			self.render_mode,
-			self.font_size,
-			self.line_height,
-			self.layout_width,
-		);
+		let config = self.current_scene_config();
 
 		if let Some(edit) = result.text_edit.as_ref() {
 			self.scene
@@ -392,6 +364,23 @@ impl Playground {
 			self.scene.rebuild(&mut self.font_system, self.editor.text(), config);
 		}
 
+		self.finish_scene_refresh();
+		self.perf.record_scene_build(started.elapsed());
+	}
+
+	fn current_scene_config(&self) -> crate::scene::SceneConfig {
+		scene_config(
+			self.font,
+			self.shaping,
+			self.wrapping,
+			self.render_mode,
+			self.font_size,
+			self.line_height,
+			self.layout_width,
+		)
+	}
+
+	fn finish_scene_refresh(&mut self) {
 		self.editor.sync_with_scene(self.scene.scene());
 		self.hovered_target = None;
 		self.canvas_scroll = Vector::ZERO;
@@ -402,7 +391,6 @@ impl Playground {
 			self.scene_dump.clear();
 		}
 		self.scene_revision += 1;
-		self.perf.record_scene_build(started.elapsed());
 	}
 }
 
