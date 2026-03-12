@@ -6,8 +6,7 @@ use crate::editor::text::{is_word_char, next_char, previous_char};
 
 impl EditorBuffer {
 	pub(super) fn pointer_cluster_index(&self, layout: &BufferLayoutSnapshot, point: Point) -> Option<usize> {
-		self.buffer
-			.hit(point.x, point.y)
+		self.buffer_hit(point)
 			.and_then(|cursor| layout.cluster_index_for_cursor(cursor))
 			.or_else(|| {
 				layout
@@ -17,7 +16,7 @@ impl EditorBuffer {
 	}
 
 	pub(super) fn extend_pointer_selection(&mut self, layout: &BufferLayoutSnapshot, position: Point) {
-		let Some(anchor_byte) = self.pointer_anchor else {
+		let Some(anchor_byte) = self.pointer_anchor() else {
 			return;
 		};
 		let Some(anchor_index) = layout
@@ -42,10 +41,10 @@ impl EditorBuffer {
 		};
 		let start = anchor.byte_range.start.min(target.byte_range.start);
 		let end = anchor.byte_range.end.max(target.byte_range.end);
-		self.mode = EditorMode::Normal;
-		self.selection = Some(start..end);
-		self.caret = target.byte_range.start;
-		self.preferred_x = Some(target.center_x());
+		self.set_mode(EditorMode::Normal);
+		self.set_selection(Some(start..end));
+		self.set_caret(target.byte_range.start);
+		self.set_preferred_x(Some(target.center_x()));
 	}
 
 	pub(super) fn select_word_at(&mut self, layout: &BufferLayoutSnapshot, position: Point) {
@@ -56,11 +55,11 @@ impl EditorBuffer {
 			return;
 		};
 		let range = self.word_range(cluster.byte_range.clone());
-		self.mode = EditorMode::Normal;
-		self.selection = Some(range.clone());
-		self.caret = range.start;
-		self.preferred_x = Some(cluster.center_x());
-		self.pointer_anchor = None;
+		self.set_mode(EditorMode::Normal);
+		self.set_selection(Some(range.clone()));
+		self.set_caret(range.start);
+		self.set_preferred_x(Some(cluster.center_x()));
+		self.clear_pointer_anchor();
 	}
 
 	fn word_range(&self, fallback: std::ops::Range<usize>) -> std::ops::Range<usize> {

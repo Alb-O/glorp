@@ -1,4 +1,4 @@
-use super::{EditorBuffer, EditorCommand, EditorMode};
+use super::{EditorBuffer, EditorCommand, EditorEffect, EditorMode};
 use crate::scene::{LayoutScene, make_font_system, scene_config};
 use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
 use iced::Point;
@@ -78,6 +78,34 @@ fn undo_and_redo_restore_text_and_caret() {
 }
 
 #[test]
+fn reset_rebuilds_document_session_and_layout_together() {
+	let (mut font_system, mut editor) = editor("abc");
+	let config = scene_config(
+		FontChoice::SansSerif,
+		ShapingChoice::Advanced,
+		WrapChoice::Word,
+		RenderMode::CanvasOnly,
+		24.0,
+		32.0,
+		400.0,
+	);
+
+	let _ = editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
+	let _ = editor.apply(&mut font_system, EditorCommand::InsertText("!".to_string()));
+	let _ = editor.apply(&mut font_system, EditorCommand::MoveRight);
+
+	assert_eq!(editor.history_depths(), (1, 0));
+
+	editor.reset(&mut font_system, "éz", config);
+
+	assert_eq!(editor.text(), "éz");
+	assert_eq!(editor.buffer_text(), "éz");
+	assert_eq!(editor.mode(), EditorMode::Normal);
+	assert_eq!(editor.history_depths(), (0, 0));
+	assert_eq!(editor.view_state().selection, Some(0.."é".len()));
+}
+
+#[test]
 fn delete_selection_on_later_line_handles_multibyte_text() {
 	let text = "🙂\né";
 	let mut font_system = make_font_system();
@@ -122,9 +150,41 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 		Some("é")
 	);
 
-	assert!(editor.apply(&mut font_system, EditorCommand::DeleteSelection).changed);
+	assert!(
+		editor
+			.apply(&mut font_system, EditorCommand::DeleteSelection)
+			.document_changed()
+	);
 	assert_eq!(editor.text(), "🙂\n");
 	assert_eq!(editor.buffer_text(), "🙂\n");
+}
+
+#[test]
+fn motion_returns_only_a_view_effect() {
+	let (mut font_system, mut editor) = editor("abc");
+
+	let update = editor.apply(&mut font_system, EditorCommand::MoveRight);
+
+	assert_eq!(update.effects(), &[EditorEffect::ViewChanged]);
+}
+
+#[test]
+fn text_insert_returns_document_and_view_effects() {
+	let (mut font_system, mut editor) = editor("abc");
+
+	let _ = editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
+	let update = editor.apply(&mut font_system, EditorCommand::InsertText("!".to_string()));
+
+	assert_eq!(
+		update.effects(),
+		&[
+			EditorEffect::DocumentChanged(super::TextEdit {
+				range: 1..1,
+				inserted: "!".to_string(),
+			}),
+			EditorEffect::ViewChanged,
+		]
+	);
 }
 
 #[test]

@@ -24,6 +24,20 @@ enum ShellPane {
 	Canvas,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EditorDispatchSource {
+	Keyboard,
+	PointerPress,
+	PointerDrag,
+	PointerRelease,
+}
+
+impl EditorDispatchSource {
+	fn reveals_viewport(self) -> bool {
+		matches!(self, Self::Keyboard | Self::PointerPress)
+	}
+}
+
 #[derive(Debug, Clone, Copy)]
 struct ResizeCoalescer {
 	applied_width: f32,
@@ -273,30 +287,31 @@ impl Playground {
 				self.selected_target = (self.active_sidebar_tab == SidebarTab::Inspect)
 					.then_some(target)
 					.flatten();
-				self.apply_editor_command(
+				self.dispatch_editor_command(
 					crate::editor::EditorCommand::BeginPointerSelection {
 						position,
 						select_word: double_click,
 					},
-					false,
-					true,
+					EditorDispatchSource::PointerPress,
 				);
 			}
 			Message::CanvasDragged(position) => {
-				self.apply_editor_command(
+				self.dispatch_editor_command(
 					crate::editor::EditorCommand::DragPointerSelection(position),
-					false,
-					false,
+					EditorDispatchSource::PointerDrag,
 				);
 			}
 			Message::CanvasReleased => {
-				self.apply_editor_command(crate::editor::EditorCommand::EndPointerSelection, false, false);
+				self.dispatch_editor_command(
+					crate::editor::EditorCommand::EndPointerSelection,
+					EditorDispatchSource::PointerRelease,
+				);
 			}
 			Message::PaneResized(event) => {
 				self.chrome.resize(event.split, event.ratio);
 			}
 			Message::EditorCommand(command) => {
-				self.apply_editor_command(command, true, true);
+				self.dispatch_editor_command(command, EditorDispatchSource::Keyboard);
 			}
 		}
 
@@ -405,22 +420,18 @@ impl Playground {
 		self.scene_dump = self.scene.scene().dump_text();
 	}
 
-	fn apply_editor_command(
-		&mut self, command: crate::editor::EditorCommand, mark_custom: bool, reveal_viewport: bool,
-	) {
+	fn dispatch_editor_command(&mut self, command: crate::editor::EditorCommand, source: EditorDispatchSource) {
 		let command_started = Instant::now();
 		let apply_started = Instant::now();
-		let result = self.editor.apply(&mut self.font_system, command);
+		let update = self.editor.apply(&mut self.font_system, command);
 		self.perf.record_editor_apply(apply_started.elapsed());
 
-		if mark_custom {
+		if update.document_changed() {
 			self.preset = SamplePreset::Custom;
-		}
-
-		if result.changed {
 			self.refresh_scene_after_edit();
 		}
-		if reveal_viewport {
+
+		if source.reveals_viewport() && update.view_changed() {
 			self.reveal_editor_target();
 		}
 
@@ -608,6 +619,25 @@ mod tests {
 		}
 
 		assert!(playground.canvas_scroll.y > 0.0);
+	}
+
+	#[test]
+	fn keyboard_motion_keeps_the_selected_preset() {
+		let (mut playground, _) = Playground::new();
+
+		let _ = playground.update(Message::EditorCommand(EditorCommand::MoveRight));
+
+		assert_eq!(playground.preset, crate::types::SamplePreset::Tall);
+	}
+
+	#[test]
+	fn text_edits_flip_the_preset_to_custom() {
+		let (mut playground, _) = Playground::new();
+
+		let _ = playground.update(Message::EditorCommand(EditorCommand::EnterInsertAfter));
+		let _ = playground.update(Message::EditorCommand(EditorCommand::InsertText("!".to_string())));
+
+		assert_eq!(playground.preset, crate::types::SamplePreset::Custom);
 	}
 }
 
