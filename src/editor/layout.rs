@@ -31,10 +31,13 @@ impl BufferClusterInfo {
 
 impl EditorSelectionRect {
 	fn from_span(start: &BufferClusterInfo, end: &BufferClusterInfo) -> Self {
+		let left = start.x.min(end.x);
+		let right = (start.x + start.width).max(end.x + end.width);
+
 		Self {
-			x: start.x,
+			x: left,
 			y: start.y.min(end.y),
-			width: (end.x + end.width) - start.x,
+			width: (right - left).max(1.0),
 			height: start.height.max(end.height),
 		}
 	}
@@ -51,6 +54,7 @@ pub(super) struct BufferCaretMetrics {
 #[derive(Debug, Clone)]
 pub(super) struct BufferLayoutSnapshot {
 	clusters: Vec<BufferClusterInfo>,
+	byte_order: Vec<usize>,
 	line_byte_offsets: Vec<usize>,
 	runs: Vec<BufferRunInfo>,
 }
@@ -80,8 +84,19 @@ impl BufferLayoutSnapshot {
 			});
 		}
 
+		let mut byte_order = (0..clusters.len()).collect::<Vec<_>>();
+		byte_order.sort_by(|a, b| {
+			clusters[*a]
+				.byte_range
+				.start
+				.cmp(&clusters[*b].byte_range.start)
+				.then_with(|| clusters[*a].byte_range.end.cmp(&clusters[*b].byte_range.end))
+				.then_with(|| clusters[*a].run_index.cmp(&clusters[*b].run_index))
+		});
+
 		Self {
 			clusters,
+			byte_order,
 			line_byte_offsets,
 			runs,
 		}
@@ -118,14 +133,18 @@ impl BufferLayoutSnapshot {
 	}
 
 	pub(super) fn cluster_at_or_after(&self, byte: usize) -> Option<usize> {
-		let index = self.clusters.partition_point(|cluster| cluster.byte_range.end <= byte);
-		(index < self.clusters.len()).then_some(index)
+		let index = self
+			.byte_order
+			.partition_point(|cluster_index| self.clusters[*cluster_index].byte_range.end <= byte);
+		self.byte_order.get(index).copied()
 	}
 
 	pub(super) fn cluster_before(&self, byte: usize) -> Option<usize> {
-		self.clusters
-			.partition_point(|cluster| cluster.byte_range.start < byte)
+		self.byte_order
+			.partition_point(|cluster_index| self.clusters[*cluster_index].byte_range.start < byte)
 			.checked_sub(1)
+			.and_then(|index| self.byte_order.get(index))
+			.copied()
 	}
 
 	pub(super) fn first_cluster_in_run(&self, run_index: usize) -> Option<usize> {

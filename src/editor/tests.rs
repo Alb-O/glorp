@@ -194,6 +194,62 @@ fn drag_selection_spans_multiple_wrapped_rectangles() {
 }
 
 #[test]
+fn rtl_cluster_byte_lookup_matches_visual_cluster() {
+	let text = "السلام عليكم السلام عليكم السلام عليكم";
+	let (mut font_system, mut editor) = editor(text);
+	editor.sync_buffer_width(&mut font_system, 150.0);
+
+	let layout = editor.layout_snapshot();
+	let rtl_indices = layout
+		.clusters()
+		.iter()
+		.enumerate()
+		.filter_map(|(index, cluster)| {
+			(layout.cluster_at_or_after(cluster.byte_range.start) == Some(index)).then_some(index)
+		})
+		.collect::<Vec<_>>();
+
+	assert!(
+		rtl_indices.len() >= 4,
+		"expected byte lookup to round-trip multiple Arabic clusters, got {rtl_indices:?}"
+	);
+
+	for (index, cluster) in layout.clusters().iter().enumerate() {
+		assert_eq!(
+			layout.cluster_at_or_after(cluster.byte_range.start),
+			Some(index),
+			"cluster byte lookup diverged for cluster {index:?} with range {:?}",
+			cluster.byte_range,
+		);
+	}
+}
+
+#[test]
+fn rtl_selection_rectangles_keep_positive_width() {
+	let text = "السلام عليكم السلام عليكم السلام عليكم";
+	let (mut font_system, mut editor) = editor(text);
+	editor.sync_buffer_width(&mut font_system, 150.0);
+
+	let layout = editor.layout_snapshot();
+	let rtl_span = layout
+		.clusters()
+		.windows(2)
+		.find(|pair| {
+			pair[0].run_index == pair[1].run_index
+				&& pair[0].byte_range.start < pair[1].byte_range.start
+				&& pair[0].x > pair[1].x
+		})
+		.expect("expected a visual rtl span in the wrapped Arabic sample");
+
+	let range = rtl_span[0].byte_range.start.min(rtl_span[1].byte_range.start)
+		..rtl_span[0].byte_range.end.max(rtl_span[1].byte_range.end);
+	let rectangles = layout.selection_rectangles(&range);
+
+	assert!(!rectangles.is_empty());
+	assert!(rectangles.iter().all(|rect| rect.width > 0.0));
+}
+
+#[test]
 fn double_click_selects_a_full_word() {
 	let (mut font_system, mut editor) = editor("alpha beta gamma");
 
