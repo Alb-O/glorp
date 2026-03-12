@@ -236,7 +236,6 @@ pub(super) struct SidebarState {
 	pub(super) active_tab: SidebarTab,
 	pub(super) hovered_target: Option<CanvasTarget>,
 	pub(super) selected_target: Option<CanvasTarget>,
-	pub(super) scene_dump: String,
 }
 
 impl SidebarState {
@@ -245,21 +244,14 @@ impl SidebarState {
 			active_tab: SidebarTab::Controls,
 			hovered_target: None,
 			selected_target: None,
-			scene_dump: String::new(),
 		}
 	}
 
-	pub(super) fn set_active_tab(&mut self, tab: SidebarTab, scene: &LayoutScene) {
+	pub(super) fn set_active_tab(&mut self, tab: SidebarTab) {
 		self.active_tab = tab;
 
 		if tab != SidebarTab::Inspect {
 			self.clear_inspect_targets();
-		}
-
-		if matches!(tab, SidebarTab::Dump) {
-			self.refresh_dump(scene);
-		} else {
-			self.scene_dump.clear();
 		}
 	}
 
@@ -271,21 +263,11 @@ impl SidebarState {
 		self.selected_target = (self.active_tab == SidebarTab::Inspect).then_some(target).flatten();
 	}
 
-	pub(super) fn refresh_dump(&mut self, scene: &LayoutScene) {
-		self.scene_dump = scene.dump_text();
-	}
-
-	pub(super) fn sync_after_scene_refresh(&mut self, scene: &LayoutScene) {
+	pub(super) fn sync_after_scene_refresh(&mut self) {
 		self.hovered_target = None;
 
 		if self.active_tab != SidebarTab::Inspect {
 			self.selected_target = None;
-		}
-
-		if matches!(self.active_tab, SidebarTab::Dump) {
-			self.refresh_dump(scene);
-		} else {
-			self.scene_dump.clear();
 		}
 	}
 

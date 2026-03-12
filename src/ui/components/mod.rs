@@ -4,14 +4,12 @@
 //! module renders from explicit props.
 
 mod controls;
-mod dump;
 mod inspect;
 mod perf;
 mod shell;
 mod sidebar;
 
 pub(crate) use controls::{ControlsTabProps, view_controls_tab};
-pub(crate) use dump::view_dump_tab;
 pub(crate) use inspect::{InspectTabProps, view_inspect_tab};
 pub(crate) use perf::{PerfTabProps, view_perf_tab};
 pub(crate) use shell::{

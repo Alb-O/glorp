@@ -84,7 +84,7 @@ impl Playground {
 				self.viewport.scene_revision += 1;
 			}
 			Message::SelectSidebarTab(tab) => {
-				self.sidebar.set_active_tab(tab, self.session.scene());
+				self.sidebar.set_active_tab(tab);
 			}
 			Message::PerfTick(_now) => {}
 			Message::CanvasHovered(target) => {
@@ -188,7 +188,7 @@ impl Playground {
 	}
 
 	fn finish_scene_refresh(&mut self, reason: SceneRefreshReason, duration: Duration) {
-		self.sidebar.sync_after_scene_refresh(self.session.scene());
+		self.sidebar.sync_after_scene_refresh();
 		self.viewport
 			.finish_scene_refresh(self.session.scene(), reason.resets_scroll());
 		self.perf.record_scene_build(duration);

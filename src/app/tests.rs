@@ -93,19 +93,3 @@ fn leaving_inspect_clears_hover_and_selection() {
 	assert_eq!(playground.sidebar.hovered_target, None);
 	assert_eq!(playground.sidebar.selected_target, None);
 }
-
-#[test]
-fn dump_cache_tracks_active_tab_only() {
-	let (mut playground, _) = Playground::new();
-
-	let _ = playground.update(Message::SelectSidebarTab(SidebarTab::Dump));
-	assert!(!playground.sidebar.scene_dump.is_empty());
-
-	let before = playground.sidebar.scene_dump.clone();
-	let _ = playground.update(Message::EditorCommand(EditorCommand::EnterInsertAfter));
-	let _ = playground.update(Message::EditorCommand(EditorCommand::InsertText("!".to_string())));
-	assert_ne!(playground.sidebar.scene_dump, before);
-
-	let _ = playground.update(Message::SelectSidebarTab(SidebarTab::Controls));
-	assert!(playground.sidebar.scene_dump.is_empty());
-}

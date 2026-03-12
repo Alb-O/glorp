@@ -43,12 +43,11 @@ pub(crate) enum Message {
 pub(crate) enum SidebarTab {
 	Controls,
 	Inspect,
-	Dump,
 	Perf,
 }
 
 impl SidebarTab {
-	pub(crate) const ALL: [Self; 4] = [Self::Controls, Self::Inspect, Self::Dump, Self::Perf];
+	pub(crate) const ALL: [Self; 3] = [Self::Controls, Self::Inspect, Self::Perf];
 }
 
 impl Display for SidebarTab {
@@ -56,7 +55,6 @@ impl Display for SidebarTab {
 		let label = match self {
 			Self::Controls => "Controls",
 			Self::Inspect => "Inspect",
-			Self::Dump => "Dump",
 			Self::Perf => "Perf",
 		};
 

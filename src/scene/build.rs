@@ -117,11 +117,6 @@ impl LayoutScene {
 			if let (Some(eager_runs), Some(glyphs)) = (eager_inspect_runs.as_mut(), inspect_glyphs) {
 				eager_runs.push(InspectRunInfo {
 					line_index: run.line_i,
-					rtl: run.rtl,
-					baseline: run.line_y,
-					line_top: run.line_top,
-					line_height: run.line_height,
-					line_width: run.line_w,
 					glyphs,
 				});
 			}
@@ -147,7 +142,6 @@ impl LayoutScene {
 			font_choice: config.font_choice,
 			shaping: config.shaping,
 			wrapping: config.wrapping,
-			render_mode: config.render_mode,
 			font_size: config.font_size,
 			line_height: config.line_height,
 			max_width: config.max_width,
@@ -180,7 +174,6 @@ impl LayoutScene {
 			font_choice,
 			shaping,
 			wrapping,
-			render_mode,
 			font_size,
 			line_height,
 			max_width,

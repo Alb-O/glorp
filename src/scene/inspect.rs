@@ -91,11 +91,6 @@ pub(super) fn build_inspect_runs(inspect: &SceneInspectCache) -> Arc<[InspectRun
 			let line_byte_offset = inspect.line_byte_offsets[run.line_i];
 			InspectRunInfo {
 				line_index: run.line_i,
-				rtl: run.rtl,
-				baseline: run.line_y,
-				line_top: run.line_top,
-				line_height: run.line_height,
-				line_width: run.line_w,
 				glyphs: run
 					.glyphs
 					.iter()
@@ -113,10 +108,6 @@ pub(super) fn build_inspect_runs(inspect: &SceneInspectCache) -> Arc<[InspectRun
 			}
 		})
 		.collect()
-}
-
-pub(super) fn collect_fonts_seen(font_names: &[(fontdb::ID, Arc<str>)]) -> Vec<String> {
-	font_names.iter().map(|(_, name)| name.to_string()).collect()
 }
 
 pub(super) fn font_name(

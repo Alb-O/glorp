@@ -18,11 +18,6 @@ pub(crate) struct RunInfo {
 #[derive(Debug, Clone)]
 pub(crate) struct InspectRunInfo {
 	pub(crate) line_index: usize,
-	pub(crate) rtl: bool,
-	pub(crate) baseline: f32,
-	pub(crate) line_top: f32,
-	pub(crate) line_height: f32,
-	pub(crate) line_width: f32,
 	pub(crate) glyphs: Vec<GlyphInfo>,
 }
 

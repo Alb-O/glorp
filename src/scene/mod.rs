@@ -1,6 +1,5 @@
 mod build;
 mod data;
-mod dump;
 mod font;
 mod geometry;
 mod inspect;
@@ -48,7 +47,6 @@ pub(crate) struct LayoutScene {
 	pub(crate) font_choice: FontChoice,
 	pub(crate) shaping: ShapingChoice,
 	pub(crate) wrapping: WrapChoice,
-	pub(crate) render_mode: RenderMode,
 	pub(crate) font_size: f32,
 	pub(crate) line_height: f32,
 	pub(crate) max_width: f32,

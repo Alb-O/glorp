@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use crate::types::{Message, SidebarTab};
 use crate::ui::{
 	CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps, is_stacked_shell, view_canvas_pane,
-	view_controls_tab, view_dump_tab, view_inspect_tab, view_perf_tab, view_sidebar, view_stacked_shell,
+	view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar, view_stacked_shell,
 };
 
 use super::Playground;
@@ -91,7 +91,6 @@ impl Playground {
 				warnings: &self.session.scene().warnings,
 				interaction_details: self.interaction_details(),
 			}),
-			SidebarTab::Dump => view_dump_tab(&self.sidebar.scene_dump),
 			SidebarTab::Perf => view_perf_tab(PerfTabProps {
 				overview: self
 					.perf
