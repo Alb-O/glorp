@@ -1,4 +1,6 @@
+mod document;
 mod editing;
+mod history;
 mod layout;
 mod navigation;
 mod selection;
@@ -16,6 +18,8 @@ use std::sync::Arc;
 
 use crate::scene::{SceneConfig, build_buffer};
 
+use self::document::Document;
+use self::history::{EditorHistory, EditorSnapshot, HistoryEntry};
 use self::layout::{BufferClusterInfo, BufferLayoutSnapshot};
 use self::text::debug_snippet;
 
@@ -43,6 +47,7 @@ pub(crate) struct EditorViewState {
 	pub(crate) caret: usize,
 	pub(crate) selection_rectangles: Arc<[EditorSelectionRect]>,
 	pub(crate) caret_geometry: EditorCaretGeometry,
+	pub(crate) viewport_target: Option<EditorSelectionRect>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -62,7 +67,8 @@ pub(crate) struct EditorCaretGeometry {
 
 #[derive(Debug, Clone)]
 pub(crate) struct EditorBuffer {
-	text: String,
+	document: Document,
+	history: EditorHistory,
 	buffer: Arc<Buffer>,
 	config: SceneConfig,
 	mode: EditorMode,
@@ -87,6 +93,8 @@ pub(crate) enum EditorCommand {
 	EnterInsertBefore,
 	EnterInsertAfter,
 	ExitInsert,
+	Undo,
+	Redo,
 	Backspace,
 	DeleteForward,
 	DeleteSelection,
@@ -107,10 +115,11 @@ pub(crate) struct ApplyResult {
 
 impl EditorBuffer {
 	pub(crate) fn new(font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) -> Self {
-		let text = text.into();
+		let document = Document::new(text);
 		let mut editor = Self {
-			buffer: Arc::new(build_buffer(font_system, &text, config)),
-			text,
+			buffer: Arc::new(build_buffer(font_system, document.text(), config)),
+			document,
+			history: EditorHistory::default(),
 			config,
 			mode: EditorMode::Normal,
 			selection: None,
@@ -129,6 +138,7 @@ impl EditorBuffer {
 					y: 0.0,
 					height: config.line_height.max(1.0),
 				},
+				viewport_target: None,
 			},
 		};
 		editor.reset_normal_selection();
@@ -137,7 +147,7 @@ impl EditorBuffer {
 	}
 
 	pub(crate) fn text(&self) -> &str {
-		&self.text
+		self.document.text()
 	}
 
 	pub(crate) fn mode(&self) -> EditorMode {
@@ -146,6 +156,10 @@ impl EditorBuffer {
 
 	pub(crate) fn buffer(&self) -> Arc<Buffer> {
 		self.buffer.clone()
+	}
+
+	pub(crate) fn history_depths(&self) -> (usize, usize) {
+		(self.history.undo_len(), self.history.redo_len())
 	}
 
 	pub(crate) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, config: SceneConfig) {
@@ -161,7 +175,7 @@ impl EditorBuffer {
 		}
 
 		self.config = config;
-		self.buffer = Arc::new(build_buffer(font_system, &self.text, config));
+		self.buffer = Arc::new(build_buffer(font_system, self.text(), config));
 		self.refresh_view_state();
 	}
 
@@ -176,9 +190,10 @@ impl EditorBuffer {
 	}
 
 	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
-		self.text = text.into();
+		self.document.reset(text);
+		self.history.clear();
 		self.config = config;
-		self.buffer = Arc::new(build_buffer(font_system, &self.text, config));
+		self.buffer = Arc::new(build_buffer(font_system, self.text(), config));
 		self.mode = EditorMode::Normal;
 		self.selection = None;
 		self.caret = 0;
@@ -201,7 +216,7 @@ impl EditorBuffer {
 				} else if let Some(cluster_index) = self.pointer_cluster_index(&layout, position) {
 					self.pointer_anchor = layout.cluster(cluster_index).map(|cluster| cluster.byte_range.start);
 					self.select_cluster(&layout, cluster_index);
-				} else if self.text.is_empty() {
+				} else if self.document.is_empty() {
 					self.mode = EditorMode::Insert;
 					self.selection = None;
 					self.caret = 0;
@@ -292,7 +307,7 @@ impl EditorBuffer {
 					.selection
 					.as_ref()
 					.map(|selection| selection.end)
-					.unwrap_or(self.text.len());
+					.unwrap_or(self.document.len());
 				self.preferred_x = None;
 				self.pointer_anchor = None;
 				ApplyResult {
@@ -307,6 +322,8 @@ impl EditorBuffer {
 					text_edit: None,
 				}
 			}
+			EditorCommand::Undo => self.undo(font_system),
+			EditorCommand::Redo => self.redo(font_system),
 			EditorCommand::Backspace => self.backspace(font_system),
 			EditorCommand::DeleteForward => self.delete_forward(font_system),
 			EditorCommand::DeleteSelection => self.delete_selection(font_system),
@@ -324,22 +341,26 @@ impl EditorBuffer {
 				};
 
 				format!(
-					"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}",
+					"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}/{}",
 					self.mode,
 					selection,
 					self.preview_range(selection),
 					self.view_state.selection_rectangles.len(),
 					self.caret,
 					self.pointer_anchor.unwrap_or(selection.start),
+					self.history.undo_len(),
+					self.history.redo_len(),
 				)
 			}
 			EditorMode::Insert => format!(
-				"  mode: {}\n  caret byte: {}\n  caret x/y: {:.1}, {:.1}\n  caret height: {:.1}",
+				"  mode: {}\n  caret byte: {}\n  caret x/y: {:.1}, {:.1}\n  caret height: {:.1}\n  undo/redo: {}/{}",
 				self.mode,
 				self.caret,
 				self.view_state.caret_geometry.x,
 				self.view_state.caret_geometry.y,
 				self.view_state.caret_geometry.height,
+				self.history.undo_len(),
+				self.history.redo_len(),
 			),
 		}
 	}
@@ -355,7 +376,7 @@ impl EditorBuffer {
 	}
 
 	fn layout_snapshot(&self) -> BufferLayoutSnapshot {
-		BufferLayoutSnapshot::new(&self.buffer, &self.text)
+		BufferLayoutSnapshot::new(&self.buffer, self.text())
 	}
 
 	fn reset_normal_selection(&mut self) {
@@ -398,7 +419,7 @@ impl EditorBuffer {
 	}
 
 	fn preview_range(&self, range: &Range<usize>) -> String {
-		self.text
+		self.text()
 			.get(range.clone())
 			.map(debug_snippet)
 			.unwrap_or_else(|| "<invalid utf8 slice>".to_string())
@@ -419,6 +440,57 @@ impl EditorBuffer {
 		buffer.shape_until_scroll(font_system, false);
 	}
 
+	fn history_snapshot(&self) -> EditorSnapshot {
+		EditorSnapshot {
+			mode: self.mode,
+			selection: self.selection.clone(),
+			caret: self.caret,
+			preferred_x: self.preferred_x,
+		}
+	}
+
+	fn restore_snapshot(&mut self, snapshot: &EditorSnapshot) {
+		self.mode = snapshot.mode;
+		self.selection = snapshot.selection.clone();
+		self.caret = snapshot.caret.min(self.document.len());
+		self.preferred_x = snapshot.preferred_x;
+		self.pointer_anchor = None;
+	}
+
+	fn apply_document_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) -> TextEdit {
+		self.apply_buffer_edit(font_system, edit);
+		self.document.apply_edit(edit)
+	}
+
+	fn record_history(&mut self, forward: TextEdit, inverse: TextEdit, before: EditorSnapshot) {
+		self.history.record(HistoryEntry {
+			forward,
+			inverse,
+			before,
+			after: self.history_snapshot(),
+		});
+	}
+
+	fn active_viewport_target(&self, layout: &BufferLayoutSnapshot) -> Option<EditorSelectionRect> {
+		match self.mode {
+			EditorMode::Normal => self.active_selection(layout).map(|cluster| EditorSelectionRect {
+				x: cluster.x,
+				y: cluster.y,
+				width: cluster.width.max(1.0),
+				height: cluster.height.max(1.0),
+			}),
+			EditorMode::Insert => {
+				let caret = layout.caret_geometry(self.caret, self.config.line_height);
+				Some(EditorSelectionRect {
+					x: caret.x,
+					y: caret.y,
+					width: 2.0,
+					height: caret.height.max(1.0),
+				})
+			}
+		}
+	}
+
 	fn refresh_view_state(&mut self) {
 		let layout = self.layout_snapshot();
 		self.view_state = EditorViewState {
@@ -433,6 +505,7 @@ impl EditorBuffer {
 				.map(|selection| layout.selection_rectangles(selection))
 				.unwrap_or_else(|| Arc::from([])),
 			caret_geometry: layout.caret_geometry(self.caret, self.config.line_height),
+			viewport_target: self.active_viewport_target(&layout),
 		};
 	}
 }

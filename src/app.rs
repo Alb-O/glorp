@@ -1,6 +1,6 @@
-use iced::Vector;
 use iced::widget::{pane_grid, responsive};
 use iced::{Element, Length, Subscription, Task, futures, stream};
+use iced::{Size, Vector};
 
 use std::fmt::Write as _;
 use std::time::{Duration, Instant};
@@ -100,6 +100,7 @@ pub(crate) struct Playground {
 	hovered_target: Option<crate::types::CanvasTarget>,
 	selected_target: Option<crate::types::CanvasTarget>,
 	canvas_scroll: Vector,
+	canvas_viewport: Size,
 	scene: LayoutSceneModel,
 	scene_dump: String,
 	font_system: cosmic_text::FontSystem,
@@ -159,6 +160,7 @@ impl Playground {
 				hovered_target: None,
 				selected_target: None,
 				canvas_scroll: Vector::ZERO,
+				canvas_viewport: Size::new(layout_width, 320.0),
 				scene,
 				scene_dump: String::new(),
 				font_system,
@@ -221,8 +223,10 @@ impl Playground {
 				self.refresh_scene();
 			}
 			Message::CanvasViewportResized(size) => {
-				let layout_width = scene_viewport_size(size).width;
+				let viewport = scene_viewport_size(size);
+				let layout_width = viewport.width;
 				let now = Instant::now();
+				self.canvas_viewport = viewport;
 				self.apply_live_layout_width(layout_width);
 
 				if let Some(layout_width) = self.resize_coalescer.observe(layout_width, now) {
@@ -275,19 +279,24 @@ impl Playground {
 						select_word: double_click,
 					},
 					false,
+					true,
 				);
 			}
 			Message::CanvasDragged(position) => {
-				self.apply_editor_command(crate::editor::EditorCommand::DragPointerSelection(position), false);
+				self.apply_editor_command(
+					crate::editor::EditorCommand::DragPointerSelection(position),
+					false,
+					false,
+				);
 			}
 			Message::CanvasReleased => {
-				self.apply_editor_command(crate::editor::EditorCommand::EndPointerSelection, false);
+				self.apply_editor_command(crate::editor::EditorCommand::EndPointerSelection, false, false);
 			}
 			Message::PaneResized(event) => {
 				self.chrome.resize(event.split, event.ratio);
 			}
 			Message::EditorCommand(command) => {
-				self.apply_editor_command(command, true);
+				self.apply_editor_command(command, true, true);
 			}
 		}
 
@@ -327,10 +336,13 @@ impl Playground {
 	}
 
 	fn view_sidebar(&self, stacked: bool) -> Element<'_, Message> {
+		let (undo_depth, redo_depth) = self.editor.history_depths();
 		view_sidebar(SidebarProps {
 			active_tab: self.active_sidebar_tab,
 			editor_mode: self.editor.mode(),
 			editor_bytes: self.editor.text().len(),
+			undo_depth,
+			redo_depth,
 			body: self.view_sidebar_body(),
 			stacked,
 		})
@@ -393,7 +405,9 @@ impl Playground {
 		self.scene_dump = self.scene.scene().dump_text();
 	}
 
-	fn apply_editor_command(&mut self, command: crate::editor::EditorCommand, mark_custom: bool) {
+	fn apply_editor_command(
+		&mut self, command: crate::editor::EditorCommand, mark_custom: bool, reveal_viewport: bool,
+	) {
 		let command_started = Instant::now();
 		let apply_started = Instant::now();
 		let result = self.editor.apply(&mut self.font_system, command);
@@ -405,6 +419,9 @@ impl Playground {
 
 		if result.changed {
 			self.refresh_scene_after_edit();
+		}
+		if reveal_viewport {
+			self.reveal_editor_target();
 		}
 
 		self.perf.record_editor_command(command_started.elapsed());
@@ -439,7 +456,7 @@ impl Playground {
 
 	fn refresh_scene_after_edit(&mut self) {
 		let duration = self.rebuild_scene();
-		self.finish_scene_refresh(true);
+		self.finish_scene_refresh(false);
 		self.perf.record_scene_build(duration);
 	}
 
@@ -494,11 +511,55 @@ impl Playground {
 		}
 		self.scene_revision += 1;
 	}
+
+	fn reveal_editor_target(&mut self) {
+		let Some(target) = self.editor.view_state().viewport_target else {
+			self.canvas_scroll = self.clamp_scroll(self.canvas_scroll);
+			return;
+		};
+
+		let viewport = self.canvas_viewport;
+		let mut scroll = self.clamp_scroll(self.canvas_scroll);
+		let margin_x = 24.0;
+		let margin_y = 24.0;
+		let left = target.x;
+		let right = target.x + target.width.max(1.0);
+		let top = target.y;
+		let bottom = target.y + target.height.max(1.0);
+
+		if left < scroll.x + margin_x {
+			scroll.x = (left - margin_x).max(0.0);
+		} else if right > scroll.x + viewport.width - margin_x {
+			scroll.x = (right - viewport.width + margin_x).max(0.0);
+		}
+
+		if top < scroll.y + margin_y {
+			scroll.y = (top - margin_y).max(0.0);
+		} else if bottom > scroll.y + viewport.height - margin_y {
+			scroll.y = (bottom - viewport.height + margin_y).max(0.0);
+		}
+
+		self.canvas_scroll = self.clamp_scroll(scroll);
+	}
+
+	fn clamp_scroll(&self, scroll: Vector) -> Vector {
+		let max_x = if matches!(self.scene.scene().wrapping, WrapChoice::None) {
+			(self.scene.scene().measured_width.max(self.layout_width) - self.canvas_viewport.width).max(0.0)
+		} else {
+			(self.layout_width - self.canvas_viewport.width).max(0.0)
+		};
+		let max_y = (self.scene.scene().measured_height - self.canvas_viewport.height).max(0.0);
+
+		Vector::new(scroll.x.clamp(0.0, max_x), scroll.y.clamp(0.0, max_y))
+	}
 }
 
 #[cfg(test)]
 mod tests {
-	use super::{RESIZE_REFLOW_INTERVAL, ResizeCoalescer};
+	use super::{Playground, RESIZE_REFLOW_INTERVAL, ResizeCoalescer};
+	use crate::editor::EditorCommand;
+	use crate::types::Message;
+	use iced::{Size, Vector};
 	use std::time::{Duration, Instant};
 
 	#[test]
@@ -512,6 +573,41 @@ mod tests {
 		assert!(coalescer.has_pending());
 		assert_eq!(coalescer.flush(started + RESIZE_REFLOW_INTERVAL), Some(720.0));
 		assert!(!coalescer.has_pending());
+	}
+
+	#[test]
+	fn edits_preserve_visible_scroll_position() {
+		let (mut playground, _) = Playground::new();
+		let _ = playground.update(Message::CanvasViewportResized(Size::new(760.0, 280.0)));
+
+		for _ in 0..5 {
+			let _ = playground.update(Message::EditorCommand(EditorCommand::MoveDown));
+		}
+
+		let target = playground
+			.editor
+			.view_state()
+			.viewport_target
+			.expect("selection should expose a viewport target");
+		playground.canvas_scroll = Vector::new(0.0, (target.y - 40.0).max(0.0));
+		let previous_scroll = playground.canvas_scroll;
+
+		let _ = playground.update(Message::EditorCommand(EditorCommand::EnterInsertAfter));
+		let _ = playground.update(Message::EditorCommand(EditorCommand::InsertText("!".to_string())));
+
+		assert_eq!(playground.canvas_scroll, previous_scroll);
+	}
+
+	#[test]
+	fn keyboard_motion_reveals_caret_when_it_leaves_viewport() {
+		let (mut playground, _) = Playground::new();
+		let _ = playground.update(Message::CanvasViewportResized(Size::new(760.0, 220.0)));
+
+		for _ in 0..12 {
+			let _ = playground.update(Message::EditorCommand(EditorCommand::MoveDown));
+		}
+
+		assert!(playground.canvas_scroll.y > 0.0);
 	}
 }
 

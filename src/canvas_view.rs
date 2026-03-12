@@ -447,10 +447,20 @@ fn key_command(
 	let latin = key
 		.to_latin(physical_key)
 		.map(|character| character.to_ascii_lowercase());
+	let redo_modifier = modifiers.shift();
+
+	if modifiers.command() {
+		return match latin {
+			Some('z') if redo_modifier => Some(EditorCommand::Redo),
+			Some('z') => Some(EditorCommand::Undo),
+			Some('y') => Some(EditorCommand::Redo),
+			_ => None,
+		};
+	}
 
 	match mode {
 		EditorMode::Normal => {
-			if modifiers.command() || modifiers.alt() {
+			if modifiers.alt() {
 				return None;
 			}
 
@@ -489,7 +499,7 @@ fn key_command(
 			key::Key::Named(key::Named::Tab) => Some(EditorCommand::InsertText("\t".to_string())),
 			key::Key::Named(key::Named::Escape) => Some(EditorCommand::ExitInsert),
 			_ => {
-				if modifiers.command() || modifiers.alt() {
+				if modifiers.alt() {
 					return None;
 				}
 

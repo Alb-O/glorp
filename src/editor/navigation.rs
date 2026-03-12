@@ -16,7 +16,7 @@ impl EditorBuffer {
 				}
 			}
 			EditorMode::Insert => {
-				self.caret = previous_char_boundary(&self.text, self.caret).unwrap_or(0);
+				self.caret = previous_char_boundary(self.text(), self.caret).unwrap_or(0);
 				self.preferred_x = None;
 			}
 		}
@@ -35,7 +35,7 @@ impl EditorBuffer {
 				}
 			}
 			EditorMode::Insert => {
-				self.caret = next_char_boundary(&self.text, self.caret).unwrap_or(self.text.len());
+				self.caret = next_char_boundary(self.text(), self.caret).unwrap_or(self.text().len());
 				self.preferred_x = None;
 			}
 		}

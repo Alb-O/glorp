@@ -64,7 +64,7 @@ impl EditorBuffer {
 	}
 
 	fn word_range(&self, fallback: std::ops::Range<usize>) -> std::ops::Range<usize> {
-		let Some(slice) = self.text.get(fallback.clone()) else {
+		let Some(slice) = self.text().get(fallback.clone()) else {
 			return fallback;
 		};
 
@@ -73,7 +73,7 @@ impl EditorBuffer {
 		}
 
 		let mut start = fallback.start;
-		while let Some((index, ch)) = previous_char(&self.text, start) {
+		while let Some((index, ch)) = previous_char(self.text(), start) {
 			if !is_word_char(ch) {
 				break;
 			}
@@ -81,7 +81,7 @@ impl EditorBuffer {
 		}
 
 		let mut end = fallback.end;
-		while let Some((next, ch)) = next_char(&self.text, end) {
+		while let Some((next, ch)) = next_char(self.text(), end) {
 			if !is_word_char(ch) {
 				break;
 			}

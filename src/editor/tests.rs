@@ -57,6 +57,27 @@ fn escape_from_insert_returns_to_normal_selection() {
 }
 
 #[test]
+fn undo_and_redo_restore_text_and_caret() {
+	let (mut font_system, mut editor) = editor("abc");
+
+	editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
+	editor.apply(&mut font_system, EditorCommand::InsertText("!".to_string()));
+
+	assert_eq!(editor.text(), "a!bc");
+	assert_eq!(editor.view_state().caret, 2);
+
+	editor.apply(&mut font_system, EditorCommand::Undo);
+	assert_eq!(editor.text(), "abc");
+	assert_eq!(editor.buffer_text(), "abc");
+	assert_eq!(editor.view_state().caret, 1);
+
+	editor.apply(&mut font_system, EditorCommand::Redo);
+	assert_eq!(editor.text(), "a!bc");
+	assert_eq!(editor.buffer_text(), "a!bc");
+	assert_eq!(editor.view_state().caret, 2);
+}
+
+#[test]
 fn delete_selection_on_later_line_handles_multibyte_text() {
 	let text = "🙂\né";
 	let mut font_system = make_font_system();
