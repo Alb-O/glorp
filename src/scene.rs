@@ -287,34 +287,6 @@ impl LayoutScene {
 		self.inspect_runs().get(run_index)?.glyphs.get(glyph_index)
 	}
 
-	pub(crate) fn hit_test_cluster(&self, local: Point) -> Option<usize> {
-		if self.clusters.is_empty() {
-			return None;
-		}
-
-		if let Some(target) = self.hit_test(local) {
-			return self.cluster_index_for_target(target);
-		}
-
-		let run_index = self
-			.runs
-			.iter()
-			.enumerate()
-			.find(|(_, run)| {
-				contains_point(
-					local,
-					0.0,
-					run.line_top,
-					self.max_width.max(1.0),
-					run.line_height.max(1.0),
-				)
-			})
-			.map(|(index, _)| index)
-			.or_else(|| nearest_run(self.runs.iter().enumerate(), local.y));
-
-		run_index.and_then(|run_index| self.nearest_cluster_in_run(run_index, local.x))
-	}
-
 	pub(crate) fn clusters(&self) -> &[ClusterInfo] {
 		&self.clusters
 	}
@@ -377,33 +349,6 @@ impl LayoutScene {
 		)
 	}
 
-	pub(crate) fn first_cluster_in_run(&self, run_index: usize) -> Option<usize> {
-		self.runs
-			.get(run_index)
-			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.start))
-	}
-
-	pub(crate) fn last_cluster_in_run(&self, run_index: usize) -> Option<usize> {
-		self.runs
-			.get(run_index)
-			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.end - 1))
-	}
-
-	pub(crate) fn nearest_cluster_on_adjacent_run(
-		&self, run_index: usize, preferred_x: f32, direction: isize,
-	) -> Option<usize> {
-		let mut next = run_index as isize + direction;
-
-		while next >= 0 && next < self.runs.len() as isize {
-			if let Some(target) = self.nearest_cluster_in_run(next as usize, preferred_x) {
-				return Some(target);
-			}
-			next += direction;
-		}
-
-		None
-	}
-
 	pub(crate) fn nearest_cluster_in_run(&self, run_index: usize, preferred_x: f32) -> Option<usize> {
 		let run = self.runs.get(run_index)?;
 		if run.cluster_range.is_empty() {
@@ -427,7 +372,6 @@ impl LayoutScene {
 				x: 0.0,
 				y: 0.0,
 				height: self.line_height.max(1.0),
-				run_index: 0,
 			};
 		}
 
@@ -438,7 +382,6 @@ impl LayoutScene {
 					x: cluster.x,
 					y: cluster.y,
 					height: cluster.height.max(1.0),
-					run_index: cluster.run_index,
 				};
 			}
 		}
@@ -449,7 +392,6 @@ impl LayoutScene {
 				x: cluster.x + cluster.width,
 				y: cluster.y,
 				height: cluster.height.max(1.0),
-				run_index: cluster.run_index,
 			};
 		}
 
@@ -458,7 +400,6 @@ impl LayoutScene {
 			x: cluster.x,
 			y: cluster.y,
 			height: cluster.height.max(1.0),
-			run_index: cluster.run_index,
 		}
 	}
 
@@ -662,7 +603,6 @@ pub(crate) struct CaretMetrics {
 	pub(crate) x: f32,
 	pub(crate) y: f32,
 	pub(crate) height: f32,
-	pub(crate) run_index: usize,
 }
 
 pub(crate) fn make_font_system() -> FontSystem {
@@ -855,15 +795,6 @@ fn glyph_outline(
 				})
 				.collect(),
 		})
-}
-
-fn nearest_run<'a>(runs: impl Iterator<Item = (usize, &'a RunInfo)>, y: f32) -> Option<usize> {
-	runs.min_by(|(_, a), (_, b)| {
-		let a_center = a.line_top + (a.line_height * 0.5);
-		let b_center = b.line_top + (b.line_height * 0.5);
-		(a_center - y).abs().total_cmp(&(b_center - y).abs())
-	})
-	.map(|(index, _)| index)
 }
 
 fn to_attributes(font: Font) -> Attrs<'static> {

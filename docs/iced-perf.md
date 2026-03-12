@@ -31,6 +31,7 @@ These are no longer the main bottlenecks:
 - Cluster range lookup and several caret-adjacent lookups use binary-search style helpers instead of repeated linear scans in `src/scene.rs`.
 - Inspection glyph data is no longer materialized eagerly on every edit in normal text mode. `LayoutScene::from_buffer(...)` now builds lightweight runs/clusters first, and `inspect_runs()` only constructs per-glyph inspection payload on demand unless outline mode requires it eagerly in `src/scene.rs`.
 - The canvas draw pass culls vector work to the visible viewport in `src/canvas_view.rs`.
+- Editor interaction no longer depends on `LayoutScene` as its state machine. Click selection now starts from retained-buffer hit testing, vertical and line-edge movement derive from retained-buffer layout, and scene refresh no longer repairs editor state after the fact in `src/editor.rs` and `src/app.rs`.
 
 ## Remaining Structural Costs
 
@@ -46,25 +47,21 @@ That is expected with the current canvas architecture:
 
 The expensive text layer is already off this path. What still pays here is overlay/debug geometry.
 
-### 2. Editor Interaction Is Still Scene-Driven
+### 2. Editor Core Is Better, But Still Custom
 
-This is now the biggest hill.
+The editor no longer depends on `LayoutScene` for interaction, but it still keeps a custom normal/insert model in `src/editor.rs`.
 
-The app still keeps:
+That means:
 
-- a retained `cosmic-text::Buffer` in `src/editor.rs`
-- a custom normal/insert interaction model in `src/editor.rs`
-- a synchronization step after each scene refresh in `src/app.rs`
+- click selection starts from `Buffer::hit(...)`, but normal-mode cluster choice and vertical movement are still implemented in repo-local code
+- caret and normal-mode selection are editor-owned byte positions and byte ranges, not a single shared upstream editor object
+- the retained `cosmic-text::Buffer` is shared with `LayoutScene` through `Arc`, so a naive switch to `cosmic_text::Editor` cursor motion would be wrong here: its motion path needs `&mut Buffer`, and in this architecture that would force `Arc::make_mut(...)` and risk cloning the whole buffer on cursor movement
+- for that reason, the current unification uses read-only retained-buffer layout snapshots for motion and hit-test projection, while keeping actual buffer mutation limited to real text edits
+- upstream `iced` still has a tighter one-object model where motion, cursor state, selection state, and rendering all sit behind the same retained editor abstraction
 
-The retained text buffer is now shared, but most cursor behavior is still derived from `LayoutScene` clusters instead of the retained text core:
+This is much better than the old scene-driven split, but it is still not the same architecture as upstream `iced_widget-0.14.2/src/text_editor.rs` plus `iced_graphics-0.14.0/src/text/editor.rs`.
 
-- click selection still goes through `scene.hit_test_cluster(...)`
-- vertical movement and line-edge movement still use `scene.nearest_cluster_on_adjacent_run(...)`, `scene.first_cluster_in_run(...)`, `scene.last_cluster_in_run(...)`, and `scene.caret_metrics(...)`
-- normal-mode selection is still stored as a scene cluster byte range and repaired by `sync_with_scene(...)` after each scene refresh
-
-Upstream `iced` does not route those paths through a derived scene snapshot. Its text editor path keeps one retained editor/buffer object and drives motion, selection, hit testing, shaping, and rendering from the same core state in `iced_widget-0.14.2/src/text_editor.rs`, `iced_graphics-0.14.0/src/text/editor.rs`, and `cosmic-text` itself.
-
-### 3. Hit Testing Is Still Custom And Linear
+### 3. Hit Testing Is Still Custom And Linear In The Overlay
 
 `src/scene.rs` still does custom hover/click hit testing over runs, clusters, or lazily built glyph inspection data.
 
@@ -79,6 +76,8 @@ The current editor/scene split is the important shift:
 
 - `EditorBuffer` owns the retained `cosmic-text::Buffer`
 - hot-path scene refresh now rebuilds only the derived inspection/layout snapshot from that retained buffer
+- editor interaction now derives from retained-buffer hit testing and retained-buffer layout instead of `LayoutScene`
+- that retained-buffer layout path is intentional: it avoids per-motion `Arc::make_mut(...)` pressure that would come from driving cursor movement through a mutable `cosmic_text::Editor` while the buffer is also shared with scene state
 - glyph inspection runs are backed by the retained buffer and built lazily through `inspect_runs()`
 - outline mode remains eager because the canvas outline renderer genuinely needs outline paths immediately
 
@@ -86,31 +85,20 @@ That means the old advice, "stop patching two retained text buffers and stop mat
 
 ## Next Big Hill
 
-The next big hill is to stop deriving editor interaction from `LayoutScene`.
+The next big hill is now the inspection overlay path, not the editor core.
 
-In practice that means pushing toward one retained editor core that owns:
+In practice that means moving more of the overlay off `iced::widget::canvas`, or otherwise restructuring it so scroll stops forcing cached geometry rebuilds in `src/canvas_view.rs`.
 
-- caret
-- selection
-- line movement
-- edit application
-- hit testing or hit-test inputs
+That is the highest-value next move because:
 
-and then deriving the inspection view from that, instead of using scene clusters as the state machine for cursor movement and selection.
+- the main text layer is already off canvas
+- editor interaction no longer depends on scene rebuild and repair
+- the remaining obvious runtime churn is scroll invalidating overlay geometry
 
-The concrete next slice is:
+The next-best follow-on after that is deeper editor unification:
 
-- switch click selection from `scene.hit_test_cluster(...)` to retained-buffer hit testing
-- switch `MoveUp`, `MoveDown`, `MoveLineStart`, and `MoveLineEnd` from scene helpers to retained-buffer cursor motion
-- treat normal-mode cluster highlighting as a derived projection of the retained cursor, not as the cursor source of truth
-- shrink or remove `sync_with_scene(...)` so scene refresh stops "repairing" editor state after the fact
-
-That is the highest-value next move because it should improve both:
-
-- correctness: cursor desync, stale line movement, and scene/editor mismatch bugs
-- performance: less post-refresh reconciliation and less custom scene-driven editor logic
-
-If that is too large for one pass, the next-best pure perf project is to move more of the inspection overlay off `canvas` so scroll no longer forces cached geometry rebuilds for the overlay path.
+- collapse normal-mode selection and insert caret toward one retained cursor/selection model
+- reuse more upstream `cosmic-text` or `iced` editor semantics instead of repo-local motion helpers
 
 ## Automated CLI Perf Metrics And Tests
 

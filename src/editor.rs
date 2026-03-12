@@ -73,8 +73,7 @@ pub(crate) struct ApplyResult {
 impl EditorBuffer {
 	pub(crate) fn new(font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) -> Self {
 		let text = text.into();
-
-		Self {
+		let mut editor = Self {
 			buffer: Arc::new(build_buffer(font_system, &text, config)),
 			text,
 			config,
@@ -82,7 +81,9 @@ impl EditorBuffer {
 			selection: None,
 			caret: 0,
 			preferred_x: None,
-		}
+		};
+		editor.reset_normal_selection();
+		editor
 	}
 
 	pub(crate) fn text(&self) -> &str {
@@ -114,6 +115,7 @@ impl EditorBuffer {
 		self.selection = None;
 		self.caret = 0;
 		self.preferred_x = None;
+		self.reset_normal_selection();
 	}
 
 	pub(crate) fn view_state(&self) -> EditorViewState {
@@ -124,13 +126,16 @@ impl EditorBuffer {
 		}
 	}
 
-	pub(crate) fn apply(
-		&mut self, font_system: &mut FontSystem, command: EditorCommand, scene: &LayoutScene,
-	) -> ApplyResult {
+	pub(crate) fn apply(&mut self, font_system: &mut FontSystem, command: EditorCommand) -> ApplyResult {
 		match command {
 			EditorCommand::SelectClusterAt(point) => {
-				if let Some(cluster_index) = scene.hit_test_cluster(point) {
-					self.select_cluster(scene, cluster_index);
+				let layout = self.layout_snapshot();
+				if let Some(cluster_index) = self
+					.buffer
+					.hit(point.x, point.y)
+					.and_then(|cursor| layout.cluster_index_for_cursor(cursor))
+				{
+					self.select_cluster(&layout, cluster_index);
 				} else if self.text.is_empty() {
 					self.mode = EditorMode::Insert;
 					self.caret = 0;
@@ -142,51 +147,58 @@ impl EditorBuffer {
 				}
 			}
 			EditorCommand::MoveLeft => {
-				self.move_left(scene);
+				let layout = self.layout_snapshot();
+				self.move_left(&layout);
 				ApplyResult {
 					changed: false,
 					text_edit: None,
 				}
 			}
 			EditorCommand::MoveRight => {
-				self.move_right(scene);
+				let layout = self.layout_snapshot();
+				self.move_right(&layout);
 				ApplyResult {
 					changed: false,
 					text_edit: None,
 				}
 			}
 			EditorCommand::MoveUp => {
-				self.move_vertical(scene, -1);
+				let layout = self.layout_snapshot();
+				self.move_vertical(&layout, -1);
 				ApplyResult {
 					changed: false,
 					text_edit: None,
 				}
 			}
 			EditorCommand::MoveDown => {
-				self.move_vertical(scene, 1);
+				let layout = self.layout_snapshot();
+				self.move_vertical(&layout, 1);
 				ApplyResult {
 					changed: false,
 					text_edit: None,
 				}
 			}
 			EditorCommand::MoveLineStart => {
-				self.move_line_edge(scene, true);
+				let layout = self.layout_snapshot();
+				self.move_line_edge(&layout, true);
 				ApplyResult {
 					changed: false,
 					text_edit: None,
 				}
 			}
 			EditorCommand::MoveLineEnd => {
-				self.move_line_edge(scene, false);
+				let layout = self.layout_snapshot();
+				self.move_line_edge(&layout, false);
 				ApplyResult {
 					changed: false,
 					text_edit: None,
 				}
 			}
 			EditorCommand::EnterInsertBefore => {
+				let layout = self.layout_snapshot();
 				self.mode = EditorMode::Insert;
 				self.caret = self
-					.current_selection(scene)
+					.current_selection(&layout)
 					.map(|cluster| cluster.byte_range.start)
 					.unwrap_or(0);
 				self.preferred_x = None;
@@ -196,9 +208,10 @@ impl EditorBuffer {
 				}
 			}
 			EditorCommand::EnterInsertAfter => {
+				let layout = self.layout_snapshot();
 				self.mode = EditorMode::Insert;
 				self.caret = self
-					.current_selection(scene)
+					.current_selection(&layout)
 					.map(|cluster| cluster.byte_range.end)
 					.unwrap_or(self.text.len());
 				self.preferred_x = None;
@@ -208,49 +221,28 @@ impl EditorBuffer {
 				}
 			}
 			EditorCommand::ExitInsert => {
-				self.exit_insert(scene);
+				self.exit_insert();
 				ApplyResult {
 					changed: false,
 					text_edit: None,
 				}
 			}
-			EditorCommand::Backspace => self.backspace(font_system, scene),
-			EditorCommand::DeleteForward => self.delete_forward(font_system, scene),
-			EditorCommand::DeleteSelection => self.delete_selection(font_system, scene),
+			EditorCommand::Backspace => self.backspace(font_system),
+			EditorCommand::DeleteForward => self.delete_forward(font_system),
+			EditorCommand::DeleteSelection => self.delete_selection(font_system),
 			EditorCommand::InsertText(text) => self.insert_text(font_system, text),
-		}
-	}
-
-	pub(crate) fn sync_with_scene(&mut self, scene: &LayoutScene) {
-		self.caret = clamp_char_boundary(&self.text, self.caret);
-
-		match self.mode {
-			EditorMode::Insert => {}
-			EditorMode::Normal => {
-				self.selection = if scene.clusters().is_empty() {
-					None
-				} else if let Some(selection) = self.selection.clone() {
-					scene
-						.cluster_index_for_range(&selection)
-						.or_else(|| scene.cluster_at_or_after(selection.start))
-						.or_else(|| scene.cluster_before(selection.start))
-						.and_then(|index| scene.cluster(index))
-						.map(|cluster| cluster.byte_range.clone())
-				} else {
-					scene.cluster(0).map(|cluster| cluster.byte_range.clone())
-				};
-
-				if let Some(cluster) = self.current_selection(scene) {
-					self.preferred_x = Some(cluster.center_x());
-				}
-			}
 		}
 	}
 
 	pub(crate) fn selection_details(&self, scene: &LayoutScene) -> String {
 		match self.mode {
 			EditorMode::Normal => {
-				let Some(cluster) = self.current_selection(scene) else {
+				let Some(cluster) = self
+					.selection
+					.as_ref()
+					.and_then(|selection| scene.cluster_index_for_range(selection))
+					.and_then(|index| scene.cluster(index))
+				else {
 					return format!("  mode: {}\n  selection: none", self.mode);
 				};
 
@@ -280,15 +272,15 @@ impl EditorBuffer {
 		}
 	}
 
-	fn move_left(&mut self, scene: &LayoutScene) {
+	fn move_left(&mut self, layout: &BufferLayoutSnapshot) {
 		match self.mode {
 			EditorMode::Normal => {
-				let Some(current) = self.selection_index(scene) else {
+				let Some(current) = self.selection_index(layout) else {
 					return;
 				};
 
 				if let Some(previous) = current.checked_sub(1) {
-					self.select_cluster(scene, previous);
+					self.select_cluster(layout, previous);
 				}
 			}
 			EditorMode::Insert => {
@@ -298,15 +290,15 @@ impl EditorBuffer {
 		}
 	}
 
-	fn move_right(&mut self, scene: &LayoutScene) {
+	fn move_right(&mut self, layout: &BufferLayoutSnapshot) {
 		match self.mode {
 			EditorMode::Normal => {
-				let Some(current) = self.selection_index(scene) else {
+				let Some(current) = self.selection_index(layout) else {
 					return;
 				};
 
-				if current + 1 < scene.clusters().len() {
-					self.select_cluster(scene, current + 1);
+				if current + 1 < layout.clusters().len() {
+					self.select_cluster(layout, current + 1);
 				}
 			}
 			EditorMode::Insert => {
@@ -316,28 +308,28 @@ impl EditorBuffer {
 		}
 	}
 
-	fn move_vertical(&mut self, scene: &LayoutScene, direction: isize) {
+	fn move_vertical(&mut self, layout: &BufferLayoutSnapshot, direction: isize) {
 		match self.mode {
 			EditorMode::Normal => {
-				let Some(current) = self.current_selection(scene) else {
+				let Some(current) = self.current_selection(layout) else {
 					return;
 				};
 				let preferred_x = self.preferred_x.unwrap_or_else(|| current.center_x());
-				let Some(target) = scene.nearest_cluster_on_adjacent_run(current.run_index, preferred_x, direction)
+				let Some(target) = layout.nearest_cluster_on_adjacent_run(current.run_index, preferred_x, direction)
 				else {
 					return;
 				};
-				self.select_cluster(scene, target);
+				self.select_cluster(layout, target);
 				self.preferred_x = Some(preferred_x);
 			}
 			EditorMode::Insert => {
-				let caret = scene.caret_metrics(self.caret);
+				let caret = layout.caret_metrics(self.caret);
 				let preferred_x = self.preferred_x.unwrap_or(caret.x);
-				let Some(target) = scene.nearest_cluster_on_adjacent_run(caret.run_index, preferred_x, direction)
+				let Some(target) = layout.nearest_cluster_on_adjacent_run(caret.run_index, preferred_x, direction)
 				else {
 					return;
 				};
-				let cluster = &scene.clusters()[target];
+				let cluster = &layout.clusters()[target];
 				self.caret = if preferred_x > cluster.center_x() {
 					cluster.byte_range.end
 				} else {
@@ -348,33 +340,33 @@ impl EditorBuffer {
 		}
 	}
 
-	fn move_line_edge(&mut self, scene: &LayoutScene, to_start: bool) {
+	fn move_line_edge(&mut self, layout: &BufferLayoutSnapshot, to_start: bool) {
 		match self.mode {
 			EditorMode::Normal => {
-				let Some(current) = self.current_selection(scene) else {
+				let Some(current) = self.current_selection(layout) else {
 					return;
 				};
 				let target = if to_start {
-					scene.first_cluster_in_run(current.run_index)
+					layout.first_cluster_in_run(current.run_index)
 				} else {
-					scene.last_cluster_in_run(current.run_index)
+					layout.last_cluster_in_run(current.run_index)
 				};
 
 				if let Some(target) = target {
-					self.select_cluster(scene, target);
+					self.select_cluster(layout, target);
 				}
 			}
 			EditorMode::Insert => {
-				let caret = scene.caret_metrics(self.caret);
+				let caret = layout.caret_metrics(self.caret);
 				let target = if to_start {
-					scene
+					layout
 						.first_cluster_in_run(caret.run_index)
-						.map(|index| scene.clusters()[index].byte_range.start)
+						.map(|index| layout.clusters()[index].byte_range.start)
 						.unwrap_or(self.caret)
 				} else {
-					scene
+					layout
 						.last_cluster_in_run(caret.run_index)
-						.map(|index| scene.clusters()[index].byte_range.end)
+						.map(|index| layout.clusters()[index].byte_range.end)
 						.unwrap_or(self.caret)
 				};
 
@@ -384,19 +376,24 @@ impl EditorBuffer {
 		}
 	}
 
-	fn exit_insert(&mut self, scene: &LayoutScene) {
+	fn exit_insert(&mut self) {
+		let layout = self.layout_snapshot();
 		self.mode = EditorMode::Normal;
 		self.preferred_x = None;
 
-		self.selection = scene
+		self.selection = layout
 			.cluster_before(self.caret)
-			.or_else(|| scene.cluster_at_or_after(self.caret))
-			.and_then(|index| scene.cluster(index))
+			.or_else(|| layout.cluster_at_or_after(self.caret))
+			.and_then(|index| layout.cluster(index))
 			.map(|cluster| cluster.byte_range.clone());
 	}
 
-	fn delete_selection(&mut self, font_system: &mut FontSystem, scene: &LayoutScene) -> ApplyResult {
-		let Some(selection) = self.current_selection(scene).map(|cluster| cluster.byte_range.clone()) else {
+	fn delete_selection(&mut self, font_system: &mut FontSystem) -> ApplyResult {
+		let layout = self.layout_snapshot();
+		let Some(selection) = self
+			.current_selection(&layout)
+			.map(|cluster| cluster.byte_range.clone())
+		else {
 			return ApplyResult {
 				changed: false,
 				text_edit: None,
@@ -410,10 +407,11 @@ impl EditorBuffer {
 		self.apply_buffer_edit(font_system, &text_edit);
 		self.text.replace_range(selection.clone(), "");
 		self.mode = EditorMode::Normal;
-		self.selection = scene
+		let next_layout = self.layout_snapshot();
+		self.selection = next_layout
 			.cluster_at_or_after(selection.start)
-			.or_else(|| scene.cluster_before(selection.start))
-			.and_then(|index| scene.cluster(index))
+			.or_else(|| next_layout.cluster_before(selection.start))
+			.and_then(|index| next_layout.cluster(index))
 			.map(|cluster| cluster.byte_range.clone());
 		self.caret = clamp_char_boundary(&self.text, selection.start);
 		self.preferred_x = None;
@@ -423,9 +421,9 @@ impl EditorBuffer {
 		}
 	}
 
-	fn backspace(&mut self, font_system: &mut FontSystem, scene: &LayoutScene) -> ApplyResult {
+	fn backspace(&mut self, font_system: &mut FontSystem) -> ApplyResult {
 		match self.mode {
-			EditorMode::Normal => self.delete_selection(font_system, scene),
+			EditorMode::Normal => self.delete_selection(font_system),
 			EditorMode::Insert => {
 				let Some(previous) = previous_char_boundary(&self.text, self.caret) else {
 					return ApplyResult {
@@ -451,9 +449,9 @@ impl EditorBuffer {
 		}
 	}
 
-	fn delete_forward(&mut self, font_system: &mut FontSystem, scene: &LayoutScene) -> ApplyResult {
+	fn delete_forward(&mut self, font_system: &mut FontSystem) -> ApplyResult {
 		match self.mode {
-			EditorMode::Normal => self.delete_selection(font_system, scene),
+			EditorMode::Normal => self.delete_selection(font_system),
 			EditorMode::Insert => {
 				let Some(next) = next_char_boundary(&self.text, self.caret) else {
 					return ApplyResult {
@@ -515,8 +513,23 @@ impl EditorBuffer {
 		text
 	}
 
-	fn select_cluster(&mut self, scene: &LayoutScene, cluster_index: usize) {
-		let Some(cluster) = scene.cluster(cluster_index) else {
+	fn layout_snapshot(&self) -> BufferLayoutSnapshot {
+		BufferLayoutSnapshot::new(&self.buffer, &self.text)
+	}
+
+	fn reset_normal_selection(&mut self) {
+		self.selection = self
+			.layout_snapshot()
+			.cluster(0)
+			.map(|cluster| cluster.byte_range.clone());
+
+		if let Some(selection) = &self.selection {
+			self.caret = selection.start;
+		}
+	}
+
+	fn select_cluster(&mut self, layout: &BufferLayoutSnapshot, cluster_index: usize) {
+		let Some(cluster) = layout.cluster(cluster_index) else {
 			return;
 		};
 
@@ -526,14 +539,14 @@ impl EditorBuffer {
 		self.preferred_x = Some(cluster.center_x());
 	}
 
-	fn selection_index(&self, scene: &LayoutScene) -> Option<usize> {
+	fn selection_index(&self, layout: &BufferLayoutSnapshot) -> Option<usize> {
 		self.selection
 			.as_ref()
-			.and_then(|selection| scene.cluster_index_for_range(selection))
+			.and_then(|selection| layout.cluster_index_for_range(selection))
 	}
 
-	fn current_selection<'a>(&self, scene: &'a LayoutScene) -> Option<&'a crate::scene::ClusterInfo> {
-		self.selection_index(scene).and_then(|index| scene.cluster(index))
+	fn current_selection<'a>(&self, layout: &'a BufferLayoutSnapshot) -> Option<&'a BufferClusterInfo> {
+		self.selection_index(layout).and_then(|index| layout.cluster(index))
 	}
 
 	fn apply_buffer_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
@@ -553,6 +566,233 @@ impl EditorBuffer {
 
 		buffer.shape_until_scroll(font_system, false);
 	}
+}
+
+#[derive(Debug, Clone)]
+struct BufferRunInfo {
+	cluster_range: Range<usize>,
+}
+
+#[derive(Debug, Clone)]
+struct BufferClusterInfo {
+	byte_range: Range<usize>,
+	height: f32,
+	run_index: usize,
+	width: f32,
+	x: f32,
+	y: f32,
+}
+
+impl BufferClusterInfo {
+	fn center_x(&self) -> f32 {
+		self.x + (self.width * 0.5)
+	}
+}
+
+#[derive(Debug, Clone)]
+struct BufferCaretMetrics {
+	run_index: usize,
+	x: f32,
+}
+
+#[derive(Debug, Clone)]
+struct BufferLayoutSnapshot {
+	clusters: Vec<BufferClusterInfo>,
+	line_byte_offsets: Vec<usize>,
+	runs: Vec<BufferRunInfo>,
+}
+
+impl BufferLayoutSnapshot {
+	fn new(buffer: &Buffer, text: &str) -> Self {
+		let line_byte_offsets = line_byte_offsets(text);
+		let mut runs = Vec::new();
+		let mut clusters = Vec::new();
+
+		for run in buffer.layout_runs() {
+			let line_byte_offset = line_byte_offsets[run.line_i];
+			let cluster_start = clusters.len();
+			clusters.extend(build_buffer_clusters(
+				runs.len(),
+				line_byte_offset,
+				run.line_top,
+				run.line_height,
+				run.glyphs,
+			));
+			let cluster_end = clusters.len();
+
+			runs.push(BufferRunInfo {
+				cluster_range: cluster_start..cluster_end,
+			});
+		}
+
+		Self {
+			clusters,
+			line_byte_offsets,
+			runs,
+		}
+	}
+
+	fn clusters(&self) -> &[BufferClusterInfo] {
+		&self.clusters
+	}
+
+	fn cluster(&self, index: usize) -> Option<&BufferClusterInfo> {
+		self.clusters.get(index)
+	}
+
+	fn cluster_index_for_range(&self, range: &Range<usize>) -> Option<usize> {
+		let index = self
+			.clusters
+			.binary_search_by_key(&range.start, |cluster| cluster.byte_range.start)
+			.ok()?;
+		(self.clusters[index].byte_range == *range).then_some(index)
+	}
+
+	fn cluster_index_for_cursor(&self, cursor: Cursor) -> Option<usize> {
+		if self.clusters.is_empty() {
+			return None;
+		}
+
+		let line_offset = self.line_byte_offsets.get(cursor.line).copied().unwrap_or_default();
+		let byte = line_offset + cursor.index;
+
+		if cursor.affinity.before() {
+			self.clusters
+				.iter()
+				.enumerate()
+				.find(|(_, cluster)| cluster.byte_range.end == byte)
+				.map(|(index, _)| index)
+				.or_else(|| self.cluster_before(byte.saturating_add(1)))
+		} else {
+			self.cluster_at_or_after(byte)
+				.filter(|index| self.clusters[*index].byte_range.start <= byte)
+				.or_else(|| self.cluster_before(byte))
+		}
+	}
+
+	fn cluster_at_or_after(&self, byte: usize) -> Option<usize> {
+		let index = self.clusters.partition_point(|cluster| cluster.byte_range.end <= byte);
+		(index < self.clusters.len()).then_some(index)
+	}
+
+	fn cluster_before(&self, byte: usize) -> Option<usize> {
+		self.clusters
+			.partition_point(|cluster| cluster.byte_range.start < byte)
+			.checked_sub(1)
+	}
+
+	fn first_cluster_in_run(&self, run_index: usize) -> Option<usize> {
+		self.runs
+			.get(run_index)
+			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.start))
+	}
+
+	fn last_cluster_in_run(&self, run_index: usize) -> Option<usize> {
+		self.runs
+			.get(run_index)
+			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.end - 1))
+	}
+
+	fn nearest_cluster_on_adjacent_run(&self, run_index: usize, preferred_x: f32, direction: isize) -> Option<usize> {
+		let mut next = run_index as isize + direction;
+
+		while next >= 0 && next < self.runs.len() as isize {
+			if let Some(target) = self.nearest_cluster_in_run(next as usize, preferred_x) {
+				return Some(target);
+			}
+			next += direction;
+		}
+
+		None
+	}
+
+	fn nearest_cluster_in_run(&self, run_index: usize, preferred_x: f32) -> Option<usize> {
+		let run = self.runs.get(run_index)?;
+		if run.cluster_range.is_empty() {
+			return None;
+		}
+
+		self.clusters[run.cluster_range.clone()]
+			.iter()
+			.enumerate()
+			.min_by(|(_, a), (_, b)| {
+				(a.center_x() - preferred_x)
+					.abs()
+					.total_cmp(&(b.center_x() - preferred_x).abs())
+			})
+			.map(|(offset, _)| run.cluster_range.start + offset)
+	}
+
+	fn caret_metrics(&self, byte: usize) -> BufferCaretMetrics {
+		if self.clusters.is_empty() {
+			return BufferCaretMetrics { run_index: 0, x: 0.0 };
+		}
+
+		if let Some(index) = self.cluster_at_or_after(byte) {
+			let cluster = &self.clusters[index];
+			if byte <= cluster.byte_range.start {
+				return BufferCaretMetrics {
+					run_index: cluster.run_index,
+					x: cluster.x,
+				};
+			}
+		}
+
+		if let Some(index) = self.cluster_before(byte) {
+			let cluster = &self.clusters[index];
+			return BufferCaretMetrics {
+				run_index: cluster.run_index,
+				x: cluster.x + cluster.width,
+			};
+		}
+
+		let cluster = &self.clusters[0];
+		BufferCaretMetrics {
+			run_index: cluster.run_index,
+			x: cluster.x,
+		}
+	}
+}
+
+fn build_buffer_clusters(
+	run_index: usize, line_byte_offset: usize, line_top: f32, line_height: f32, glyphs: &[cosmic_text::LayoutGlyph],
+) -> Vec<BufferClusterInfo> {
+	let mut clusters = Vec::new();
+	let mut current: Option<BufferClusterInfo> = None;
+
+	for glyph in glyphs {
+		let byte_range = (line_byte_offset + glyph.start)..(line_byte_offset + glyph.end);
+		let glyph_y = line_top + glyph.y;
+		let glyph_height = glyph.line_height_opt.unwrap_or(line_height);
+
+		match current.as_mut() {
+			Some(cluster) if cluster.byte_range == byte_range => {
+				cluster.width = (glyph.x + glyph.w - cluster.x).max(cluster.width);
+				cluster.height = cluster.height.max(glyph_height);
+				cluster.y = cluster.y.min(glyph_y);
+			}
+			_ => {
+				if let Some(cluster) = current.take() {
+					clusters.push(cluster);
+				}
+
+				current = Some(BufferClusterInfo {
+					byte_range,
+					height: glyph_height.max(1.0),
+					run_index,
+					width: glyph.w.max(1.0),
+					x: glyph.x,
+					y: glyph_y,
+				});
+			}
+		}
+	}
+
+	if let Some(cluster) = current {
+		clusters.push(cluster);
+	}
+
+	clusters
 }
 
 fn clamp_char_boundary(text: &str, byte: usize) -> usize {
@@ -608,65 +848,8 @@ fn line_byte_offsets(text: &str) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
 	use super::{EditorBuffer, EditorCommand, EditorMode};
-	use crate::scene::{CaretMetrics, ClusterInfo, LayoutScene, RunInfo, make_font_system, scene_config};
+	use crate::scene::{LayoutScene, make_font_system, scene_config};
 	use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
-	use std::sync::Arc;
-
-	fn scene(clusters: &[(usize, usize, usize, f32)]) -> LayoutScene {
-		let cluster_infos = clusters
-			.iter()
-			.enumerate()
-			.map(|(index, (run_index, start, end, x))| ClusterInfo {
-				run_index: *run_index,
-				glyph_start: index,
-				glyph_end: index + 1,
-				byte_range: *start..*end,
-				x: *x,
-				y: (*run_index as f32) * 20.0,
-				width: 10.0,
-				height: 18.0,
-			})
-			.collect::<Vec<_>>();
-
-		LayoutScene::new_for_test(
-			Arc::<str>::from("abc\ndef"),
-			FontChoice::JetBrainsMono,
-			crate::types::ShapingChoice::Basic,
-			WrapChoice::Word,
-			RenderMode::CanvasAndOutlines,
-			16.0,
-			20.0,
-			100.0,
-			100.0,
-			40.0,
-			cluster_infos.len(),
-			1,
-			vec![
-				RunInfo {
-					line_index: 0,
-					rtl: false,
-					baseline: 16.0,
-					line_top: 0.0,
-					line_height: 20.0,
-					line_width: 40.0,
-					cluster_range: 0..clusters.iter().filter(|(run_index, _, _, _)| *run_index == 0).count(),
-					glyph_count: clusters.iter().filter(|(run_index, _, _, _)| *run_index == 0).count(),
-				},
-				RunInfo {
-					line_index: 1,
-					rtl: false,
-					baseline: 36.0,
-					line_top: 20.0,
-					line_height: 20.0,
-					line_width: 40.0,
-					cluster_range: clusters.iter().filter(|(run_index, _, _, _)| *run_index == 0).count()
-						..cluster_infos.len(),
-					glyph_count: clusters.iter().filter(|(run_index, _, _, _)| *run_index == 1).count(),
-				},
-			],
-			cluster_infos,
-		)
-	}
 
 	fn editor(text: &str) -> (cosmic_text::FontSystem, EditorBuffer) {
 		let mut font_system = make_font_system();
@@ -685,29 +868,25 @@ mod tests {
 
 	#[test]
 	fn normal_mode_moves_by_visual_cluster() {
-		let scene = scene(&[(0, 0, 1, 0.0), (0, 1, 2, 10.0), (1, 4, 5, 0.0)]);
 		let (mut font_system, mut editor) = editor("ab\nd");
-		editor.sync_with_scene(&scene);
 
 		assert_eq!(editor.view_state().selection, Some(0..1));
 
-		editor.apply(&mut font_system, EditorCommand::MoveRight, &scene);
+		editor.apply(&mut font_system, EditorCommand::MoveRight);
 		assert_eq!(editor.view_state().selection, Some(1..2));
 
-		editor.apply(&mut font_system, EditorCommand::MoveDown, &scene);
-		assert_eq!(editor.view_state().selection, Some(4..5));
+		editor.apply(&mut font_system, EditorCommand::MoveDown);
+		assert_eq!(editor.view_state().selection, Some(3..4));
 	}
 
 	#[test]
 	fn insert_mode_backspace_keeps_caret_on_char_boundaries() {
-		let scene = scene(&[(0, 0, 1, 0.0), (0, 1, 3, 10.0)]);
 		let (mut font_system, mut editor) = editor("aé");
-		editor.sync_with_scene(&scene);
 
-		editor.apply(&mut font_system, EditorCommand::EnterInsertAfter, &scene);
+		editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
 		assert_eq!(editor.view_state().mode, EditorMode::Insert);
 
-		editor.apply(&mut font_system, EditorCommand::Backspace, &scene);
+		editor.apply(&mut font_system, EditorCommand::Backspace);
 		assert_eq!(editor.text(), "é");
 		assert_eq!(editor.buffer_text(), "é");
 		assert_eq!(editor.view_state().caret, 0);
@@ -715,17 +894,14 @@ mod tests {
 
 	#[test]
 	fn escape_from_insert_returns_to_normal_selection() {
-		let scene = scene(&[(0, 0, 1, 0.0), (0, 1, 2, 10.0), (0, 2, 3, 20.0)]);
 		let (mut font_system, mut editor) = editor("abc");
-		editor.sync_with_scene(&scene);
 
-		editor.apply(&mut font_system, EditorCommand::EnterInsertAfter, &scene);
-		editor.apply(&mut font_system, EditorCommand::MoveRight, &scene);
-		editor.apply(&mut font_system, EditorCommand::ExitInsert, &scene);
+		editor.apply(&mut font_system, EditorCommand::EnterInsertAfter);
+		editor.apply(&mut font_system, EditorCommand::MoveRight);
+		editor.apply(&mut font_system, EditorCommand::ExitInsert);
 
 		assert_eq!(editor.view_state().mode, EditorMode::Normal);
 		assert_eq!(editor.view_state().selection, Some(1..2));
-		let CaretMetrics { .. } = scene.caret_metrics(editor.view_state().caret);
 	}
 
 	#[test]
@@ -753,7 +929,6 @@ mod tests {
 			400.0,
 		);
 		let mut editor = EditorBuffer::new(&mut font_system, text, config);
-		editor.sync_with_scene(&scene);
 
 		assert_eq!(
 			editor
@@ -764,7 +939,7 @@ mod tests {
 			Some("🙂")
 		);
 
-		editor.apply(&mut font_system, EditorCommand::MoveDown, &scene);
+		editor.apply(&mut font_system, EditorCommand::MoveDown);
 		assert_eq!(
 			editor
 				.view_state()
@@ -774,11 +949,7 @@ mod tests {
 			Some("é")
 		);
 
-		assert!(
-			editor
-				.apply(&mut font_system, EditorCommand::DeleteSelection, &scene)
-				.changed
-		);
+		assert!(editor.apply(&mut font_system, EditorCommand::DeleteSelection).changed);
 		assert_eq!(editor.text(), "🙂\n");
 		assert_eq!(editor.buffer_text(), "🙂\n");
 	}

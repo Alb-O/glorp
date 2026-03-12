@@ -75,9 +75,8 @@ impl Playground {
 			a: Box::new(pane_grid::Configuration::Pane(ShellPane::Sidebar)),
 			b: Box::new(pane_grid::Configuration::Pane(ShellPane::Canvas)),
 		});
-		let mut editor = EditorBuffer::new(&mut font_system, preset.text(), config);
+		let editor = EditorBuffer::new(&mut font_system, preset.text(), config);
 		let scene = LayoutSceneModel::new(&mut font_system, editor.text(), editor.buffer(), config);
-		editor.sync_with_scene(scene.scene());
 
 		(
 			Self {
@@ -295,7 +294,7 @@ impl Playground {
 	fn apply_editor_command(&mut self, command: crate::editor::EditorCommand, mark_custom: bool) {
 		let command_started = Instant::now();
 		let apply_started = Instant::now();
-		let result = self.editor.apply(&mut self.font_system, command, self.scene.scene());
+		let result = self.editor.apply(&mut self.font_system, command);
 		self.perf.record_editor_apply(apply_started.elapsed());
 
 		if mark_custom {
@@ -376,7 +375,6 @@ impl Playground {
 	}
 
 	fn finish_scene_refresh(&mut self) {
-		self.editor.sync_with_scene(self.scene.scene());
 		self.hovered_target = None;
 		self.canvas_scroll = Vector::ZERO;
 		self.sync_selected_target();
