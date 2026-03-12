@@ -272,14 +272,6 @@ impl LayoutScene {
 		self.clusters.get(index)
 	}
 
-	pub(crate) fn cluster_index_for_range(&self, range: &Range<usize>) -> Option<usize> {
-		let index = self
-			.clusters
-			.binary_search_by_key(&range.start, |cluster| cluster.byte_range.start)
-			.ok()?;
-		(self.clusters[index].byte_range == *range).then_some(index)
-	}
-
 	pub(crate) fn cluster_index_for_target(&self, target: CanvasTarget) -> Option<usize> {
 		match target {
 			CanvasTarget::Run(run_index) => self.nearest_cluster_in_run(run_index, 0.0),
@@ -294,17 +286,6 @@ impl LayoutScene {
 				})
 				.map(|(index, _)| index),
 		}
-	}
-
-	pub(crate) fn cluster_at_or_after(&self, byte: usize) -> Option<usize> {
-		let index = self.clusters.partition_point(|cluster| cluster.byte_range.end <= byte);
-		(index < self.clusters.len()).then_some(index)
-	}
-
-	pub(crate) fn cluster_before(&self, byte: usize) -> Option<usize> {
-		self.clusters
-			.partition_point(|cluster| cluster.byte_range.start < byte)
-			.checked_sub(1)
 	}
 
 	pub(crate) fn dump_text(&self) -> String {
@@ -379,10 +360,6 @@ impl LayoutScene {
 				))
 			}
 		}
-	}
-
-	pub(crate) fn cluster_preview(&self, cluster: &ClusterInfo) -> String {
-		self.debug_snippet(&cluster.byte_range)
 	}
 
 	fn debug_snippet(&self, range: &Range<usize>) -> String {

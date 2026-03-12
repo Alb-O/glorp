@@ -5,7 +5,7 @@ use std::fmt::{self, Display};
 use std::ops::Range;
 use std::sync::Arc;
 
-use crate::scene::{LayoutScene, SceneConfig, build_buffer};
+use crate::scene::{SceneConfig, build_buffer};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EditorMode {
@@ -27,12 +27,12 @@ pub(crate) struct EditorViewState {
 	pub(crate) mode: EditorMode,
 	pub(crate) selection: Option<Range<usize>>,
 	pub(crate) caret: usize,
-	pub(crate) selection_geometry: Option<EditorClusterGeometry>,
+	pub(crate) selection_rectangles: Arc<[EditorSelectionRect]>,
 	pub(crate) caret_geometry: EditorCaretGeometry,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct EditorClusterGeometry {
+pub(crate) struct EditorSelectionRect {
 	pub(crate) x: f32,
 	pub(crate) y: f32,
 	pub(crate) width: f32,
@@ -55,12 +55,15 @@ pub(crate) struct EditorBuffer {
 	selection: Option<Range<usize>>,
 	caret: usize,
 	preferred_x: Option<f32>,
+	pointer_anchor: Option<usize>,
 	view_state: EditorViewState,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum EditorCommand {
-	SelectClusterAt(Point),
+	BeginPointerSelection { position: Point, select_word: bool },
+	DragPointerSelection(Point),
+	EndPointerSelection,
 	MoveLeft,
 	MoveRight,
 	MoveUp,
@@ -99,11 +102,12 @@ impl EditorBuffer {
 			selection: None,
 			caret: 0,
 			preferred_x: None,
+			pointer_anchor: None,
 			view_state: EditorViewState {
 				mode: EditorMode::Normal,
 				selection: None,
 				caret: 0,
-				selection_geometry: None,
+				selection_rectangles: Arc::from([]),
 				caret_geometry: EditorCaretGeometry {
 					x: 0.0,
 					y: 0.0,
@@ -163,6 +167,7 @@ impl EditorBuffer {
 		self.selection = None;
 		self.caret = 0;
 		self.preferred_x = None;
+		self.pointer_anchor = None;
 		self.reset_normal_selection();
 		self.refresh_view_state();
 	}
@@ -173,19 +178,35 @@ impl EditorBuffer {
 
 	pub(crate) fn apply(&mut self, font_system: &mut FontSystem, command: EditorCommand) -> ApplyResult {
 		let result = match command {
-			EditorCommand::SelectClusterAt(point) => {
+			EditorCommand::BeginPointerSelection { position, select_word } => {
 				let layout = self.layout_snapshot();
-				if let Some(cluster_index) = self
-					.buffer
-					.hit(point.x, point.y)
-					.and_then(|cursor| layout.cluster_index_for_cursor(cursor))
-				{
+				if select_word {
+					self.select_word_at(&layout, position);
+				} else if let Some(cluster_index) = self.pointer_cluster_index(&layout, position) {
+					self.pointer_anchor = layout.cluster(cluster_index).map(|cluster| cluster.byte_range.start);
 					self.select_cluster(&layout, cluster_index);
 				} else if self.text.is_empty() {
 					self.mode = EditorMode::Insert;
+					self.selection = None;
 					self.caret = 0;
 					self.preferred_x = None;
+					self.pointer_anchor = None;
 				}
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
+			}
+			EditorCommand::DragPointerSelection(position) => {
+				let layout = self.layout_snapshot();
+				self.extend_pointer_selection(&layout, position);
+				ApplyResult {
+					changed: false,
+					text_edit: None,
+				}
+			}
+			EditorCommand::EndPointerSelection => {
+				self.pointer_anchor = None;
 				ApplyResult {
 					changed: false,
 					text_edit: None,
@@ -240,26 +261,24 @@ impl EditorBuffer {
 				}
 			}
 			EditorCommand::EnterInsertBefore => {
-				let layout = self.layout_snapshot();
 				self.mode = EditorMode::Insert;
-				self.caret = self
-					.current_selection(&layout)
-					.map(|cluster| cluster.byte_range.start)
-					.unwrap_or(0);
+				self.caret = self.selection.as_ref().map(|selection| selection.start).unwrap_or(0);
 				self.preferred_x = None;
+				self.pointer_anchor = None;
 				ApplyResult {
 					changed: false,
 					text_edit: None,
 				}
 			}
 			EditorCommand::EnterInsertAfter => {
-				let layout = self.layout_snapshot();
 				self.mode = EditorMode::Insert;
 				self.caret = self
-					.current_selection(&layout)
-					.map(|cluster| cluster.byte_range.end)
+					.selection
+					.as_ref()
+					.map(|selection| selection.end)
 					.unwrap_or(self.text.len());
 				self.preferred_x = None;
+				self.pointer_anchor = None;
 				ApplyResult {
 					changed: false,
 					text_edit: None,
@@ -281,48 +300,39 @@ impl EditorBuffer {
 		result
 	}
 
-	pub(crate) fn selection_details(&self, scene: &LayoutScene) -> String {
+	pub(crate) fn selection_details(&self) -> String {
 		match self.mode {
 			EditorMode::Normal => {
-				let Some(cluster) = self
-					.selection
-					.as_ref()
-					.and_then(|selection| scene.cluster_index_for_range(selection))
-					.and_then(|index| scene.cluster(index))
-				else {
+				let Some(selection) = &self.selection else {
 					return format!("  mode: {}\n  selection: none", self.mode);
 				};
 
 				format!(
-					"  mode: {}\n  cluster: {}\n  bytes: {:?}\n  run: {}\n  x/y: {:.1}, {:.1}\n  w/h: {:.1}, {:.1}",
+					"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}",
 					self.mode,
-					scene.cluster_preview(cluster),
-					cluster.byte_range,
-					cluster.run_index,
-					cluster.x,
-					cluster.y,
-					cluster.width,
-					cluster.height,
+					selection,
+					self.preview_range(selection),
+					self.view_state.selection_rectangles.len(),
+					self.caret,
+					self.pointer_anchor.unwrap_or(selection.start),
 				)
 			}
 			EditorMode::Insert => format!(
-				"  mode: {}\n  caret byte: {}\n  selection on escape: {}",
+				"  mode: {}\n  caret byte: {}\n  caret x/y: {:.1}, {:.1}\n  caret height: {:.1}",
 				self.mode,
 				self.caret,
-				scene
-					.cluster_before(self.caret)
-					.or_else(|| scene.cluster_at_or_after(self.caret))
-					.and_then(|index| scene.cluster(index))
-					.map(|cluster| scene.cluster_preview(cluster))
-					.unwrap_or_else(|| "<none>".to_string())
+				self.view_state.caret_geometry.x,
+				self.view_state.caret_geometry.y,
+				self.view_state.caret_geometry.height,
 			),
 		}
 	}
 
 	fn move_left(&mut self, layout: &BufferLayoutSnapshot) {
+		self.pointer_anchor = None;
 		match self.mode {
 			EditorMode::Normal => {
-				let Some(current) = self.selection_index(layout) else {
+				let Some(current) = self.active_selection_index(layout) else {
 					return;
 				};
 
@@ -338,9 +348,10 @@ impl EditorBuffer {
 	}
 
 	fn move_right(&mut self, layout: &BufferLayoutSnapshot) {
+		self.pointer_anchor = None;
 		match self.mode {
 			EditorMode::Normal => {
-				let Some(current) = self.selection_index(layout) else {
+				let Some(current) = self.active_selection_index(layout) else {
 					return;
 				};
 
@@ -356,9 +367,10 @@ impl EditorBuffer {
 	}
 
 	fn move_vertical(&mut self, layout: &BufferLayoutSnapshot, direction: isize) {
+		self.pointer_anchor = None;
 		match self.mode {
 			EditorMode::Normal => {
-				let Some(current) = self.current_selection(layout) else {
+				let Some(current) = self.active_selection(layout) else {
 					return;
 				};
 				let preferred_x = self.preferred_x.unwrap_or_else(|| current.center_x());
@@ -388,9 +400,10 @@ impl EditorBuffer {
 	}
 
 	fn move_line_edge(&mut self, layout: &BufferLayoutSnapshot, to_start: bool) {
+		self.pointer_anchor = None;
 		match self.mode {
 			EditorMode::Normal => {
-				let Some(current) = self.current_selection(layout) else {
+				let Some(current) = self.active_selection(layout) else {
 					return;
 				};
 				let target = if to_start {
@@ -427,6 +440,7 @@ impl EditorBuffer {
 		let layout = self.layout_snapshot();
 		self.mode = EditorMode::Normal;
 		self.preferred_x = None;
+		self.pointer_anchor = None;
 
 		self.selection = layout
 			.cluster_before(self.caret)
@@ -436,11 +450,7 @@ impl EditorBuffer {
 	}
 
 	fn delete_selection(&mut self, font_system: &mut FontSystem) -> ApplyResult {
-		let layout = self.layout_snapshot();
-		let Some(selection) = self
-			.current_selection(&layout)
-			.map(|cluster| cluster.byte_range.clone())
-		else {
+		let Some(selection) = self.selection.clone() else {
 			return ApplyResult {
 				changed: false,
 				text_edit: None,
@@ -454,6 +464,7 @@ impl EditorBuffer {
 		self.apply_buffer_edit(font_system, &text_edit);
 		self.text.replace_range(selection.clone(), "");
 		self.mode = EditorMode::Normal;
+		self.pointer_anchor = None;
 		let next_layout = self.layout_snapshot();
 		self.selection = next_layout
 			.cluster_at_or_after(selection.start)
@@ -488,6 +499,7 @@ impl EditorBuffer {
 				self.text.replace_range(previous..self.caret, "");
 				self.caret = previous;
 				self.preferred_x = None;
+				self.pointer_anchor = None;
 				ApplyResult {
 					changed: true,
 					text_edit: Some(text_edit),
@@ -515,6 +527,7 @@ impl EditorBuffer {
 				self.apply_buffer_edit(font_system, &text_edit);
 				self.text.replace_range(self.caret..next, "");
 				self.preferred_x = None;
+				self.pointer_anchor = None;
 				ApplyResult {
 					changed: true,
 					text_edit: Some(text_edit),
@@ -545,6 +558,7 @@ impl EditorBuffer {
 		self.text.insert_str(self.caret, &text_edit.inserted);
 		self.caret += text_edit.inserted.len();
 		self.preferred_x = None;
+		self.pointer_anchor = None;
 		ApplyResult {
 			changed: true,
 			text_edit: Some(text_edit),
@@ -572,6 +586,7 @@ impl EditorBuffer {
 
 		if let Some(selection) = &self.selection {
 			self.caret = selection.start;
+			self.pointer_anchor = Some(selection.start);
 		}
 	}
 
@@ -584,16 +599,115 @@ impl EditorBuffer {
 		self.selection = Some(cluster.byte_range.clone());
 		self.caret = cluster.byte_range.start;
 		self.preferred_x = Some(cluster.center_x());
+		self.pointer_anchor = Some(cluster.byte_range.start);
 	}
 
-	fn selection_index(&self, layout: &BufferLayoutSnapshot) -> Option<usize> {
-		self.selection
-			.as_ref()
-			.and_then(|selection| layout.cluster_index_for_range(selection))
+	fn active_selection_index(&self, layout: &BufferLayoutSnapshot) -> Option<usize> {
+		if self.selection.is_none() {
+			return None;
+		}
+
+		layout
+			.cluster_at_or_after(self.caret)
+			.or_else(|| layout.cluster_before(self.caret.saturating_add(1)))
 	}
 
-	fn current_selection<'a>(&self, layout: &'a BufferLayoutSnapshot) -> Option<&'a BufferClusterInfo> {
-		self.selection_index(layout).and_then(|index| layout.cluster(index))
+	fn active_selection<'a>(&self, layout: &'a BufferLayoutSnapshot) -> Option<&'a BufferClusterInfo> {
+		self.active_selection_index(layout)
+			.and_then(|index| layout.cluster(index))
+	}
+
+	fn pointer_cluster_index(&self, layout: &BufferLayoutSnapshot, point: Point) -> Option<usize> {
+		self.buffer
+			.hit(point.x, point.y)
+			.and_then(|cursor| layout.cluster_index_for_cursor(cursor))
+			.or_else(|| {
+				layout
+					.nearest_cluster_at(point.y, point.x)
+					.or_else(|| (!layout.clusters().is_empty()).then_some(0))
+			})
+	}
+
+	fn extend_pointer_selection(&mut self, layout: &BufferLayoutSnapshot, position: Point) {
+		let Some(anchor_byte) = self.pointer_anchor else {
+			return;
+		};
+		let Some(anchor_index) = layout
+			.cluster_at_or_after(anchor_byte)
+			.or_else(|| layout.cluster_before(anchor_byte.saturating_add(1)))
+		else {
+			return;
+		};
+		let Some(target_index) = self.pointer_cluster_index(layout, position) else {
+			return;
+		};
+
+		self.select_range(layout, anchor_index, target_index);
+	}
+
+	fn select_range(&mut self, layout: &BufferLayoutSnapshot, anchor_index: usize, target_index: usize) {
+		let Some(anchor) = layout.cluster(anchor_index) else {
+			return;
+		};
+		let Some(target) = layout.cluster(target_index) else {
+			return;
+		};
+		let start = anchor.byte_range.start.min(target.byte_range.start);
+		let end = anchor.byte_range.end.max(target.byte_range.end);
+		self.mode = EditorMode::Normal;
+		self.selection = Some(start..end);
+		self.caret = target.byte_range.start;
+		self.preferred_x = Some(target.center_x());
+	}
+
+	fn select_word_at(&mut self, layout: &BufferLayoutSnapshot, position: Point) {
+		let Some(cluster_index) = self.pointer_cluster_index(layout, position) else {
+			return;
+		};
+		let Some(cluster) = layout.cluster(cluster_index) else {
+			return;
+		};
+		let range = self.word_range(cluster.byte_range.clone());
+		self.mode = EditorMode::Normal;
+		self.selection = Some(range.clone());
+		self.caret = range.start;
+		self.preferred_x = Some(cluster.center_x());
+		self.pointer_anchor = None;
+	}
+
+	fn word_range(&self, fallback: Range<usize>) -> Range<usize> {
+		let Some(slice) = self.text.get(fallback.clone()) else {
+			return fallback;
+		};
+
+		if !slice.chars().any(is_word_char) {
+			return fallback;
+		}
+
+		let mut start = fallback.start;
+		while let Some((index, ch)) = previous_char(&self.text, start) {
+			if !is_word_char(ch) {
+				break;
+			}
+			start = index;
+		}
+
+		let mut end = fallback.end;
+		while let Some((next, ch)) = next_char(&self.text, end) {
+			if !is_word_char(ch) {
+				break;
+			}
+			end = next;
+		}
+
+		start..end
+	}
+
+	fn preview_range(&self, range: &Range<usize>) -> String {
+		self.text
+			.get(range.clone())
+			.map(debug_snippet)
+			.unwrap_or_else(|| "<invalid utf8 slice>".to_string())
 	}
 
 	fn apply_buffer_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
@@ -635,12 +749,11 @@ impl EditorBuffer {
 			mode: self.mode,
 			selection: self.selection.clone(),
 			caret: self.caret,
-			selection_geometry: self
+			selection_rectangles: self
 				.selection
 				.as_ref()
-				.and_then(|selection| layout.cluster_index_for_range(selection))
-				.and_then(|index| layout.cluster(index))
-				.map(EditorClusterGeometry::from_cluster),
+				.map(|selection| layout.selection_rectangles(selection))
+				.unwrap_or_else(|| Arc::from([])),
 			caret_geometry: layout.caret_geometry(self.caret, self.config.line_height),
 		};
 	}
@@ -669,13 +782,13 @@ impl BufferClusterInfo {
 	}
 }
 
-impl EditorClusterGeometry {
-	fn from_cluster(cluster: &BufferClusterInfo) -> Self {
+impl EditorSelectionRect {
+	fn from_span(start: &BufferClusterInfo, end: &BufferClusterInfo) -> Self {
 		Self {
-			x: cluster.x,
-			y: cluster.y,
-			width: cluster.width,
-			height: cluster.height,
+			x: start.x,
+			y: start.y.min(end.y),
+			width: (end.x + end.width) - start.x,
+			height: start.height.max(end.height),
 		}
 	}
 }
@@ -733,14 +846,6 @@ impl BufferLayoutSnapshot {
 
 	fn cluster(&self, index: usize) -> Option<&BufferClusterInfo> {
 		self.clusters.get(index)
-	}
-
-	fn cluster_index_for_range(&self, range: &Range<usize>) -> Option<usize> {
-		let index = self
-			.clusters
-			.binary_search_by_key(&range.start, |cluster| cluster.byte_range.start)
-			.ok()?;
-		(self.clusters[index].byte_range == *range).then_some(index)
 	}
 
 	fn cluster_index_for_cursor(&self, cursor: Cursor) -> Option<usize> {
@@ -816,6 +921,51 @@ impl BufferLayoutSnapshot {
 					.total_cmp(&(b.center_x() - preferred_x).abs())
 			})
 			.map(|(offset, _)| run.cluster_range.start + offset)
+	}
+
+	fn nearest_cluster_at(&self, y: f32, preferred_x: f32) -> Option<usize> {
+		let run_index = self
+			.runs
+			.iter()
+			.enumerate()
+			.min_by(|(_, a), (_, b)| {
+				run_distance(a, y)
+					.total_cmp(&run_distance(b, y))
+					.then_with(|| a.line_top.total_cmp(&b.line_top))
+			})
+			.map(|(index, _)| index)?;
+		self.nearest_cluster_in_run(run_index, preferred_x)
+	}
+
+	fn selection_rectangles(&self, range: &Range<usize>) -> Arc<[EditorSelectionRect]> {
+		let selected = self
+			.clusters
+			.iter()
+			.filter(|cluster| cluster.byte_range.end > range.start && cluster.byte_range.start < range.end)
+			.collect::<Vec<_>>();
+		if selected.is_empty() {
+			return Arc::from([]);
+		}
+
+		let mut rectangles = Vec::new();
+		let mut span_start = selected[0];
+		let mut span_end = selected[0];
+
+		for cluster in selected.into_iter().skip(1) {
+			let same_run = cluster.run_index == span_end.run_index;
+			let contiguous = cluster.byte_range.start <= span_end.byte_range.end;
+			if same_run && contiguous {
+				span_end = cluster;
+				continue;
+			}
+
+			rectangles.push(EditorSelectionRect::from_span(span_start, span_end));
+			span_start = cluster;
+			span_end = cluster;
+		}
+
+		rectangles.push(EditorSelectionRect::from_span(span_start, span_end));
+		rectangles.into()
 	}
 
 	fn caret_metrics(&self, byte: usize, fallback_height: f32) -> BufferCaretMetrics {
@@ -936,6 +1086,21 @@ fn next_char_boundary(text: &str, byte: usize) -> Option<usize> {
 		.or_else(|| (byte < text.len()).then_some(text.len()))
 }
 
+fn previous_char(text: &str, byte: usize) -> Option<(usize, char)> {
+	let byte = clamp_char_boundary(text, byte);
+	text[..byte].char_indices().last()
+}
+
+fn next_char(text: &str, byte: usize) -> Option<(usize, char)> {
+	let byte = clamp_char_boundary(text, byte);
+	let (_, ch) = text[byte..].char_indices().next()?;
+	Some((byte + ch.len_utf8(), ch))
+}
+
+fn is_word_char(ch: char) -> bool {
+	ch.is_alphanumeric() || ch == '_'
+}
+
 fn byte_to_cursor(text: &str, byte: usize) -> Cursor {
 	let mut clamped = byte.min(text.len());
 	while clamped > 0 && !text.is_char_boundary(clamped) {
@@ -960,11 +1125,32 @@ fn line_byte_offsets(text: &str) -> Vec<usize> {
 	offsets
 }
 
+fn run_distance(run: &BufferRunInfo, y: f32) -> f32 {
+	let run_bottom = run.line_top + run.line_height;
+	if y < run.line_top {
+		run.line_top - y
+	} else if y > run_bottom {
+		y - run_bottom
+	} else {
+		0.0
+	}
+}
+
+fn debug_snippet(text: &str) -> String {
+	let escaped: String = text.chars().flat_map(char::escape_default).collect();
+	if escaped.is_empty() {
+		"<empty>".to_string()
+	} else {
+		format!("\"{escaped}\"")
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::{EditorBuffer, EditorCommand, EditorMode};
 	use crate::scene::{LayoutScene, make_font_system, scene_config};
 	use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
+	use iced::Point;
 
 	fn editor(text: &str) -> (cosmic_text::FontSystem, EditorBuffer) {
 		let mut font_system = make_font_system();
@@ -1070,7 +1256,7 @@ mod tests {
 	}
 
 	#[test]
-	fn live_selection_geometry_tracks_wrapped_width_changes() {
+	fn live_selection_rectangles_track_wrapped_width_changes() {
 		let text = "alpha beta gamma delta epsilon zeta eta theta";
 		let (mut font_system, mut editor) = editor(text);
 
@@ -1080,19 +1266,88 @@ mod tests {
 
 		let before = editor
 			.view_state()
-			.selection_geometry
+			.selection_rectangles
+			.first()
+			.copied()
 			.expect("selection geometry should exist before resize");
 
 		editor.sync_buffer_width(&mut font_system, 110.0);
 
 		let after = editor
 			.view_state()
-			.selection_geometry
+			.selection_rectangles
+			.first()
+			.copied()
 			.expect("selection geometry should exist after resize");
 
 		assert!(
 			after.y > before.y || (after.y == before.y && after.x < before.x),
 			"expected wrapped selection to move after width shrink, before={before:?} after={after:?}"
 		);
+	}
+
+	#[test]
+	fn drag_selection_spans_multiple_wrapped_rectangles() {
+		let text = "alpha beta gamma delta epsilon zeta eta theta";
+		let (mut font_system, mut editor) = editor(text);
+		editor.sync_buffer_width(&mut font_system, 130.0);
+
+		let start = editor
+			.view_state()
+			.selection_rectangles
+			.first()
+			.copied()
+			.expect("initial selection should have a rectangle");
+
+		editor.apply(
+			&mut font_system,
+			EditorCommand::BeginPointerSelection {
+				position: Point::new(start.x + 2.0, start.y + 2.0),
+				select_word: false,
+			},
+		);
+		editor.apply(
+			&mut font_system,
+			EditorCommand::DragPointerSelection(Point::new(90.0, 120.0)),
+		);
+		editor.apply(&mut font_system, EditorCommand::EndPointerSelection);
+
+		let view = editor.view_state();
+		assert!(view.selection_rectangles.len() >= 2);
+		assert!(
+			view.selection
+				.as_ref()
+				.is_some_and(|selection| selection.end > selection.start)
+		);
+	}
+
+	#[test]
+	fn double_click_selects_a_full_word() {
+		let (mut font_system, mut editor) = editor("alpha beta gamma");
+
+		for _ in 0..11 {
+			editor.apply(&mut font_system, EditorCommand::MoveRight);
+		}
+
+		let rect = editor
+			.view_state()
+			.selection_rectangles
+			.first()
+			.copied()
+			.expect("selection should have a rectangle");
+
+		editor.apply(
+			&mut font_system,
+			EditorCommand::BeginPointerSelection {
+				position: Point::new(rect.x + 2.0, rect.y + 2.0),
+				select_word: true,
+			},
+		);
+
+		let selection = editor
+			.view_state()
+			.selection
+			.expect("double click should produce a selection");
+		assert_eq!(editor.text().get(selection), Some("gamma"));
 	}
 }

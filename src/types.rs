@@ -28,10 +28,13 @@ pub(crate) enum Message {
 	ResizeTick(Instant),
 	CanvasHovered(Option<CanvasTarget>),
 	CanvasScrollChanged(Vector),
-	CanvasClicked {
+	CanvasPressed {
 		target: Option<CanvasTarget>,
 		position: Point,
+		double_click: bool,
 	},
+	CanvasDragged(Point),
+	CanvasReleased,
 	PaneResized(pane_grid::ResizeEvent),
 	EditorCommand(EditorCommand),
 }

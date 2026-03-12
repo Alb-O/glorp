@@ -16,6 +16,7 @@ const MIN_CANVAS_WIDTH: f32 = 620.0;
 pub(crate) struct CanvasPaneProps {
 	pub(crate) scene: LayoutScene,
 	pub(crate) layout_width: f32,
+	pub(crate) show_inspector_overlays: bool,
 	pub(crate) show_baselines: bool,
 	pub(crate) show_hitboxes: bool,
 	pub(crate) hovered_target: Option<CanvasTarget>,
@@ -57,6 +58,7 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	let canvas_view = canvas(GlyphCanvas {
 		scene: props.scene,
 		layout_width: props.layout_width,
+		show_inspector_overlays: props.show_inspector_overlays,
 		show_baselines: props.show_baselines,
 		show_hitboxes: props.show_hitboxes,
 		hovered_target: props.hovered_target,

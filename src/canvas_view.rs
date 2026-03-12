@@ -1,5 +1,5 @@
 use std::cell::Cell;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use iced::keyboard::{self, key};
 use iced::widget::canvas;
@@ -14,6 +14,7 @@ use crate::types::{CanvasTarget, Message};
 pub(crate) struct GlyphCanvas {
 	pub(crate) scene: LayoutScene,
 	pub(crate) layout_width: f32,
+	pub(crate) show_inspector_overlays: bool,
 	pub(crate) show_baselines: bool,
 	pub(crate) show_hitboxes: bool,
 	pub(crate) hovered_target: Option<CanvasTarget>,
@@ -30,10 +31,15 @@ pub(crate) struct CanvasState {
 	focused: bool,
 	scroll: Vector,
 	target_scroll: Vector,
+	pointer_selecting: bool,
+	last_click: Option<(Instant, Point)>,
 	scene_cache: canvas::Cache,
 	cached_scene_revision: Cell<Option<u64>>,
 	cached_scroll: Cell<Option<(i32, i32)>>,
 }
+
+const DOUBLE_CLICK_INTERVAL: Duration = Duration::from_millis(300);
+const DOUBLE_CLICK_DISTANCE: f32 = 8.0;
 
 impl canvas::Program<Message> for GlyphCanvas {
 	type State = CanvasState;
@@ -67,7 +73,9 @@ impl canvas::Program<Message> for GlyphCanvas {
 				}
 			}
 			canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => {
-				if state.hovered_target != cursor_target {
+				if state.pointer_selecting {
+					cursor_local.map(|position| canvas::Action::publish(Message::CanvasDragged(position)).and_capture())
+				} else if state.hovered_target != cursor_target {
 					state.hovered_target = cursor_target;
 					Some(canvas::Action::publish(Message::CanvasHovered(cursor_target)))
 				} else {
@@ -80,15 +88,30 @@ impl canvas::Program<Message> for GlyphCanvas {
 					None
 				} else if let Some(position) = cursor_local {
 					state.focused = true;
+					state.pointer_selecting = true;
 					state.hovered_target = cursor_target;
+					let double_click = state.last_click.is_some_and(|(at, last_position)| {
+						started.duration_since(at) <= DOUBLE_CLICK_INTERVAL
+							&& point_distance(last_position, position) <= DOUBLE_CLICK_DISTANCE
+					});
+					state.last_click = Some((started, position));
 
 					Some(
-						canvas::Action::publish(Message::CanvasClicked {
+						canvas::Action::publish(Message::CanvasPressed {
 							target: cursor_target,
 							position,
+							double_click,
 						})
 						.and_capture(),
 					)
+				} else {
+					None
+				}
+			}
+			canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
+				if state.pointer_selecting {
+					state.pointer_selecting = false;
+					Some(canvas::Action::publish(Message::CanvasReleased))
 				} else {
 					None
 				}
@@ -289,7 +312,7 @@ fn draw_dynamic_overlay(
 ) {
 	let origin = scrolled_origin(scroll);
 
-	if let Some(selection) = canvas.editor.selection_geometry {
+	for selection in canvas.editor.selection_rectangles.iter() {
 		frame.fill_rectangle(
 			Point::new(origin.x + selection.x, origin.y + selection.y),
 			Size::new(selection.width.max(1.0), selection.height.max(1.0)),
@@ -318,12 +341,14 @@ fn draw_dynamic_overlay(
 		);
 	}
 
-	if let Some(target) = canvas.hovered_target {
-		draw_target_overlay(frame, canvas, origin, target, false);
-	}
+	if canvas.show_inspector_overlays {
+		if let Some(target) = canvas.hovered_target {
+			draw_target_overlay(frame, canvas, origin, target, false);
+		}
 
-	if let Some(target) = canvas.selected_target {
-		draw_target_overlay(frame, canvas, origin, target, true);
+		if let Some(target) = canvas.selected_target {
+			draw_target_overlay(frame, canvas, origin, target, true);
+		}
 	}
 
 	if focused {
@@ -508,6 +533,12 @@ fn scroll_delta(delta: mouse::ScrollDelta) -> Vector {
 
 fn vector_length(vector: Vector) -> f32 {
 	(vector.x * vector.x + vector.y * vector.y).sqrt()
+}
+
+fn point_distance(a: Point, b: Point) -> f32 {
+	let dx = a.x - b.x;
+	let dy = a.y - b.y;
+	(dx * dx + dy * dy).sqrt()
 }
 
 fn to_scene_local(position: Point, scroll: Vector) -> Point {

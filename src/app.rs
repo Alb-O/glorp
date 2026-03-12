@@ -244,20 +244,44 @@ impl Playground {
 			}
 			Message::SelectSidebarTab(tab) => {
 				self.active_sidebar_tab = tab;
+				if tab != SidebarTab::Inspect {
+					self.hovered_target = None;
+					self.selected_target = None;
+				}
 				if matches!(tab, SidebarTab::Dump) {
 					self.refresh_scene_dump();
 				}
 			}
 			Message::PerfTick(_now) => {}
 			Message::CanvasHovered(target) => {
-				self.hovered_target = target;
+				self.hovered_target = (self.active_sidebar_tab == SidebarTab::Inspect)
+					.then_some(target)
+					.flatten();
 			}
 			Message::CanvasScrollChanged(scroll) => {
 				self.canvas_scroll = scroll;
 			}
-			Message::CanvasClicked { target, position } => {
-				self.selected_target = target;
-				self.apply_editor_command(crate::editor::EditorCommand::SelectClusterAt(position), false);
+			Message::CanvasPressed {
+				target,
+				position,
+				double_click,
+			} => {
+				self.selected_target = (self.active_sidebar_tab == SidebarTab::Inspect)
+					.then_some(target)
+					.flatten();
+				self.apply_editor_command(
+					crate::editor::EditorCommand::BeginPointerSelection {
+						position,
+						select_word: double_click,
+					},
+					false,
+				);
+			}
+			Message::CanvasDragged(position) => {
+				self.apply_editor_command(crate::editor::EditorCommand::DragPointerSelection(position), false);
+			}
+			Message::CanvasReleased => {
+				self.apply_editor_command(crate::editor::EditorCommand::EndPointerSelection, false);
 			}
 			Message::PaneResized(event) => {
 				self.chrome.resize(event.split, event.ratio);
@@ -316,6 +340,7 @@ impl Playground {
 		view_canvas_pane(CanvasPaneProps {
 			scene: self.scene.scene().clone(),
 			layout_width: self.layout_width,
+			show_inspector_overlays: self.active_sidebar_tab == SidebarTab::Inspect,
 			show_baselines: self.show_baselines,
 			show_hitboxes: self.show_hitboxes,
 			hovered_target: self.hovered_target,
@@ -380,31 +405,15 @@ impl Playground {
 
 		if result.changed {
 			self.refresh_scene_after_edit();
-		} else {
-			self.sync_selected_target();
 		}
 
 		self.perf.record_editor_command(command_started.elapsed());
 	}
 
-	fn sync_selected_target(&mut self) {
-		self.selected_target = self
-			.editor
-			.view_state()
-			.selection
-			.as_ref()
-			.and_then(|selection| self.scene.scene().cluster_index_for_range(selection))
-			.and_then(|index| self.scene.scene().cluster(index))
-			.map(|cluster| crate::types::CanvasTarget::Glyph {
-				run_index: cluster.run_index,
-				glyph_index: cluster.glyph_start,
-			});
-	}
-
 	fn interaction_details(&self) -> String {
 		let mut details = String::new();
 		let _ = writeln!(details, "editor");
-		let _ = writeln!(details, "{}", self.editor.selection_details(self.scene.scene()));
+		let _ = writeln!(details, "{}", self.editor.selection_details());
 		let _ = writeln!(details);
 		let _ = writeln!(details, "hover");
 		let _ = writeln!(
@@ -478,7 +487,6 @@ impl Playground {
 		if reset_scroll {
 			self.canvas_scroll = Vector::ZERO;
 		}
-		self.sync_selected_target();
 		if matches!(self.active_sidebar_tab, SidebarTab::Dump) {
 			self.refresh_scene_dump();
 		} else {
