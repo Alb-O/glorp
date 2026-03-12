@@ -37,7 +37,9 @@ impl Display for EditorMode {
 #[derive(Debug, Clone)]
 pub(crate) struct EditorViewState {
 	pub(crate) mode: EditorMode,
+	#[cfg(test)]
 	pub(crate) selection: Option<Range<usize>>,
+	#[cfg(test)]
 	pub(crate) caret: usize,
 	pub(crate) selection_rectangles: Arc<[EditorSelectionRect]>,
 	pub(crate) caret_geometry: EditorCaretGeometry,
@@ -117,7 +119,9 @@ impl EditorBuffer {
 			pointer_anchor: None,
 			view_state: EditorViewState {
 				mode: EditorMode::Normal,
+				#[cfg(test)]
 				selection: None,
+				#[cfg(test)]
 				caret: 0,
 				selection_rectangles: Arc::from([]),
 				caret_geometry: EditorCaretGeometry {
@@ -340,6 +344,7 @@ impl EditorBuffer {
 		}
 	}
 
+	#[cfg(test)]
 	pub(crate) fn buffer_text(&self) -> String {
 		let mut text = String::new();
 		for line in &self.buffer.lines {
@@ -418,7 +423,9 @@ impl EditorBuffer {
 		let layout = self.layout_snapshot();
 		self.view_state = EditorViewState {
 			mode: self.mode,
+			#[cfg(test)]
 			selection: self.selection.clone(),
+			#[cfg(test)]
 			caret: self.caret,
 			selection_rectangles: self
 				.selection

@@ -1,11 +1,15 @@
-use cosmic_text::{Buffer, FontSystem, Metrics, SwashCache};
+#[cfg(test)]
+use cosmic_text::Metrics;
+use cosmic_text::{Buffer, FontSystem, SwashCache};
 
 use std::sync::{Arc, OnceLock};
 
+#[cfg(test)]
+use super::build_buffer;
 use super::geometry::build_clusters;
 use super::inspect::{SceneInspectCache, font_name, glyph_outline};
 use super::text::line_byte_offsets;
-use super::{InspectRunInfo, LayoutScene, LayoutSceneModel, RunInfo, SceneConfig, build_buffer};
+use super::{InspectRunInfo, LayoutScene, LayoutSceneModel, RunInfo, SceneConfig};
 
 impl LayoutSceneModel {
 	pub(crate) fn new(font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig) -> Self {
@@ -27,6 +31,7 @@ impl LayoutSceneModel {
 }
 
 impl LayoutScene {
+	#[cfg(test)]
 	#[allow(clippy::too_many_arguments)]
 	pub(crate) fn build(
 		font_system: &mut FontSystem, text: String, font_choice: crate::types::FontChoice,

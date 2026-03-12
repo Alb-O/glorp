@@ -99,7 +99,6 @@ fn app_theme(_playground: &Playground) -> Theme {
 	Theme::TokyoNightStorm
 }
 
-#[allow(dead_code)]
 fn main() -> iced::Result {
 	run()
 }
