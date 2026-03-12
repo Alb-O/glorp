@@ -289,26 +289,23 @@ fn draw_dynamic_overlay(
 ) {
 	let origin = scrolled_origin(scroll);
 
-	if let Some(selection) = &canvas.editor.selection {
-		if let Some(cluster_index) = canvas.scene.cluster_index_for_range(selection) {
-			let cluster = &canvas.scene.clusters()[cluster_index];
-			frame.fill_rectangle(
-				Point::new(origin.x + cluster.x, origin.y + cluster.y),
-				Size::new(cluster.width.max(1.0), cluster.height.max(1.0)),
-				Color::from_rgba(1.0, 0.92, 0.45, 0.35),
-			);
-			frame.stroke_rectangle(
-				Point::new(origin.x + cluster.x, origin.y + cluster.y),
-				Size::new(cluster.width.max(1.0), cluster.height.max(1.0)),
-				canvas::Stroke::default()
-					.with_width(1.0)
-					.with_color(Color::from_rgba(1.0, 0.95, 0.7, 0.92)),
-			);
-		}
+	if let Some(selection) = canvas.editor.selection_geometry {
+		frame.fill_rectangle(
+			Point::new(origin.x + selection.x, origin.y + selection.y),
+			Size::new(selection.width.max(1.0), selection.height.max(1.0)),
+			Color::from_rgba(1.0, 0.92, 0.45, 0.35),
+		);
+		frame.stroke_rectangle(
+			Point::new(origin.x + selection.x, origin.y + selection.y),
+			Size::new(selection.width.max(1.0), selection.height.max(1.0)),
+			canvas::Stroke::default()
+				.with_width(1.0)
+				.with_color(Color::from_rgba(1.0, 0.95, 0.7, 0.92)),
+		);
 	}
 
-	if matches!(canvas.editor.mode, EditorMode::Insert) {
-		let caret = canvas.scene.caret_metrics(canvas.editor.caret);
+	if matches!(canvas.editor.mode, crate::editor::EditorMode::Insert) {
+		let caret = canvas.editor.caret_geometry;
 		let path = canvas::Path::line(
 			Point::new(origin.x + caret.x, origin.y + caret.y),
 			Point::new(origin.x + caret.x, origin.y + caret.y + caret.height),

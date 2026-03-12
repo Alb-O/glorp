@@ -27,6 +27,23 @@ pub(crate) struct EditorViewState {
 	pub(crate) mode: EditorMode,
 	pub(crate) selection: Option<Range<usize>>,
 	pub(crate) caret: usize,
+	pub(crate) selection_geometry: Option<EditorClusterGeometry>,
+	pub(crate) caret_geometry: EditorCaretGeometry,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct EditorClusterGeometry {
+	pub(crate) x: f32,
+	pub(crate) y: f32,
+	pub(crate) width: f32,
+	pub(crate) height: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct EditorCaretGeometry {
+	pub(crate) x: f32,
+	pub(crate) y: f32,
+	pub(crate) height: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +55,7 @@ pub(crate) struct EditorBuffer {
 	selection: Option<Range<usize>>,
 	caret: usize,
 	preferred_x: Option<f32>,
+	view_state: EditorViewState,
 }
 
 #[derive(Debug, Clone)]
@@ -81,8 +99,20 @@ impl EditorBuffer {
 			selection: None,
 			caret: 0,
 			preferred_x: None,
+			view_state: EditorViewState {
+				mode: EditorMode::Normal,
+				selection: None,
+				caret: 0,
+				selection_geometry: None,
+				caret_geometry: EditorCaretGeometry {
+					x: 0.0,
+					y: 0.0,
+					height: config.line_height.max(1.0),
+				},
+			},
 		};
 		editor.reset_normal_selection();
+		editor.refresh_view_state();
 		editor
 	}
 
@@ -106,11 +136,13 @@ impl EditorBuffer {
 		if self.width_only_config_change(config) {
 			self.resize_buffer(font_system, config.max_width);
 			self.config = config;
+			self.refresh_view_state();
 			return;
 		}
 
 		self.config = config;
 		self.buffer = Arc::new(build_buffer(font_system, &self.text, config));
+		self.refresh_view_state();
 	}
 
 	pub(crate) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) {
@@ -120,6 +152,7 @@ impl EditorBuffer {
 
 		self.resize_buffer(font_system, width);
 		self.config.max_width = width;
+		self.refresh_view_state();
 	}
 
 	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
@@ -131,18 +164,15 @@ impl EditorBuffer {
 		self.caret = 0;
 		self.preferred_x = None;
 		self.reset_normal_selection();
+		self.refresh_view_state();
 	}
 
 	pub(crate) fn view_state(&self) -> EditorViewState {
-		EditorViewState {
-			mode: self.mode,
-			selection: self.selection.clone(),
-			caret: self.caret,
-		}
+		self.view_state.clone()
 	}
 
 	pub(crate) fn apply(&mut self, font_system: &mut FontSystem, command: EditorCommand) -> ApplyResult {
-		match command {
+		let result = match command {
 			EditorCommand::SelectClusterAt(point) => {
 				let layout = self.layout_snapshot();
 				if let Some(cluster_index) = self
@@ -246,7 +276,9 @@ impl EditorBuffer {
 			EditorCommand::DeleteForward => self.delete_forward(font_system),
 			EditorCommand::DeleteSelection => self.delete_selection(font_system),
 			EditorCommand::InsertText(text) => self.insert_text(font_system, text),
-		}
+		};
+		self.refresh_view_state();
+		result
 	}
 
 	pub(crate) fn selection_details(&self, scene: &LayoutScene) -> String {
@@ -338,7 +370,7 @@ impl EditorBuffer {
 				self.preferred_x = Some(preferred_x);
 			}
 			EditorMode::Insert => {
-				let caret = layout.caret_metrics(self.caret);
+				let caret = layout.caret_metrics(self.caret, self.config.line_height);
 				let preferred_x = self.preferred_x.unwrap_or(caret.x);
 				let Some(target) = layout.nearest_cluster_on_adjacent_run(caret.run_index, preferred_x, direction)
 				else {
@@ -372,7 +404,7 @@ impl EditorBuffer {
 				}
 			}
 			EditorMode::Insert => {
-				let caret = layout.caret_metrics(self.caret);
+				let caret = layout.caret_metrics(self.caret, self.config.line_height);
 				let target = if to_start {
 					layout
 						.first_cluster_in_run(caret.run_index)
@@ -596,11 +628,29 @@ impl EditorBuffer {
 		buffer.set_size(font_system, Some(width), None);
 		buffer.shape_until_scroll(font_system, false);
 	}
+
+	fn refresh_view_state(&mut self) {
+		let layout = self.layout_snapshot();
+		self.view_state = EditorViewState {
+			mode: self.mode,
+			selection: self.selection.clone(),
+			caret: self.caret,
+			selection_geometry: self
+				.selection
+				.as_ref()
+				.and_then(|selection| layout.cluster_index_for_range(selection))
+				.and_then(|index| layout.cluster(index))
+				.map(EditorClusterGeometry::from_cluster),
+			caret_geometry: layout.caret_geometry(self.caret, self.config.line_height),
+		};
+	}
 }
 
 #[derive(Debug, Clone)]
 struct BufferRunInfo {
 	cluster_range: Range<usize>,
+	line_height: f32,
+	line_top: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -619,10 +669,23 @@ impl BufferClusterInfo {
 	}
 }
 
+impl EditorClusterGeometry {
+	fn from_cluster(cluster: &BufferClusterInfo) -> Self {
+		Self {
+			x: cluster.x,
+			y: cluster.y,
+			width: cluster.width,
+			height: cluster.height,
+		}
+	}
+}
+
 #[derive(Debug, Clone)]
 struct BufferCaretMetrics {
 	run_index: usize,
 	x: f32,
+	y: f32,
+	height: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -652,6 +715,8 @@ impl BufferLayoutSnapshot {
 
 			runs.push(BufferRunInfo {
 				cluster_range: cluster_start..cluster_end,
+				line_height: run.line_height,
+				line_top: run.line_top,
 			});
 		}
 
@@ -753,9 +818,14 @@ impl BufferLayoutSnapshot {
 			.map(|(offset, _)| run.cluster_range.start + offset)
 	}
 
-	fn caret_metrics(&self, byte: usize) -> BufferCaretMetrics {
+	fn caret_metrics(&self, byte: usize, fallback_height: f32) -> BufferCaretMetrics {
 		if self.clusters.is_empty() {
-			return BufferCaretMetrics { run_index: 0, x: 0.0 };
+			return BufferCaretMetrics {
+				run_index: 0,
+				x: 0.0,
+				y: 0.0,
+				height: fallback_height.max(1.0),
+			};
 		}
 
 		if let Some(index) = self.cluster_at_or_after(byte) {
@@ -764,6 +834,8 @@ impl BufferLayoutSnapshot {
 				return BufferCaretMetrics {
 					run_index: cluster.run_index,
 					x: cluster.x,
+					y: cluster.y,
+					height: cluster.height.max(1.0),
 				};
 			}
 		}
@@ -773,13 +845,26 @@ impl BufferLayoutSnapshot {
 			return BufferCaretMetrics {
 				run_index: cluster.run_index,
 				x: cluster.x + cluster.width,
+				y: cluster.y,
+				height: cluster.height.max(1.0),
 			};
 		}
 
-		let cluster = &self.clusters[0];
+		let run = &self.runs[0];
 		BufferCaretMetrics {
-			run_index: cluster.run_index,
-			x: cluster.x,
+			run_index: 0,
+			x: 0.0,
+			y: run.line_top,
+			height: run.line_height.max(1.0),
+		}
+	}
+
+	fn caret_geometry(&self, byte: usize, fallback_height: f32) -> EditorCaretGeometry {
+		let metrics = self.caret_metrics(byte, fallback_height);
+		EditorCaretGeometry {
+			x: metrics.x,
+			y: metrics.y,
+			height: metrics.height,
 		}
 	}
 }
@@ -982,5 +1067,32 @@ mod tests {
 		assert!(editor.apply(&mut font_system, EditorCommand::DeleteSelection).changed);
 		assert_eq!(editor.text(), "🙂\n");
 		assert_eq!(editor.buffer_text(), "🙂\n");
+	}
+
+	#[test]
+	fn live_selection_geometry_tracks_wrapped_width_changes() {
+		let text = "alpha beta gamma delta epsilon zeta eta theta";
+		let (mut font_system, mut editor) = editor(text);
+
+		for _ in 0..14 {
+			editor.apply(&mut font_system, EditorCommand::MoveRight);
+		}
+
+		let before = editor
+			.view_state()
+			.selection_geometry
+			.expect("selection geometry should exist before resize");
+
+		editor.sync_buffer_width(&mut font_system, 110.0);
+
+		let after = editor
+			.view_state()
+			.selection_geometry
+			.expect("selection geometry should exist after resize");
+
+		assert!(
+			after.y > before.y || (after.y == before.y && after.x < before.x),
+			"expected wrapped selection to move after width shrink, before={before:?} after={after:?}"
+		);
 	}
 }

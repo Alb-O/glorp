@@ -343,43 +343,6 @@ impl LayoutScene {
 			.map(|(offset, _)| run.cluster_range.start + offset)
 	}
 
-	pub(crate) fn caret_metrics(&self, byte: usize) -> CaretMetrics {
-		if self.clusters.is_empty() {
-			return CaretMetrics {
-				x: 0.0,
-				y: 0.0,
-				height: self.line_height.max(1.0),
-			};
-		}
-
-		if let Some(index) = self.cluster_at_or_after(byte) {
-			let cluster = &self.clusters[index];
-			if byte <= cluster.byte_range.start {
-				return CaretMetrics {
-					x: cluster.x,
-					y: cluster.y,
-					height: cluster.height.max(1.0),
-				};
-			}
-		}
-
-		if let Some(index) = self.cluster_before(byte) {
-			let cluster = &self.clusters[index];
-			return CaretMetrics {
-				x: cluster.x + cluster.width,
-				y: cluster.y,
-				height: cluster.height.max(1.0),
-			};
-		}
-
-		let cluster = &self.clusters[0];
-		CaretMetrics {
-			x: cluster.x,
-			y: cluster.y,
-			height: cluster.height.max(1.0),
-		}
-	}
-
 	pub(crate) fn target_details(&self, target: Option<CanvasTarget>) -> Option<String> {
 		match target? {
 			CanvasTarget::Run(run_index) => {
@@ -573,13 +536,6 @@ pub(crate) enum PathCommand {
 pub(crate) struct PathPoint {
 	pub(crate) x: f32,
 	pub(crate) y: f32,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct CaretMetrics {
-	pub(crate) x: f32,
-	pub(crate) y: f32,
-	pub(crate) height: f32,
 }
 
 pub(crate) fn make_font_system() -> FontSystem {
