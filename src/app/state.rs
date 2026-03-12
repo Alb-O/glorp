@@ -1,0 +1,314 @@
+use iced::widget::pane_grid;
+use iced::{Size, Vector};
+
+use std::time::{Duration, Instant};
+
+use crate::canvas_view::scene_viewport_size;
+use crate::editor::EditorSelectionRect;
+use crate::scene::{LayoutScene, SceneConfig, scene_config};
+use crate::types::{CanvasTarget, FontChoice, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
+use crate::ui::default_sidebar_ratio;
+
+pub(super) const RESIZE_REFLOW_INTERVAL: Duration = Duration::from_millis(16);
+const DEFAULT_CANVAS_HEIGHT: f32 = 320.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ShellPane {
+	Sidebar,
+	Canvas,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum EditorDispatchSource {
+	Keyboard,
+	PointerPress,
+	PointerDrag,
+	PointerRelease,
+}
+
+impl EditorDispatchSource {
+	pub(super) fn reveals_viewport(self) -> bool {
+		matches!(self, Self::Keyboard | Self::PointerPress)
+	}
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ResizeCoalescer {
+	applied_width: f32,
+	pending_width: Option<f32>,
+	last_applied_at: Option<Instant>,
+}
+
+impl ResizeCoalescer {
+	pub(super) fn new(width: f32) -> Self {
+		Self {
+			applied_width: width,
+			pending_width: None,
+			last_applied_at: None,
+		}
+	}
+
+	pub(super) fn observe(&mut self, width: f32, now: Instant) -> Option<f32> {
+		if (self.applied_width - width).abs() < 0.5 && self.pending_width.is_none() {
+			return None;
+		}
+
+		self.pending_width = Some(width);
+
+		if self
+			.last_applied_at
+			.is_none_or(|last| now.duration_since(last) >= RESIZE_REFLOW_INTERVAL)
+		{
+			return self.flush(now);
+		}
+
+		None
+	}
+
+	pub(super) fn flush(&mut self, now: Instant) -> Option<f32> {
+		let width = self.pending_width?;
+		self.pending_width = None;
+
+		if (self.applied_width - width).abs() < 0.5 {
+			return None;
+		}
+
+		self.applied_width = width;
+		self.last_applied_at = Some(now);
+		Some(width)
+	}
+
+	pub(super) fn has_pending(&self) -> bool {
+		self.pending_width.is_some()
+	}
+
+	pub(super) fn mark_applied(&mut self, width: f32, now: Instant) {
+		self.applied_width = width;
+		self.last_applied_at = Some(now);
+
+		if self.pending_width.is_some_and(|pending| (pending - width).abs() < 0.5) {
+			self.pending_width = None;
+		}
+	}
+}
+
+#[derive(Debug)]
+pub(super) struct ControlsState {
+	pub(super) preset: SamplePreset,
+	pub(super) font: FontChoice,
+	pub(super) shaping: ShapingChoice,
+	pub(super) wrapping: WrapChoice,
+	pub(super) render_mode: RenderMode,
+	pub(super) font_size: f32,
+	pub(super) line_height: f32,
+	pub(super) show_baselines: bool,
+	pub(super) show_hitboxes: bool,
+}
+
+impl ControlsState {
+	pub(super) fn new() -> Self {
+		Self {
+			preset: SamplePreset::Tall,
+			font: FontChoice::JetBrainsMono,
+			shaping: ShapingChoice::Advanced,
+			wrapping: WrapChoice::Word,
+			render_mode: RenderMode::CanvasOnly,
+			font_size: 24.0,
+			line_height: 32.0,
+			show_baselines: false,
+			show_hitboxes: false,
+		}
+	}
+
+	pub(super) fn initial_layout_width(&self) -> f32 {
+		540.0
+	}
+
+	pub(super) fn scene_config(&self, layout_width: f32) -> SceneConfig {
+		scene_config(
+			self.font,
+			self.shaping,
+			self.wrapping,
+			self.render_mode,
+			self.font_size,
+			self.line_height,
+			layout_width,
+		)
+	}
+}
+
+#[derive(Debug)]
+pub(super) struct ViewportState {
+	pub(super) layout_width: f32,
+	pub(super) canvas_viewport: Size,
+	pub(super) canvas_scroll: Vector,
+	pub(super) scene_revision: u64,
+	pub(super) resize_coalescer: ResizeCoalescer,
+}
+
+impl ViewportState {
+	pub(super) fn new(layout_width: f32) -> Self {
+		Self {
+			layout_width,
+			canvas_viewport: Size::new(layout_width, DEFAULT_CANVAS_HEIGHT),
+			canvas_scroll: Vector::ZERO,
+			scene_revision: 1,
+			resize_coalescer: ResizeCoalescer::new(layout_width),
+		}
+	}
+
+	pub(super) fn observe_resize(&mut self, size: Size, now: Instant) -> (bool, Option<f32>) {
+		let viewport = scene_viewport_size(size);
+		let layout_width = viewport.width;
+		let width_changed = (self.layout_width - layout_width).abs() >= 0.5;
+
+		self.canvas_viewport = viewport;
+		self.layout_width = layout_width;
+
+		(width_changed, self.resize_coalescer.observe(layout_width, now))
+	}
+
+	pub(super) fn flush_resize(&mut self, now: Instant) -> Option<f32> {
+		self.resize_coalescer.flush(now)
+	}
+
+	pub(super) fn mark_scene_applied(&mut self, now: Instant) {
+		self.resize_coalescer.mark_applied(self.layout_width, now);
+	}
+
+	pub(super) fn clamp_scroll(&mut self, scene: &LayoutScene) {
+		self.canvas_scroll = self.clamped_scroll(self.canvas_scroll, scene);
+	}
+
+	pub(super) fn reveal_target(&mut self, target: Option<EditorSelectionRect>, scene: &LayoutScene) {
+		let Some(target) = target else {
+			self.clamp_scroll(scene);
+			return;
+		};
+
+		let viewport = self.canvas_viewport;
+		let mut scroll = self.clamped_scroll(self.canvas_scroll, scene);
+		let margin_x = 24.0;
+		let margin_y = 24.0;
+		let left = target.x;
+		let right = target.x + target.width.max(1.0);
+		let top = target.y;
+		let bottom = target.y + target.height.max(1.0);
+
+		if left < scroll.x + margin_x {
+			scroll.x = (left - margin_x).max(0.0);
+		} else if right > scroll.x + viewport.width - margin_x {
+			scroll.x = (right - viewport.width + margin_x).max(0.0);
+		}
+
+		if top < scroll.y + margin_y {
+			scroll.y = (top - margin_y).max(0.0);
+		} else if bottom > scroll.y + viewport.height - margin_y {
+			scroll.y = (bottom - viewport.height + margin_y).max(0.0);
+		}
+
+		self.canvas_scroll = self.clamped_scroll(scroll, scene);
+	}
+
+	pub(super) fn finish_scene_refresh(&mut self, scene: &LayoutScene, reset_scroll: bool) {
+		if reset_scroll {
+			self.canvas_scroll = Vector::ZERO;
+		}
+
+		self.clamp_scroll(scene);
+		self.scene_revision += 1;
+	}
+
+	fn clamped_scroll(&self, scroll: Vector, scene: &LayoutScene) -> Vector {
+		let max_x = if matches!(scene.wrapping, WrapChoice::None) {
+			(scene.measured_width.max(self.layout_width) - self.canvas_viewport.width).max(0.0)
+		} else {
+			(self.layout_width - self.canvas_viewport.width).max(0.0)
+		};
+		let max_y = (scene.measured_height - self.canvas_viewport.height).max(0.0);
+
+		Vector::new(scroll.x.clamp(0.0, max_x), scroll.y.clamp(0.0, max_y))
+	}
+}
+
+#[derive(Debug)]
+pub(super) struct SidebarState {
+	pub(super) active_tab: SidebarTab,
+	pub(super) hovered_target: Option<CanvasTarget>,
+	pub(super) selected_target: Option<CanvasTarget>,
+	pub(super) scene_dump: String,
+}
+
+impl SidebarState {
+	pub(super) fn new() -> Self {
+		Self {
+			active_tab: SidebarTab::Controls,
+			hovered_target: None,
+			selected_target: None,
+			scene_dump: String::new(),
+		}
+	}
+
+	pub(super) fn set_active_tab(&mut self, tab: SidebarTab, scene: &LayoutScene) {
+		self.active_tab = tab;
+
+		if tab != SidebarTab::Inspect {
+			self.clear_inspect_targets();
+		}
+
+		if matches!(tab, SidebarTab::Dump) {
+			self.refresh_dump(scene);
+		} else {
+			self.scene_dump.clear();
+		}
+	}
+
+	pub(super) fn set_hovered_target(&mut self, target: Option<CanvasTarget>) {
+		self.hovered_target = (self.active_tab == SidebarTab::Inspect).then_some(target).flatten();
+	}
+
+	pub(super) fn set_selected_target(&mut self, target: Option<CanvasTarget>) {
+		self.selected_target = (self.active_tab == SidebarTab::Inspect).then_some(target).flatten();
+	}
+
+	pub(super) fn refresh_dump(&mut self, scene: &LayoutScene) {
+		self.scene_dump = scene.dump_text();
+	}
+
+	pub(super) fn sync_after_scene_refresh(&mut self, scene: &LayoutScene) {
+		self.hovered_target = None;
+
+		if self.active_tab != SidebarTab::Inspect {
+			self.selected_target = None;
+		}
+
+		if matches!(self.active_tab, SidebarTab::Dump) {
+			self.refresh_dump(scene);
+		} else {
+			self.scene_dump.clear();
+		}
+	}
+
+	fn clear_inspect_targets(&mut self) {
+		self.hovered_target = None;
+		self.selected_target = None;
+	}
+}
+
+#[derive(Debug)]
+pub(super) struct ShellState {
+	pub(super) chrome: pane_grid::State<ShellPane>,
+}
+
+impl ShellState {
+	pub(super) fn new() -> Self {
+		Self {
+			chrome: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
+				axis: pane_grid::Axis::Vertical,
+				ratio: default_sidebar_ratio(),
+				a: Box::new(pane_grid::Configuration::Pane(ShellPane::Sidebar)),
+				b: Box::new(pane_grid::Configuration::Pane(ShellPane::Canvas)),
+			}),
+		}
+	}
+}
