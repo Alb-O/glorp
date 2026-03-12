@@ -25,6 +25,7 @@ pub(crate) enum Message {
 	SelectSidebarTab(SidebarTab),
 	PerfTick(Instant),
 	CanvasViewportResized(Size),
+	ResizeTick(Instant),
 	CanvasHovered(Option<CanvasTarget>),
 	CanvasScrollChanged(Vector),
 	CanvasClicked {

@@ -17,6 +17,7 @@ enum MetricKind {
 	EditorCommand,
 	EditorApply,
 	SceneBuild,
+	ResizeReflow,
 	CanvasUpdate,
 	CanvasStaticBuild,
 	CanvasOverlayDraw,
@@ -24,10 +25,11 @@ enum MetricKind {
 }
 
 impl MetricKind {
-	const ALL: [Self; 7] = [
+	const ALL: [Self; 8] = [
 		Self::EditorCommand,
 		Self::EditorApply,
 		Self::SceneBuild,
+		Self::ResizeReflow,
 		Self::CanvasUpdate,
 		Self::CanvasStaticBuild,
 		Self::CanvasOverlayDraw,
@@ -39,6 +41,7 @@ impl MetricKind {
 			Self::EditorCommand => "editor.command",
 			Self::EditorApply => "editor.apply",
 			Self::SceneBuild => "scene.build",
+			Self::ResizeReflow => "resize.reflow",
 			Self::CanvasUpdate => "canvas.update",
 			Self::CanvasStaticBuild => "canvas.static",
 			Self::CanvasOverlayDraw => "canvas.overlay",
@@ -51,10 +54,11 @@ impl MetricKind {
 			Self::EditorCommand => 0,
 			Self::EditorApply => 1,
 			Self::SceneBuild => 2,
-			Self::CanvasUpdate => 3,
-			Self::CanvasStaticBuild => 4,
-			Self::CanvasOverlayDraw => 5,
-			Self::CanvasDraw => 6,
+			Self::ResizeReflow => 3,
+			Self::CanvasUpdate => 4,
+			Self::CanvasStaticBuild => 5,
+			Self::CanvasOverlayDraw => 6,
+			Self::CanvasDraw => 7,
 		}
 	}
 }
@@ -240,6 +244,10 @@ impl PerfMonitor {
 		self.record(MetricKind::SceneBuild, duration);
 	}
 
+	pub(crate) fn record_resize_reflow(&mut self, duration: Duration) {
+		self.record(MetricKind::ResizeReflow, duration);
+	}
+
 	pub(crate) fn flush_canvas_metrics(&mut self) {
 		let pending = self.bridge.drain();
 
@@ -310,6 +318,9 @@ impl PerfMonitor {
 		let update = self.metrics[MetricKind::CanvasUpdate.index()]
 			.summary(MetricKind::CanvasUpdate.label())
 			.recent_report();
+		let resize = self.metrics[MetricKind::ResizeReflow.index()]
+			.summary(MetricKind::ResizeReflow.label())
+			.recent_report();
 		let draw = self.metrics[MetricKind::CanvasDraw.index()]
 			.summary(MetricKind::CanvasDraw.label())
 			.recent_report();
@@ -321,7 +332,7 @@ impl PerfMonitor {
 			.recent_report();
 		let frames = self.frames.summary().recent_report();
 
-		format!("{update}\n{static_build}\n{overlay}\n{draw}\n{frames}")
+		format!("{resize}\n{update}\n{static_build}\n{overlay}\n{draw}\n{frames}")
 	}
 
 	pub(crate) fn graphs(&self) -> Vec<PerfGraphSeries> {
@@ -345,6 +356,7 @@ impl PerfMonitor {
 			MetricKind::CanvasStaticBuild,
 			MetricKind::CanvasOverlayDraw,
 			MetricKind::CanvasUpdate,
+			MetricKind::ResizeReflow,
 			MetricKind::EditorCommand,
 			MetricKind::SceneBuild,
 			MetricKind::EditorApply,

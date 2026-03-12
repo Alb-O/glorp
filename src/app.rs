@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use std::time::{Duration, Instant};
 
 use crate::canvas_view::scene_viewport_size;
-use crate::editor::{ApplyResult, EditorBuffer};
+use crate::editor::EditorBuffer;
 use crate::perf::PerfMonitor;
 use crate::scene::{LayoutSceneModel, make_font_system, scene_config};
 use crate::types::{FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
@@ -16,10 +16,63 @@ use crate::ui::{
 	view_sidebar, view_stacked_shell,
 };
 
+const RESIZE_REFLOW_INTERVAL: Duration = Duration::from_millis(16);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ShellPane {
 	Sidebar,
 	Canvas,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ResizeCoalescer {
+	applied_width: f32,
+	pending_width: Option<f32>,
+	last_applied_at: Option<Instant>,
+}
+
+impl ResizeCoalescer {
+	fn new(width: f32) -> Self {
+		Self {
+			applied_width: width,
+			pending_width: None,
+			last_applied_at: None,
+		}
+	}
+
+	fn observe(&mut self, width: f32, now: Instant) -> Option<f32> {
+		if (self.applied_width - width).abs() < 0.5 && self.pending_width.is_none() {
+			return None;
+		}
+
+		self.pending_width = Some(width);
+
+		if self
+			.last_applied_at
+			.is_none_or(|last| now.duration_since(last) >= RESIZE_REFLOW_INTERVAL)
+		{
+			return self.flush(now);
+		}
+
+		None
+	}
+
+	fn flush(&mut self, now: Instant) -> Option<f32> {
+		let width = self.pending_width?;
+		self.pending_width = None;
+
+		if (self.applied_width - width).abs() < 0.5 {
+			return None;
+		}
+
+		self.applied_width = width;
+		self.last_applied_at = Some(now);
+		Some(width)
+	}
+
+	fn has_pending(&self) -> bool {
+		self.pending_width.is_some()
+	}
 }
 
 pub(crate) struct Playground {
@@ -42,6 +95,7 @@ pub(crate) struct Playground {
 	scene_dump: String,
 	font_system: cosmic_text::FontSystem,
 	chrome: pane_grid::State<ShellPane>,
+	resize_coalescer: ResizeCoalescer,
 	perf: PerfMonitor,
 	scene_revision: u64,
 }
@@ -100,6 +154,7 @@ impl Playground {
 				scene_dump: String::new(),
 				font_system,
 				chrome,
+				resize_coalescer: ResizeCoalescer::new(layout_width),
 				perf,
 				scene_revision: 1,
 			},
@@ -108,11 +163,17 @@ impl Playground {
 	}
 
 	pub(crate) fn subscription(&self) -> Subscription<Message> {
+		let mut subscriptions = Vec::new();
+
 		if self.active_sidebar_tab == SidebarTab::Perf {
-			Subscription::run(perf_tick_stream).map(Message::PerfTick)
-		} else {
-			Subscription::none()
+			subscriptions.push(Subscription::run(perf_tick_stream).map(Message::PerfTick));
 		}
+
+		if self.resize_coalescer.has_pending() {
+			subscriptions.push(Subscription::run(resize_tick_stream).map(Message::ResizeTick));
+		}
+
+		Subscription::batch(subscriptions)
 	}
 
 	pub(crate) fn update(&mut self, message: Message) -> Task<Message> {
@@ -151,13 +212,17 @@ impl Playground {
 				self.refresh_scene();
 			}
 			Message::CanvasViewportResized(size) => {
-				let layout_width = scene_viewport_size(size).width;
-				if (self.layout_width - layout_width).abs() < 0.5 {
-					return Task::none();
+				if let Some(layout_width) = self
+					.resize_coalescer
+					.observe(scene_viewport_size(size).width, Instant::now())
+				{
+					self.apply_resize_layout_width(layout_width);
 				}
-
-				self.layout_width = layout_width;
-				self.refresh_scene();
+			}
+			Message::ResizeTick(now) => {
+				if let Some(layout_width) = self.resize_coalescer.flush(now) {
+					self.apply_resize_layout_width(layout_width);
+				}
 			}
 			Message::ShowBaselinesChanged(show_baselines) => {
 				self.show_baselines = show_baselines;
@@ -283,13 +348,9 @@ impl Playground {
 	}
 
 	fn refresh_scene(&mut self) {
-		let started = Instant::now();
-		let config = self.current_scene_config();
-		self.editor.sync_buffer_config(&mut self.font_system, config);
-		self.scene
-			.rebuild(&mut self.font_system, self.editor.text(), self.editor.buffer(), config);
-		self.finish_scene_refresh();
-		self.perf.record_scene_build(started.elapsed());
+		let duration = self.rebuild_scene();
+		self.finish_scene_refresh(true);
+		self.perf.record_scene_build(duration);
 	}
 
 	fn refresh_scene_dump(&mut self) {
@@ -307,7 +368,7 @@ impl Playground {
 		}
 
 		if result.changed {
-			self.refresh_scene_after_edit(result);
+			self.refresh_scene_after_edit();
 		} else {
 			self.sync_selected_target();
 		}
@@ -356,15 +417,10 @@ impl Playground {
 		details
 	}
 
-	fn refresh_scene_after_edit(&mut self, _result: ApplyResult) {
-		let started = Instant::now();
-		let config = self.current_scene_config();
-		self.editor.sync_buffer_config(&mut self.font_system, config);
-		self.scene
-			.rebuild(&mut self.font_system, self.editor.text(), self.editor.buffer(), config);
-
-		self.finish_scene_refresh();
-		self.perf.record_scene_build(started.elapsed());
+	fn refresh_scene_after_edit(&mut self) {
+		let duration = self.rebuild_scene();
+		self.finish_scene_refresh(true);
+		self.perf.record_scene_build(duration);
 	}
 
 	fn current_scene_config(&self) -> crate::scene::SceneConfig {
@@ -379,9 +435,28 @@ impl Playground {
 		)
 	}
 
-	fn finish_scene_refresh(&mut self) {
+	fn apply_resize_layout_width(&mut self, layout_width: f32) {
+		self.layout_width = layout_width;
+		let duration = self.rebuild_scene();
+		self.finish_scene_refresh(false);
+		self.perf.record_scene_build(duration);
+		self.perf.record_resize_reflow(duration);
+	}
+
+	fn rebuild_scene(&mut self) -> Duration {
+		let started = Instant::now();
+		let config = self.current_scene_config();
+		self.editor.sync_buffer_config(&mut self.font_system, config);
+		self.scene
+			.rebuild(&mut self.font_system, self.editor.text(), self.editor.buffer(), config);
+		started.elapsed()
+	}
+
+	fn finish_scene_refresh(&mut self, reset_scroll: bool) {
 		self.hovered_target = None;
-		self.canvas_scroll = Vector::ZERO;
+		if reset_scroll {
+			self.canvas_scroll = Vector::ZERO;
+		}
 		self.sync_selected_target();
 		if matches!(self.active_sidebar_tab, SidebarTab::Dump) {
 			self.refresh_scene_dump();
@@ -392,12 +467,39 @@ impl Playground {
 	}
 }
 
+#[cfg(test)]
+mod tests {
+	use super::{RESIZE_REFLOW_INTERVAL, ResizeCoalescer};
+	use std::time::{Duration, Instant};
+
+	#[test]
+	fn resize_coalescer_limits_burst_reflows_and_flushes_latest_width() {
+		let started = Instant::now();
+		let mut coalescer = ResizeCoalescer::new(600.0);
+
+		assert_eq!(coalescer.observe(700.0, started), Some(700.0));
+		assert_eq!(coalescer.observe(710.0, started + Duration::from_millis(4)), None);
+		assert_eq!(coalescer.observe(720.0, started + Duration::from_millis(8)), None);
+		assert!(coalescer.has_pending());
+		assert_eq!(coalescer.flush(started + RESIZE_REFLOW_INTERVAL), Some(720.0));
+		assert!(!coalescer.has_pending());
+	}
+}
+
 fn perf_tick_stream() -> impl futures::Stream<Item = iced::time::Instant> {
+	tick_stream(Duration::from_millis(100))
+}
+
+fn resize_tick_stream() -> impl futures::Stream<Item = iced::time::Instant> {
+	tick_stream(RESIZE_REFLOW_INTERVAL)
+}
+
+fn tick_stream(interval: Duration) -> impl futures::Stream<Item = iced::time::Instant> {
 	stream::channel(1, async move |mut output| {
 		use futures::SinkExt;
 
 		loop {
-			std::thread::sleep(Duration::from_millis(100));
+			std::thread::sleep(interval);
 
 			if output.send(iced::time::Instant::now()).await.is_err() {
 				break;
