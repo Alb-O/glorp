@@ -271,7 +271,7 @@ impl PerfMonitor {
 			scene.runs.len(),
 			scene.glyph_count,
 			scene.clusters().len(),
-			scene.fonts_seen.len(),
+			scene.font_count,
 			scene.warnings.len(),
 			scene.measured_width,
 			scene.measured_height,

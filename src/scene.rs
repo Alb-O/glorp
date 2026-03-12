@@ -9,19 +9,21 @@ use crate::types::{CanvasTarget, FontChoice, RenderMode, ShapingChoice, WrapChoi
 #[derive(Debug, Clone)]
 pub(crate) struct LayoutScene {
 	pub(crate) text: String,
+	pub(crate) font_choice: FontChoice,
 	pub(crate) font: Font,
 	pub(crate) shaping: ShapingChoice,
+	pub(crate) wrapping: WrapChoice,
+	pub(crate) render_mode: RenderMode,
 	pub(crate) font_size: f32,
 	pub(crate) line_height: f32,
 	pub(crate) max_width: f32,
 	pub(crate) measured_width: f32,
 	pub(crate) measured_height: f32,
 	pub(crate) glyph_count: usize,
+	pub(crate) font_count: usize,
 	pub(crate) runs: Vec<RunInfo>,
 	pub(crate) clusters: Vec<ClusterInfo>,
-	pub(crate) fonts_seen: Vec<String>,
 	pub(crate) warnings: Vec<String>,
-	pub(crate) dump: String,
 	pub(crate) draw_canvas_text: bool,
 	pub(crate) draw_outlines: bool,
 	pub(crate) canvas_wraps: bool,
@@ -33,6 +35,7 @@ impl LayoutScene {
 		font_system: &mut FontSystem, text: String, font_choice: FontChoice, shaping: ShapingChoice,
 		wrapping: WrapChoice, font_size: f32, line_height: f32, max_width: f32, render_mode: RenderMode,
 	) -> Self {
+		let draw_outlines = render_mode.draw_outlines();
 		let mut buffer = Buffer::new(font_system, Metrics::new(font_size, line_height));
 		buffer.set_size(font_system, Some(max_width), None);
 		buffer.set_wrap(font_system, wrapping.to_cosmic());
@@ -44,10 +47,10 @@ impl LayoutScene {
 			None,
 		);
 
-		let mut swash_cache = SwashCache::new();
+		let mut swash_cache = draw_outlines.then(SwashCache::new);
 		let mut runs = Vec::new();
 		let mut warnings = Vec::new();
-		let mut fonts_seen = Vec::<String>::new();
+		let mut font_ids = Vec::new();
 		let mut measured_width: f32 = 0.0;
 		let mut measured_height: f32 = 0.0;
 		let mut glyph_count = 0usize;
@@ -62,6 +65,9 @@ impl LayoutScene {
 			let mut glyphs = Vec::new();
 			for glyph in run.glyphs {
 				glyph_count += 1;
+				if !font_ids.iter().any(|font_id| *font_id == glyph.font_id) {
+					font_ids.push(glyph.font_id);
+				}
 
 				let font_name = font_system
 					.db()
@@ -69,59 +75,57 @@ impl LayoutScene {
 					.map(|face| face.post_script_name.clone())
 					.unwrap_or_else(|| format!("font#{:?}", glyph.font_id));
 
-				if !fonts_seen.iter().any(|existing| existing == &font_name) {
-					fonts_seen.push(font_name.clone());
-				}
-
 				let cluster_text = run
 					.text
 					.get(glyph.start..glyph.end)
 					.map(debug_snippet)
 					.unwrap_or_else(|| "<invalid utf8 slice>".to_string());
 
-				let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
-				let outline = swash_cache
-					.get_outline_commands(font_system, physical_glyph.cache_key)
-					.map(|commands| OutlinePath {
-						commands: commands
-							.iter()
-							.map(|command| match command {
-								Command::MoveTo(point) => PathCommand::MoveTo(PathPoint {
-									x: point.x + glyph.x + glyph.x_offset,
-									y: -point.y + run.line_y + glyph.y_offset,
-								}),
-								Command::LineTo(point) => PathCommand::LineTo(PathPoint {
-									x: point.x + glyph.x + glyph.x_offset,
-									y: -point.y + run.line_y + glyph.y_offset,
-								}),
-								Command::QuadTo(control, to) => PathCommand::QuadTo(
-									PathPoint {
-										x: control.x + glyph.x + glyph.x_offset,
-										y: -control.y + run.line_y + glyph.y_offset,
-									},
-									PathPoint {
-										x: to.x + glyph.x + glyph.x_offset,
-										y: -to.y + run.line_y + glyph.y_offset,
-									},
-								),
-								Command::CurveTo(a, b, to) => PathCommand::CurveTo(
-									PathPoint {
-										x: a.x + glyph.x + glyph.x_offset,
-										y: -a.y + run.line_y + glyph.y_offset,
-									},
-									PathPoint {
-										x: b.x + glyph.x + glyph.x_offset,
-										y: -b.y + run.line_y + glyph.y_offset,
-									},
-									PathPoint {
-										x: to.x + glyph.x + glyph.x_offset,
-										y: -to.y + run.line_y + glyph.y_offset,
-									},
-								),
-								Command::Close => PathCommand::Close,
-							})
-							.collect(),
-					});
+				let outline = swash_cache.as_mut().and_then(|cache| {
+					let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
+					cache
+						.get_outline_commands(font_system, physical_glyph.cache_key)
+						.map(|commands| OutlinePath {
+							commands: commands
+								.iter()
+								.map(|command| match command {
+									Command::MoveTo(point) => PathCommand::MoveTo(PathPoint {
+										x: point.x + glyph.x + glyph.x_offset,
+										y: -point.y + run.line_y + glyph.y_offset,
+									}),
+									Command::LineTo(point) => PathCommand::LineTo(PathPoint {
+										x: point.x + glyph.x + glyph.x_offset,
+										y: -point.y + run.line_y + glyph.y_offset,
+									}),
+									Command::QuadTo(control, to) => PathCommand::QuadTo(
+										PathPoint {
+											x: control.x + glyph.x + glyph.x_offset,
+											y: -control.y + run.line_y + glyph.y_offset,
+										},
+										PathPoint {
+											x: to.x + glyph.x + glyph.x_offset,
+											y: -to.y + run.line_y + glyph.y_offset,
+										},
+									),
+									Command::CurveTo(a, b, to) => PathCommand::CurveTo(
+										PathPoint {
+											x: a.x + glyph.x + glyph.x_offset,
+											y: -a.y + run.line_y + glyph.y_offset,
+										},
+										PathPoint {
+											x: b.x + glyph.x + glyph.x_offset,
+											y: -b.y + run.line_y + glyph.y_offset,
+										},
+										PathPoint {
+											x: to.x + glyph.x + glyph.x_offset,
+											y: -to.y + run.line_y + glyph.y_offset,
+										},
+									),
+									Command::Close => PathCommand::Close,
+								})
+								.collect(),
+						})
+				});
 
 				glyphs.push(GlyphInfo {
 					cluster: cluster_text,
@@ -167,9 +171,10 @@ impl LayoutScene {
 			warnings.push("No layout runs were produced. Check the font choice and text content.".to_string());
 		}
 
-		let dump = build_dump(
-			&text,
+		Self {
+			text,
 			font_choice,
+			font: font_choice.to_iced_font(),
 			shaping,
 			wrapping,
 			render_mode,
@@ -179,27 +184,12 @@ impl LayoutScene {
 			measured_width,
 			measured_height,
 			glyph_count,
-			&fonts_seen,
-			&runs,
-		);
-
-		Self {
-			text,
-			font: font_choice.to_iced_font(),
-			shaping,
-			font_size,
-			line_height,
-			max_width,
-			measured_width,
-			measured_height,
-			glyph_count,
+			font_count: font_ids.len(),
 			runs,
 			clusters,
-			fonts_seen,
 			warnings,
-			dump,
 			draw_canvas_text: render_mode.draw_canvas_text(),
-			draw_outlines: render_mode.draw_outlines(),
+			draw_outlines,
 			canvas_wraps: !matches!(wrapping, WrapChoice::None),
 		}
 	}
@@ -263,7 +253,11 @@ impl LayoutScene {
 	}
 
 	pub(crate) fn cluster_index_for_range(&self, range: &Range<usize>) -> Option<usize> {
-		self.clusters.iter().position(|cluster| cluster.byte_range == *range)
+		let index = self
+			.clusters
+			.binary_search_by_key(&range.start, |cluster| cluster.byte_range.start)
+			.ok()?;
+		(self.clusters[index].byte_range == *range).then_some(index)
 	}
 
 	pub(crate) fn cluster_index_for_target(&self, target: CanvasTarget) -> Option<usize> {
@@ -278,18 +272,33 @@ impl LayoutScene {
 	}
 
 	pub(crate) fn cluster_at_or_after(&self, byte: usize) -> Option<usize> {
-		self.clusters
-			.iter()
-			.position(|cluster| cluster.byte_range.start >= byte || is_inside(cluster.byte_range.clone(), byte))
+		let index = self.clusters.partition_point(|cluster| cluster.byte_range.end <= byte);
+		(index < self.clusters.len()).then_some(index)
 	}
 
 	pub(crate) fn cluster_before(&self, byte: usize) -> Option<usize> {
 		self.clusters
-			.iter()
-			.enumerate()
-			.filter(|(_, cluster)| cluster.byte_range.end <= byte || is_inside(cluster.byte_range.clone(), byte))
-			.map(|(index, _)| index)
-			.last()
+			.partition_point(|cluster| cluster.byte_range.start < byte)
+			.checked_sub(1)
+	}
+
+	pub(crate) fn dump_text(&self) -> String {
+		let fonts_seen = collect_fonts_seen(&self.runs);
+		build_dump(
+			&self.text,
+			self.font_choice,
+			self.shaping,
+			self.wrapping,
+			self.render_mode,
+			self.font_size,
+			self.line_height,
+			self.max_width,
+			self.measured_width,
+			self.measured_height,
+			self.glyph_count,
+			&fonts_seen,
+			&self.runs,
+		)
 	}
 
 	pub(crate) fn first_cluster_in_run(&self, run_index: usize) -> Option<usize> {
@@ -545,6 +554,18 @@ fn build_clusters(text: &str, line_index: usize, run_index: usize, glyphs: &[Gly
 	clusters
 }
 
+fn collect_fonts_seen(runs: &[RunInfo]) -> Vec<String> {
+	let mut fonts_seen = Vec::new();
+
+	for glyph in runs.iter().flat_map(|run| run.glyphs.iter()) {
+		if !fonts_seen.iter().any(|existing| existing == &glyph.font_name) {
+			fonts_seen.push(glyph.font_name.clone());
+		}
+	}
+
+	fonts_seen
+}
+
 fn nearest_run<'a>(runs: impl Iterator<Item = (usize, &'a RunInfo)>, y: f32) -> Option<usize> {
 	runs.min_by(|(_, a), (_, b)| {
 		let a_center = a.line_top + (a.line_height * 0.5);
@@ -552,10 +573,6 @@ fn nearest_run<'a>(runs: impl Iterator<Item = (usize, &'a RunInfo)>, y: f32) -> 
 		(a_center - y).abs().total_cmp(&(b_center - y).abs())
 	})
 	.map(|(index, _)| index)
-}
-
-fn is_inside(range: Range<usize>, byte: usize) -> bool {
-	range.start < byte && byte < range.end
 }
 
 fn to_attributes(font: Font) -> Attrs<'static> {

@@ -465,14 +465,18 @@ mod tests {
 
 		LayoutScene {
 			text: "abc\ndef".to_string(),
+			font_choice: FontChoice::JetBrainsMono,
 			font: Font::MONOSPACE,
 			shaping: crate::types::ShapingChoice::Basic,
+			wrapping: WrapChoice::Word,
+			render_mode: RenderMode::CanvasAndOutlines,
 			font_size: 16.0,
 			line_height: 20.0,
 			max_width: 100.0,
 			measured_width: 100.0,
 			measured_height: 40.0,
 			glyph_count: cluster_infos.len(),
+			font_count: 1,
 			runs: vec![
 				RunInfo {
 					line_index: 0,
@@ -497,9 +501,7 @@ mod tests {
 				},
 			],
 			clusters: cluster_infos,
-			fonts_seen: vec!["JetBrains Mono".to_string()],
 			warnings: Vec::new(),
-			dump: String::new(),
 			draw_canvas_text: true,
 			draw_outlines: false,
 			canvas_wraps: true,

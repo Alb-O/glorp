@@ -36,6 +36,7 @@ pub(crate) struct Playground {
 	hovered_target: Option<crate::types::CanvasTarget>,
 	selected_target: Option<crate::types::CanvasTarget>,
 	scene: LayoutScene,
+	scene_dump: String,
 	font_system: cosmic_text::FontSystem,
 	chrome: pane_grid::State<ShellPane>,
 	perf: PerfMonitor,
@@ -95,6 +96,7 @@ impl Playground {
 				hovered_target: None,
 				selected_target: None,
 				scene,
+				scene_dump: String::new(),
 				font_system,
 				chrome,
 				perf,
@@ -160,6 +162,9 @@ impl Playground {
 			}
 			Message::SelectSidebarTab(tab) => {
 				self.active_sidebar_tab = tab;
+				if matches!(tab, SidebarTab::Dump) {
+					self.refresh_scene_dump();
+				}
 			}
 			Message::PerfTick(_now) => {}
 			Message::CanvasHovered(target) => {
@@ -254,7 +259,7 @@ impl Playground {
 				warnings: &self.scene.warnings,
 				interaction_details: self.interaction_details(),
 			}),
-			SidebarTab::Dump => view_dump_tab(&self.scene.dump),
+			SidebarTab::Dump => view_dump_tab(&self.scene_dump),
 			SidebarTab::Perf => view_perf_tab(PerfTabProps {
 				overview: self
 					.perf
@@ -283,8 +288,17 @@ impl Playground {
 		self.editor.sync_with_scene(&self.scene);
 		self.hovered_target = None;
 		self.sync_selected_target();
+		if matches!(self.active_sidebar_tab, SidebarTab::Dump) {
+			self.refresh_scene_dump();
+		} else {
+			self.scene_dump.clear();
+		}
 		self.scene_revision += 1;
 		self.perf.record_scene_build(started.elapsed());
+	}
+
+	fn refresh_scene_dump(&mut self) {
+		self.scene_dump = self.scene.dump_text();
 	}
 
 	fn apply_editor_command(&mut self, command: crate::editor::EditorCommand, mark_custom: bool) {
