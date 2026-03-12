@@ -33,15 +33,15 @@ The old main cost center was rebuilding both the layout buffer and the derived s
 
 Status: largely addressed. Text edits now mutate a retained `cosmic-text::Buffer` in place, but the app still rebuilds the full inspectable `LayoutScene` snapshot after each edit.
 
-## 2. Scroll Still Invalidates Overlay Geometry
+## 2. Scroll Still Invalidates Cached Canvas Geometry
 
 Source: `src/canvas_view.rs`, `src/text_view.rs`, Cargo cache `iced_widget-0.14.2/src/text_editor.rs`, `iced_wgpu-0.14.0/src/text.rs`
 
-The overlay canvas still clears its geometry cache whenever rounded scroll changes in `src/canvas_view.rs:138`, because baselines, hitboxes, and outlines are still drawn in canvas space.
+The canvas cache still clears whenever rounded scroll changes in `src/canvas_view.rs:138`, because the cached inspection geometry is built in scrolled canvas space.
 
-The document text no longer pays that cost. It now renders through an `iced` paragraph layer that keeps the text buffer stable and passes clip bounds to the renderer on scroll, matching the upstream text-widget path in `iced_wgpu-0.14.0/src/text.rs:617`.
+The document text no longer pays that cost. It now renders through a retained `iced` paragraph layer in `src/text_view.rs`, which keeps paragraph state outside the canvas cache and just changes origin/clip on scroll, matching the upstream text-widget path in `iced_wgpu-0.14.0/src/text.rs:617`.
 
-Status: partially addressed. The expensive text layer is scroll-decoupled now, but the inspection overlay still invalidates on scroll because it remains a canvas pass.
+Status: partially addressed. The expensive text layer is scroll-decoupled now, but the cached canvas inspection pass still invalidates on scroll because its geometry is still keyed by scroll position.
 
 ## 3. The `canvas::Text` Bottleneck Is Removed
 
