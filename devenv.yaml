@@ -24,9 +24,6 @@ inputs:
   dvnv-instructions-composer:
     url: github:Alb-O/dvnv-instructions-composer
     flake: false
-  agent-scripts:
-    url: github:Alb-O/agent-scripts
-    flake: false
   dvnv-rust-env:
     url: github:Alb-O/dvnv-rust-env
     flake: false
@@ -38,6 +35,5 @@ inputs:
     flake: false
 imports:
   - dvnv-instructions-composer
-  - agent-scripts
   - dvnv-docs-env
   - dvnv-local-inputs
