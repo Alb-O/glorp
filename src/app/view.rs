@@ -3,7 +3,7 @@ use iced::{Element, Length};
 
 use std::fmt::Write as _;
 
-use crate::types::{Message, SidebarTab};
+use crate::types::{Message, ShellMessage, SidebarTab};
 use crate::ui::{
 	CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps, is_stacked_shell, view_canvas_pane,
 	view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar, view_stacked_shell,
@@ -31,7 +31,7 @@ impl Playground {
 			.height(Length::Fill)
 			.spacing(12)
 			.min_size(220)
-			.on_resize(12, Message::PaneResized);
+			.on_resize(12, |event| Message::Shell(ShellMessage::PaneResized(event)));
 
 			iced::widget::container(grid)
 				.padding(16)
@@ -69,7 +69,7 @@ impl Playground {
 			editor: self.session.view_state(),
 			scene_revision: self.viewport.scene_revision,
 			scroll: self.viewport.canvas_scroll,
-			perf: self.perf.bridge(),
+			perf: self.perf.sink(),
 			stacked,
 		})
 	}
@@ -92,13 +92,9 @@ impl Playground {
 				interaction_details: self.interaction_details(),
 			}),
 			SidebarTab::Perf => view_perf_tab(PerfTabProps {
-				overview: self
+				dashboard: self
 					.perf
-					.overview_text(self.session.scene(), self.session.mode(), self.session.text().len()),
-				graphs: self.perf.graphs(),
-				frame_pacing: self.perf.frame_pacing_text(),
-				hot_paths: self.perf.hot_paths_text(),
-				recent_activity: self.perf.recent_activity_text(),
+					.dashboard(self.session.scene(), self.session.mode(), self.session.text().len()),
 			}),
 		}
 	}

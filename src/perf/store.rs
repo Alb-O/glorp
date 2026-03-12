@@ -1,0 +1,249 @@
+use std::collections::VecDeque;
+use std::time::{Duration, Instant};
+
+use super::bridge::CanvasPerfSink;
+
+pub(super) const HISTORY_LIMIT: usize = 180;
+pub(super) const RECENT_LIMIT: usize = 8;
+pub(super) const FRAME_BUDGET_MS: f32 = 16.7;
+pub(super) const SEVERE_FRAME_MS: f32 = 33.3;
+pub(super) const METRIC_WARNING_MS: f32 = 8.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum MetricKind {
+	EditorCommand,
+	EditorApply,
+	SceneBuild,
+	ResizeReflow,
+	CanvasUpdate,
+	CanvasStaticBuild,
+	CanvasOverlayDraw,
+	CanvasDraw,
+}
+
+impl MetricKind {
+	pub(super) const ALL: [Self; 8] = [
+		Self::EditorCommand,
+		Self::EditorApply,
+		Self::SceneBuild,
+		Self::ResizeReflow,
+		Self::CanvasUpdate,
+		Self::CanvasStaticBuild,
+		Self::CanvasOverlayDraw,
+		Self::CanvasDraw,
+	];
+
+	pub(super) fn label(self) -> &'static str {
+		match self {
+			Self::EditorCommand => "editor.command",
+			Self::EditorApply => "editor.apply",
+			Self::SceneBuild => "scene.build",
+			Self::ResizeReflow => "resize.reflow",
+			Self::CanvasUpdate => "canvas.update",
+			Self::CanvasStaticBuild => "canvas.static",
+			Self::CanvasOverlayDraw => "canvas.overlay",
+			Self::CanvasDraw => "canvas.draw",
+		}
+	}
+
+	fn index(self) -> usize {
+		match self {
+			Self::EditorCommand => 0,
+			Self::EditorApply => 1,
+			Self::SceneBuild => 2,
+			Self::ResizeReflow => 3,
+			Self::CanvasUpdate => 4,
+			Self::CanvasStaticBuild => 5,
+			Self::CanvasOverlayDraw => 6,
+			Self::CanvasDraw => 7,
+		}
+	}
+}
+
+#[derive(Debug, Clone, Default)]
+pub(super) struct MetricSeries {
+	pub(super) window: VecDeque<f32>,
+	pub(super) total_samples: u64,
+	pub(super) over_warning: u64,
+	pub(super) over_budget: u64,
+}
+
+impl MetricSeries {
+	pub(super) fn record(&mut self, duration: Duration) {
+		let sample_ms = duration.as_secs_f32() * 1000.0;
+		push_bounded(&mut self.window, sample_ms, HISTORY_LIMIT);
+		self.total_samples += 1;
+		self.over_warning += u64::from(sample_ms >= METRIC_WARNING_MS);
+		self.over_budget += u64::from(sample_ms >= FRAME_BUDGET_MS);
+	}
+}
+
+#[derive(Debug, Default)]
+pub(super) struct FrameSeries {
+	pub(super) intervals_ms: VecDeque<f32>,
+	last_draw_at: Option<Instant>,
+	pub(super) total_draws: u64,
+	pub(super) over_budget: u64,
+	pub(super) severe_jank: u64,
+}
+
+impl FrameSeries {
+	pub(super) fn record_draw(&mut self, at: Instant) {
+		if let Some(previous) = self.last_draw_at.replace(at) {
+			let interval_ms = (at - previous).as_secs_f32() * 1000.0;
+			push_bounded(&mut self.intervals_ms, interval_ms, HISTORY_LIMIT);
+			self.over_budget += u64::from(interval_ms >= FRAME_BUDGET_MS);
+			self.severe_jank += u64::from(interval_ms >= SEVERE_FRAME_MS);
+		}
+
+		self.total_draws += 1;
+	}
+}
+
+#[derive(Debug, Default)]
+pub(super) struct CacheStats {
+	pub(super) hits: u64,
+	pub(super) misses: u64,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct PerfStore {
+	pub(super) metrics: [MetricSeries; MetricKind::ALL.len()],
+	pub(super) frames: FrameSeries,
+	pub(super) cache: CacheStats,
+}
+
+impl PerfStore {
+	pub(super) fn record_editor_apply(&mut self, duration: Duration) {
+		self.record(MetricKind::EditorApply, duration);
+	}
+
+	pub(super) fn record_editor_command(&mut self, duration: Duration) {
+		self.record(MetricKind::EditorCommand, duration);
+	}
+
+	pub(super) fn record_scene_build(&mut self, duration: Duration) {
+		self.record(MetricKind::SceneBuild, duration);
+	}
+
+	pub(super) fn record_resize_reflow(&mut self, duration: Duration) {
+		self.record(MetricKind::ResizeReflow, duration);
+	}
+
+	pub(super) fn flush_canvas_metrics(&mut self, sink: &CanvasPerfSink) {
+		let pending = sink.drain();
+
+		for duration in pending.canvas_update {
+			self.record(MetricKind::CanvasUpdate, duration);
+		}
+
+		for sample in pending.canvas_draw {
+			self.record(MetricKind::CanvasDraw, sample.total);
+			if let Some(duration) = sample.static_build {
+				self.record(MetricKind::CanvasStaticBuild, duration);
+			}
+			self.record(MetricKind::CanvasOverlayDraw, sample.overlay);
+			self.frames.record_draw(sample.drawn_at);
+
+			if sample.cache_miss {
+				self.cache.misses += 1;
+			} else {
+				self.cache.hits += 1;
+			}
+		}
+	}
+
+	fn record(&mut self, kind: MetricKind, duration: Duration) {
+		self.metrics[kind.index()].record(duration);
+	}
+}
+
+pub(super) fn average_ms(values: impl Iterator<Item = f32>) -> f32 {
+	let mut total = 0.0;
+	let mut count = 0.0;
+
+	for value in values {
+		total += value;
+		count += 1.0;
+	}
+
+	if count > 0.0 { total / count } else { 0.0 }
+}
+
+pub(super) fn percentile_ms(values: &VecDeque<f32>, percentile: f32) -> f32 {
+	if values.is_empty() {
+		return 0.0;
+	}
+
+	let mut sorted = values.iter().copied().collect::<Vec<_>>();
+	sorted.sort_by(f32::total_cmp);
+
+	let index = ((sorted.len() - 1) as f32 * percentile).round() as usize;
+	sorted[index]
+}
+
+fn push_bounded<T>(items: &mut VecDeque<T>, value: T, limit: usize) {
+	if items.len() == limit {
+		let _ = items.pop_front();
+	}
+
+	items.push_back(value);
+}
+
+#[cfg(test)]
+mod tests {
+	use std::time::{Duration, Instant};
+
+	use super::{FRAME_BUDGET_MS, FrameSeries, MetricSeries, PerfStore, percentile_ms};
+	use crate::perf::CanvasPerfSink;
+
+	#[test]
+	fn metric_series_discards_evicted_spikes_from_the_window() {
+		let mut series = MetricSeries::default();
+
+		series.record(Duration::from_millis(99));
+		for _ in 0..super::HISTORY_LIMIT {
+			series.record(Duration::from_micros(500));
+		}
+
+		assert!(series.window.iter().all(|sample| *sample < 2.0));
+		assert_eq!(series.total_samples, (super::HISTORY_LIMIT + 1) as u64);
+		assert_eq!(series.over_budget, 1);
+	}
+
+	#[test]
+	fn percentile_returns_zero_for_empty_series() {
+		assert_eq!(percentile_ms(&std::collections::VecDeque::new(), 0.95), 0.0);
+	}
+
+	#[test]
+	fn frame_series_tracks_over_budget_intervals() {
+		let mut frames = FrameSeries::default();
+		let started = Instant::now();
+
+		frames.record_draw(started);
+		frames.record_draw(started + Duration::from_secs_f32((FRAME_BUDGET_MS + 2.0) / 1000.0));
+
+		assert_eq!(frames.total_draws, 2);
+		assert_eq!(frames.over_budget, 1);
+	}
+
+	#[test]
+	fn store_flushes_bridge_samples_into_metrics() {
+		let mut store = PerfStore::default();
+		let sink = CanvasPerfSink::default();
+
+		sink.record_canvas_update(Duration::from_millis(3));
+		sink.record_canvas_draw(
+			Duration::from_millis(5),
+			Some(Duration::from_millis(2)),
+			Duration::from_millis(1),
+			false,
+		);
+		store.flush_canvas_metrics(&sink);
+
+		assert_eq!(store.metrics[super::MetricKind::CanvasUpdate.index()].total_samples, 1);
+		assert_eq!(store.metrics[super::MetricKind::CanvasDraw.index()].total_samples, 1);
+		assert_eq!(store.cache.hits, 1);
+	}
+}

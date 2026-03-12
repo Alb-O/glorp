@@ -1,33 +1,44 @@
 use iced::widget::{canvas, column, container, row, text};
 use iced::{Color, Element, Font, Length, Pixels, Point, Rectangle, Size, Theme};
 
-use crate::perf::PerfGraphSeries;
+use crate::perf::{PerfDashboard, PerfGraphSeries};
 use crate::types::Message;
 use crate::ui::{panel_scrollable, panel_style};
 
 /// Props for the performance inspection tab.
 pub(crate) struct PerfTabProps {
-	pub(crate) overview: String,
-	pub(crate) graphs: Vec<PerfGraphSeries>,
-	pub(crate) frame_pacing: String,
-	pub(crate) hot_paths: String,
-	pub(crate) recent_activity: String,
+	pub(crate) dashboard: PerfDashboard,
 }
 
 pub(crate) fn view_perf_tab(props: PerfTabProps) -> Element<'static, Message> {
+	let dashboard = props.dashboard;
 	panel_scrollable(
 		container(
 			column![
 				text("Overview").size(18),
-				view_perf_panel(props.overview),
+				view_perf_panel(dashboard.overview.text()),
 				text("Live graphs").size(18),
-				view_graph_grid(props.graphs),
+				view_graph_grid(dashboard.graphs),
 				text("Frame pacing").size(18),
-				view_perf_panel(props.frame_pacing),
+				view_perf_panel(dashboard.frame_pacing.text()),
 				text("Hot paths").size(18),
-				view_perf_panel(props.hot_paths),
+				view_perf_panel(
+					dashboard
+						.hot_paths
+						.into_iter()
+						.map(|summary| summary.text())
+						.collect::<Vec<_>>()
+						.join("\n"),
+				),
 				text("Recent activity").size(18),
-				view_perf_panel(props.recent_activity),
+				view_perf_panel(
+					dashboard
+						.recent_activity
+						.into_iter()
+						.map(|activity| activity.text())
+						.collect::<Vec<_>>()
+						.join("\n"),
+				),
 			]
 			.spacing(12),
 		)
@@ -270,29 +281,35 @@ fn graph_points(bounds: Rectangle, graph: &PerfGraphSeries) -> Vec<Point> {
 }
 
 fn sample_y(bounds: Rectangle, sample_ms: f32, ceiling_ms: f32) -> f32 {
-	let normalized = (sample_ms / ceiling_ms.max(0.1)).clamp(0.0, 1.0);
-	bounds.y + bounds.height - normalized * bounds.height
+	let normalized = 1.0 - (sample_ms / ceiling_ms.max(0.001)).clamp(0.0, 1.0);
+	bounds.y + bounds.height * normalized
 }
 
 fn spike_color(sample_ms: f32, warning_ms: Option<f32>, severe_ms: Option<f32>) -> Color {
 	if severe_ms.is_some_and(|threshold| sample_ms >= threshold) {
-		Color::from_rgb(1.0, 0.35, 0.35)
-	} else if warning_ms.is_some_and(|threshold| sample_ms >= threshold) {
-		Color::from_rgb(1.0, 0.8, 0.2)
-	} else {
-		Color::from_rgb(0.35, 0.82, 1.0)
+		return Color::from_rgb(1.0, 0.42, 0.42);
+	}
+
+	if warning_ms.is_some_and(|threshold| sample_ms >= threshold) {
+		return Color::from_rgb(1.0, 0.86, 0.35);
+	}
+
+	Color::from_rgb(0.35, 0.82, 1.0)
+}
+
+fn faded_text(color: Color, alpha: f32) -> Color {
+	Color {
+		a: color.a * alpha,
+		..color
 	}
 }
 
-fn faded_text(mut color: Color, alpha: f32) -> Color {
-	color.a = alpha;
-	color
-}
-
 fn format_duration_label(ms: f32) -> String {
-	if ms < 1.0 {
-		format!("{:>5.0} us", ms * 1000.0)
+	if ms >= 100.0 {
+		format!("{ms:>6.0} ms")
+	} else if ms >= 10.0 {
+		format!("{ms:>6.1} ms")
 	} else {
-		format!("{:>5.2} ms", ms)
+		format!("{ms:>6.2} ms")
 	}
 }
