@@ -49,7 +49,6 @@ impl Playground {
 	pub(crate) fn new() -> (Self, Task<Message>) {
 		let mut font_system = make_font_system();
 		let preset = SamplePreset::Tall;
-		let editor = EditorBuffer::new(preset.text());
 		let font = FontChoice::JetBrainsMono;
 		let shaping = ShapingChoice::Advanced;
 		let wrapping = WrapChoice::Word;
@@ -61,26 +60,23 @@ impl Playground {
 		let show_hitboxes = false;
 		let active_sidebar_tab = SidebarTab::Controls;
 		let perf = PerfMonitor::default();
+		let config = scene_config(
+			font,
+			shaping,
+			wrapping,
+			render_mode,
+			font_size,
+			line_height,
+			layout_width,
+		);
 		let chrome = pane_grid::State::with_configuration(pane_grid::Configuration::Split {
 			axis: pane_grid::Axis::Vertical,
 			ratio: default_sidebar_ratio(),
 			a: Box::new(pane_grid::Configuration::Pane(ShellPane::Sidebar)),
 			b: Box::new(pane_grid::Configuration::Pane(ShellPane::Canvas)),
 		});
-		let scene = LayoutSceneModel::new(
-			&mut font_system,
-			editor.text(),
-			scene_config(
-				font,
-				shaping,
-				wrapping,
-				render_mode,
-				font_size,
-				line_height,
-				layout_width,
-			),
-		);
-		let mut editor = editor;
+		let mut editor = EditorBuffer::new(&mut font_system, preset.text(), config);
+		let scene = LayoutSceneModel::new(&mut font_system, editor.text(), editor.buffer(), config);
 		editor.sync_with_scene(scene.scene());
 
 		(
@@ -124,7 +120,8 @@ impl Playground {
 			Message::LoadPreset(preset) => {
 				self.preset = preset;
 				if !matches!(preset, SamplePreset::Custom) {
-					self.editor.reset(preset.text());
+					let config = self.current_scene_config();
+					self.editor.reset(&mut self.font_system, preset.text(), config);
 					self.refresh_scene();
 				}
 			}
@@ -284,7 +281,9 @@ impl Playground {
 	fn refresh_scene(&mut self) {
 		let started = Instant::now();
 		let config = self.current_scene_config();
-		self.scene.rebuild(&mut self.font_system, self.editor.text(), config);
+		self.editor.sync_buffer_config(&mut self.font_system, config);
+		self.scene
+			.rebuild(&mut self.font_system, self.editor.text(), self.editor.buffer(), config);
 		self.finish_scene_refresh();
 		self.perf.record_scene_build(started.elapsed());
 	}
@@ -296,7 +295,7 @@ impl Playground {
 	fn apply_editor_command(&mut self, command: crate::editor::EditorCommand, mark_custom: bool) {
 		let command_started = Instant::now();
 		let apply_started = Instant::now();
-		let result = self.editor.apply(command, self.scene.scene());
+		let result = self.editor.apply(&mut self.font_system, command, self.scene.scene());
 		self.perf.record_editor_apply(apply_started.elapsed());
 
 		if mark_custom {
@@ -353,16 +352,12 @@ impl Playground {
 		details
 	}
 
-	fn refresh_scene_after_edit(&mut self, result: ApplyResult) {
+	fn refresh_scene_after_edit(&mut self, _result: ApplyResult) {
 		let started = Instant::now();
 		let config = self.current_scene_config();
-
-		if let Some(edit) = result.text_edit.as_ref() {
-			self.scene
-				.apply_text_edit(&mut self.font_system, edit, self.editor.text(), config);
-		} else {
-			self.scene.rebuild(&mut self.font_system, self.editor.text(), config);
-		}
+		self.editor.sync_buffer_config(&mut self.font_system, config);
+		self.scene
+			.rebuild(&mut self.font_system, self.editor.text(), self.editor.buffer(), config);
 
 		self.finish_scene_refresh();
 		self.perf.record_scene_build(started.elapsed());

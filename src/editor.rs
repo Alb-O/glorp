@@ -1,9 +1,11 @@
-use std::fmt::{self, Display};
-use std::ops::Range;
-
+use cosmic_text::{Buffer, Cursor, Edit as _, Editor as CosmicEditor, FontSystem};
 use iced::Point;
 
-use crate::scene::LayoutScene;
+use std::fmt::{self, Display};
+use std::ops::Range;
+use std::sync::Arc;
+
+use crate::scene::{LayoutScene, SceneConfig, build_buffer};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EditorMode {
@@ -30,6 +32,8 @@ pub(crate) struct EditorViewState {
 #[derive(Debug, Clone)]
 pub(crate) struct EditorBuffer {
 	text: String,
+	buffer: Arc<Buffer>,
+	config: SceneConfig,
 	mode: EditorMode,
 	selection: Option<Range<usize>>,
 	caret: usize,
@@ -67,9 +71,13 @@ pub(crate) struct ApplyResult {
 }
 
 impl EditorBuffer {
-	pub(crate) fn new(text: impl Into<String>) -> Self {
+	pub(crate) fn new(font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) -> Self {
+		let text = text.into();
+
 		Self {
-			text: text.into(),
+			buffer: Arc::new(build_buffer(font_system, &text, config)),
+			text,
+			config,
 			mode: EditorMode::Normal,
 			selection: None,
 			caret: 0,
@@ -85,8 +93,23 @@ impl EditorBuffer {
 		self.mode
 	}
 
-	pub(crate) fn reset(&mut self, text: impl Into<String>) {
+	pub(crate) fn buffer(&self) -> Arc<Buffer> {
+		self.buffer.clone()
+	}
+
+	pub(crate) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, config: SceneConfig) {
+		if self.config == config {
+			return;
+		}
+
+		self.config = config;
+		self.buffer = Arc::new(build_buffer(font_system, &self.text, config));
+	}
+
+	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
 		self.text = text.into();
+		self.config = config;
+		self.buffer = Arc::new(build_buffer(font_system, &self.text, config));
 		self.mode = EditorMode::Normal;
 		self.selection = None;
 		self.caret = 0;
@@ -101,7 +124,9 @@ impl EditorBuffer {
 		}
 	}
 
-	pub(crate) fn apply(&mut self, command: EditorCommand, scene: &LayoutScene) -> ApplyResult {
+	pub(crate) fn apply(
+		&mut self, font_system: &mut FontSystem, command: EditorCommand, scene: &LayoutScene,
+	) -> ApplyResult {
 		match command {
 			EditorCommand::SelectClusterAt(point) => {
 				if let Some(cluster_index) = scene.hit_test_cluster(point) {
@@ -189,10 +214,10 @@ impl EditorBuffer {
 					text_edit: None,
 				}
 			}
-			EditorCommand::Backspace => self.backspace(scene),
-			EditorCommand::DeleteForward => self.delete_forward(scene),
-			EditorCommand::DeleteSelection => self.delete_selection(scene),
-			EditorCommand::InsertText(text) => self.insert_text(text),
+			EditorCommand::Backspace => self.backspace(font_system, scene),
+			EditorCommand::DeleteForward => self.delete_forward(font_system, scene),
+			EditorCommand::DeleteSelection => self.delete_selection(font_system, scene),
+			EditorCommand::InsertText(text) => self.insert_text(font_system, text),
 		}
 	}
 
@@ -370,7 +395,7 @@ impl EditorBuffer {
 			.map(|cluster| cluster.byte_range.clone());
 	}
 
-	fn delete_selection(&mut self, scene: &LayoutScene) -> ApplyResult {
+	fn delete_selection(&mut self, font_system: &mut FontSystem, scene: &LayoutScene) -> ApplyResult {
 		let Some(selection) = self.current_selection(scene).map(|cluster| cluster.byte_range.clone()) else {
 			return ApplyResult {
 				changed: false,
@@ -378,6 +403,11 @@ impl EditorBuffer {
 			};
 		};
 
+		let text_edit = TextEdit {
+			range: selection.clone(),
+			inserted: String::new(),
+		};
+		self.apply_buffer_edit(font_system, &text_edit);
 		self.text.replace_range(selection.clone(), "");
 		self.mode = EditorMode::Normal;
 		self.selection = scene
@@ -389,16 +419,13 @@ impl EditorBuffer {
 		self.preferred_x = None;
 		ApplyResult {
 			changed: true,
-			text_edit: Some(TextEdit {
-				range: selection,
-				inserted: String::new(),
-			}),
+			text_edit: Some(text_edit),
 		}
 	}
 
-	fn backspace(&mut self, scene: &LayoutScene) -> ApplyResult {
+	fn backspace(&mut self, font_system: &mut FontSystem, scene: &LayoutScene) -> ApplyResult {
 		match self.mode {
-			EditorMode::Normal => self.delete_selection(scene),
+			EditorMode::Normal => self.delete_selection(font_system, scene),
 			EditorMode::Insert => {
 				let Some(previous) = previous_char_boundary(&self.text, self.caret) else {
 					return ApplyResult {
@@ -408,23 +435,25 @@ impl EditorBuffer {
 				};
 
 				let range = previous..self.caret;
+				let text_edit = TextEdit {
+					range: range.clone(),
+					inserted: String::new(),
+				};
+				self.apply_buffer_edit(font_system, &text_edit);
 				self.text.replace_range(previous..self.caret, "");
 				self.caret = previous;
 				self.preferred_x = None;
 				ApplyResult {
 					changed: true,
-					text_edit: Some(TextEdit {
-						range,
-						inserted: String::new(),
-					}),
+					text_edit: Some(text_edit),
 				}
 			}
 		}
 	}
 
-	fn delete_forward(&mut self, scene: &LayoutScene) -> ApplyResult {
+	fn delete_forward(&mut self, font_system: &mut FontSystem, scene: &LayoutScene) -> ApplyResult {
 		match self.mode {
-			EditorMode::Normal => self.delete_selection(scene),
+			EditorMode::Normal => self.delete_selection(font_system, scene),
 			EditorMode::Insert => {
 				let Some(next) = next_char_boundary(&self.text, self.caret) else {
 					return ApplyResult {
@@ -434,20 +463,22 @@ impl EditorBuffer {
 				};
 
 				let range = self.caret..next;
+				let text_edit = TextEdit {
+					range: range.clone(),
+					inserted: String::new(),
+				};
+				self.apply_buffer_edit(font_system, &text_edit);
 				self.text.replace_range(self.caret..next, "");
 				self.preferred_x = None;
 				ApplyResult {
 					changed: true,
-					text_edit: Some(TextEdit {
-						range,
-						inserted: String::new(),
-					}),
+					text_edit: Some(text_edit),
 				}
 			}
 		}
 	}
 
-	fn insert_text(&mut self, text: String) -> ApplyResult {
+	fn insert_text(&mut self, font_system: &mut FontSystem, text: String) -> ApplyResult {
 		if text.is_empty() {
 			return ApplyResult {
 				changed: false,
@@ -461,13 +492,27 @@ impl EditorBuffer {
 
 		self.caret = clamp_char_boundary(&self.text, self.caret);
 		let range = self.caret..self.caret;
-		self.text.insert_str(self.caret, &text);
-		self.caret += text.len();
+		let text_edit = TextEdit {
+			range: range.clone(),
+			inserted: text,
+		};
+		self.apply_buffer_edit(font_system, &text_edit);
+		self.text.insert_str(self.caret, &text_edit.inserted);
+		self.caret += text_edit.inserted.len();
 		self.preferred_x = None;
 		ApplyResult {
 			changed: true,
-			text_edit: Some(TextEdit { range, inserted: text }),
+			text_edit: Some(text_edit),
 		}
+	}
+
+	pub(crate) fn buffer_text(&self) -> String {
+		let mut text = String::new();
+		for line in &self.buffer.lines {
+			text.push_str(line.text());
+			text.push_str(line.ending().as_str());
+		}
+		text
 	}
 
 	fn select_cluster(&mut self, scene: &LayoutScene, cluster_index: usize) {
@@ -489,6 +534,24 @@ impl EditorBuffer {
 
 	fn current_selection<'a>(&self, scene: &'a LayoutScene) -> Option<&'a crate::scene::ClusterInfo> {
 		self.selection_index(scene).and_then(|index| scene.cluster(index))
+	}
+
+	fn apply_buffer_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
+		let start = byte_to_cursor(&self.text, edit.range.start);
+		let end = byte_to_cursor(&self.text, edit.range.end);
+		let buffer = Arc::make_mut(&mut self.buffer);
+		let mut editor = CosmicEditor::new(&mut *buffer);
+
+		editor.set_cursor(start);
+		if start != end {
+			editor.delete_range(start, end);
+			editor.set_cursor(start);
+		}
+		if !edit.inserted.is_empty() {
+			let _ = editor.insert_at(start, &edit.inserted, None);
+		}
+
+		buffer.shape_until_scroll(font_system, false);
 	}
 }
 
@@ -518,10 +581,34 @@ fn next_char_boundary(text: &str, byte: usize) -> Option<usize> {
 		.or_else(|| (byte < text.len()).then_some(text.len()))
 }
 
+fn byte_to_cursor(text: &str, byte: usize) -> Cursor {
+	let mut clamped = byte.min(text.len());
+	while clamped > 0 && !text.is_char_boundary(clamped) {
+		clamped -= 1;
+	}
+
+	let line_offsets = line_byte_offsets(text);
+	let line = line_offsets
+		.partition_point(|offset| *offset <= clamped)
+		.saturating_sub(1);
+	Cursor::new(line, clamped - line_offsets[line])
+}
+
+fn line_byte_offsets(text: &str) -> Vec<usize> {
+	let mut offsets = vec![0];
+	for (index, ch) in text.char_indices() {
+		if ch == '\n' {
+			offsets.push(index + ch.len_utf8());
+		}
+	}
+
+	offsets
+}
+
 #[cfg(test)]
 mod tests {
 	use super::{EditorBuffer, EditorCommand, EditorMode};
-	use crate::scene::{CaretMetrics, ClusterInfo, LayoutScene, RunInfo, make_font_system};
+	use crate::scene::{CaretMetrics, ClusterInfo, LayoutScene, RunInfo, make_font_system, scene_config};
 	use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
 	use std::sync::Arc;
 
@@ -581,44 +668,60 @@ mod tests {
 		)
 	}
 
+	fn editor(text: &str) -> (cosmic_text::FontSystem, EditorBuffer) {
+		let mut font_system = make_font_system();
+		let config = scene_config(
+			FontChoice::SansSerif,
+			ShapingChoice::Advanced,
+			WrapChoice::Word,
+			RenderMode::CanvasOnly,
+			24.0,
+			32.0,
+			400.0,
+		);
+		let editor = EditorBuffer::new(&mut font_system, text, config);
+		(font_system, editor)
+	}
+
 	#[test]
 	fn normal_mode_moves_by_visual_cluster() {
 		let scene = scene(&[(0, 0, 1, 0.0), (0, 1, 2, 10.0), (1, 4, 5, 0.0)]);
-		let mut editor = EditorBuffer::new("ab\nd");
+		let (mut font_system, mut editor) = editor("ab\nd");
 		editor.sync_with_scene(&scene);
 
 		assert_eq!(editor.view_state().selection, Some(0..1));
 
-		editor.apply(EditorCommand::MoveRight, &scene);
+		editor.apply(&mut font_system, EditorCommand::MoveRight, &scene);
 		assert_eq!(editor.view_state().selection, Some(1..2));
 
-		editor.apply(EditorCommand::MoveDown, &scene);
+		editor.apply(&mut font_system, EditorCommand::MoveDown, &scene);
 		assert_eq!(editor.view_state().selection, Some(4..5));
 	}
 
 	#[test]
 	fn insert_mode_backspace_keeps_caret_on_char_boundaries() {
 		let scene = scene(&[(0, 0, 1, 0.0), (0, 1, 3, 10.0)]);
-		let mut editor = EditorBuffer::new("aé");
+		let (mut font_system, mut editor) = editor("aé");
 		editor.sync_with_scene(&scene);
 
-		editor.apply(EditorCommand::EnterInsertAfter, &scene);
+		editor.apply(&mut font_system, EditorCommand::EnterInsertAfter, &scene);
 		assert_eq!(editor.view_state().mode, EditorMode::Insert);
 
-		editor.apply(EditorCommand::Backspace, &scene);
+		editor.apply(&mut font_system, EditorCommand::Backspace, &scene);
 		assert_eq!(editor.text(), "é");
+		assert_eq!(editor.buffer_text(), "é");
 		assert_eq!(editor.view_state().caret, 0);
 	}
 
 	#[test]
 	fn escape_from_insert_returns_to_normal_selection() {
 		let scene = scene(&[(0, 0, 1, 0.0), (0, 1, 2, 10.0), (0, 2, 3, 20.0)]);
-		let mut editor = EditorBuffer::new("abc");
+		let (mut font_system, mut editor) = editor("abc");
 		editor.sync_with_scene(&scene);
 
-		editor.apply(EditorCommand::EnterInsertAfter, &scene);
-		editor.apply(EditorCommand::MoveRight, &scene);
-		editor.apply(EditorCommand::ExitInsert, &scene);
+		editor.apply(&mut font_system, EditorCommand::EnterInsertAfter, &scene);
+		editor.apply(&mut font_system, EditorCommand::MoveRight, &scene);
+		editor.apply(&mut font_system, EditorCommand::ExitInsert, &scene);
 
 		assert_eq!(editor.view_state().mode, EditorMode::Normal);
 		assert_eq!(editor.view_state().selection, Some(1..2));
@@ -640,7 +743,16 @@ mod tests {
 			400.0,
 			RenderMode::CanvasAndOutlines,
 		);
-		let mut editor = EditorBuffer::new(text);
+		let config = scene_config(
+			FontChoice::SansSerif,
+			ShapingChoice::Advanced,
+			WrapChoice::None,
+			RenderMode::CanvasAndOutlines,
+			24.0,
+			32.0,
+			400.0,
+		);
+		let mut editor = EditorBuffer::new(&mut font_system, text, config);
 		editor.sync_with_scene(&scene);
 
 		assert_eq!(
@@ -652,7 +764,7 @@ mod tests {
 			Some("🙂")
 		);
 
-		editor.apply(EditorCommand::MoveDown, &scene);
+		editor.apply(&mut font_system, EditorCommand::MoveDown, &scene);
 		assert_eq!(
 			editor
 				.view_state()
@@ -662,7 +774,12 @@ mod tests {
 			Some("é")
 		);
 
-		assert!(editor.apply(EditorCommand::DeleteSelection, &scene).changed);
+		assert!(
+			editor
+				.apply(&mut font_system, EditorCommand::DeleteSelection, &scene)
+				.changed
+		);
 		assert_eq!(editor.text(), "🙂\n");
+		assert_eq!(editor.buffer_text(), "🙂\n");
 	}
 }
