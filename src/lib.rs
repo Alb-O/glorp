@@ -104,6 +104,50 @@ impl HeadlessScenario {
 	}
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeadlessScriptScenario {
+	LargePaste,
+	IncrementalTyping,
+	IncrementalLineBreaks,
+	UndoRedoBurst,
+	BackspaceBurst,
+	DeleteForwardBurst,
+	MotionSweep,
+	PointerSelectionSweep,
+	ResizeReflowSweep,
+	InspectInteractionSweep,
+}
+
+impl HeadlessScriptScenario {
+	pub const ALL: [Self; 10] = [
+		Self::LargePaste,
+		Self::IncrementalTyping,
+		Self::IncrementalLineBreaks,
+		Self::UndoRedoBurst,
+		Self::BackspaceBurst,
+		Self::DeleteForwardBurst,
+		Self::MotionSweep,
+		Self::PointerSelectionSweep,
+		Self::ResizeReflowSweep,
+		Self::InspectInteractionSweep,
+	];
+
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::LargePaste => "large-paste",
+			Self::IncrementalTyping => "incremental-typing",
+			Self::IncrementalLineBreaks => "incremental-line-breaks",
+			Self::UndoRedoBurst => "undo-redo-burst",
+			Self::BackspaceBurst => "backspace-burst",
+			Self::DeleteForwardBurst => "delete-forward-burst",
+			Self::MotionSweep => "motion-sweep",
+			Self::PointerSelectionSweep => "pointer-selection-sweep",
+			Self::ResizeReflowSweep => "resize-reflow-sweep",
+			Self::InspectInteractionSweep => "inspect-interaction-sweep",
+		}
+	}
+}
+
 pub fn run() -> iced::Result {
 	let settings = iced::Settings {
 		default_font: Font::with_name("Noto Sans CJK SC"),
