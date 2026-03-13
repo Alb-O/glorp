@@ -110,7 +110,7 @@ pub(super) fn draw_overlay(
 ) {
 	let origin = scrolled_origin(scroll);
 
-	for primitive in overlay_primitives(bounds, canvas, focused, scroll) {
+	for primitive in over_text_primitives(bounds, canvas, focused, scroll) {
 		match primitive {
 			OverlayPrimitive::Rect { rect, kind, space } => draw_rect_primitive(frame, origin, rect, kind, space),
 			OverlayPrimitive::Label {
@@ -123,9 +123,21 @@ pub(super) fn draw_overlay(
 	}
 }
 
-fn overlay_primitives(bounds: Rectangle, canvas: &GlyphCanvas, focused: bool, scroll: Vector) -> Vec<OverlayPrimitive> {
-	let mut overlays = Vec::with_capacity(canvas.editor.overlays.len() + canvas.inspect_overlays.len() + 3);
-	overlays.extend(canvas.editor.overlays.iter().cloned());
+pub(super) fn draw_underlay_overlay(
+	frame: &mut canvas::Frame, editor: &crate::editor::EditorViewState, scroll: Vector,
+) {
+	let origin = scrolled_origin(scroll);
+	for primitive in editor.overlays.iter().filter(is_under_text_primitive) {
+		if let OverlayPrimitive::Rect { rect, kind, space } = primitive {
+			draw_rect_primitive(frame, origin, *rect, *kind, *space);
+		}
+	}
+}
+
+fn over_text_primitives(
+	bounds: Rectangle, canvas: &GlyphCanvas, focused: bool, scroll: Vector,
+) -> Vec<OverlayPrimitive> {
+	let mut overlays = Vec::with_capacity(canvas.inspect_overlays.len() + 3);
 	overlays.extend(canvas.inspect_overlays.iter().cloned());
 
 	if focused {
@@ -163,6 +175,19 @@ fn overlay_primitives(bounds: Rectangle, canvas: &GlyphCanvas, focused: bool, sc
 	));
 
 	overlays
+}
+
+fn is_under_text_primitive(primitive: &&OverlayPrimitive) -> bool {
+	matches!(
+		primitive,
+		OverlayPrimitive::Rect {
+			kind: OverlayRectKind::EditorSelection(_)
+				| OverlayRectKind::EditorActive(_)
+				| OverlayRectKind::EditorInsertBlock(_)
+				| OverlayRectKind::EditorCaret(_),
+			..
+		}
+	)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -317,23 +342,13 @@ fn label_style(kind: OverlayLabelKind) -> LabelStyle {
 	}
 }
 
-fn selection_palette(tone: EditorOverlayTone) -> SelectionPalette {
-	match tone {
-		EditorOverlayTone::Normal => SelectionPalette {
-			selection_fill: Color::from_rgba(1.0, 0.84, 0.28, 0.22),
-			selection_stroke: Color::from_rgba(1.0, 0.92, 0.6, 0.74),
-			active_fill: Color::from_rgba(1.0, 0.74, 0.14, 0.5),
-			active_stroke: Color::from_rgba(1.0, 0.96, 0.78, 0.98),
-			caret_fill: Color::from_rgba(1.0, 0.92, 0.45, 1.0),
-			focus_stroke: Color::from_rgba(1.0, 0.9, 0.55, 0.88),
-		},
-		EditorOverlayTone::Insert => SelectionPalette {
-			selection_fill: Color::from_rgba(0.28, 0.74, 1.0, 0.18),
-			selection_stroke: Color::from_rgba(0.6, 0.9, 1.0, 0.66),
-			active_fill: Color::from_rgba(0.1, 0.86, 0.72, 0.28),
-			active_stroke: Color::from_rgba(0.66, 1.0, 0.9, 0.94),
-			caret_fill: Color::from_rgba(0.62, 1.0, 0.88, 1.0),
-			focus_stroke: Color::from_rgba(0.56, 0.94, 1.0, 0.84),
-		},
+fn selection_palette(_tone: EditorOverlayTone) -> SelectionPalette {
+	SelectionPalette {
+		selection_fill: Color::from_rgba(0.28, 0.74, 1.0, 0.18),
+		selection_stroke: Color::from_rgba(0.6, 0.9, 1.0, 0.66),
+		active_fill: Color::from_rgba(0.1, 0.86, 0.72, 0.28),
+		active_stroke: Color::from_rgba(0.66, 1.0, 0.9, 0.94),
+		caret_fill: Color::from_rgba(0.62, 1.0, 0.88, 1.0),
+		focus_stroke: Color::from_rgba(0.56, 0.94, 1.0, 0.84),
 	}
 }

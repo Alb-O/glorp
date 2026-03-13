@@ -20,7 +20,7 @@ use crate::types::Message;
 
 use self::geometry::max_scroll;
 use self::input::decode_event;
-use self::render::{draw_overlay, draw_static_scene};
+use self::render::{draw_overlay, draw_static_scene, draw_underlay_overlay};
 
 #[derive(Debug, Clone)]
 pub(crate) struct GlyphCanvas {
@@ -33,6 +33,12 @@ pub(crate) struct GlyphCanvas {
 	pub(crate) scene_revision: u64,
 	pub(crate) scroll: Vector,
 	pub(crate) perf: CanvasPerfSink,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GlyphCanvasUnderlay {
+	pub(crate) editor: EditorViewState,
+	pub(crate) scroll: Vector,
 }
 
 impl canvas::Program<Message> for GlyphCanvas {
@@ -93,5 +99,18 @@ impl canvas::Program<Message> for GlyphCanvas {
 			.position_in(bounds)
 			.map(|_| mouse::Interaction::Text)
 			.unwrap_or_default()
+	}
+}
+
+impl canvas::Program<Message> for GlyphCanvasUnderlay {
+	type State = ();
+
+	fn draw(
+		&self, _state: &Self::State, renderer: &iced::Renderer, _theme: &Theme, bounds: Rectangle,
+		_cursor: iced::mouse::Cursor,
+	) -> Vec<canvas::Geometry> {
+		let mut overlay = canvas::Frame::new(renderer, bounds.size());
+		draw_underlay_overlay(&mut overlay, &self.editor, self.scroll);
+		vec![overlay.into_geometry()]
 	}
 }

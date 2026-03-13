@@ -28,6 +28,8 @@ pub(crate) struct SceneTextLayer {
 	scene: LayoutScene,
 	layout_width: f32,
 	scroll: Vector,
+	draw_backdrop: bool,
+	draw_text: bool,
 	width: Length,
 	height: Length,
 }
@@ -38,9 +40,23 @@ impl SceneTextLayer {
 			scene,
 			layout_width,
 			scroll,
+			draw_backdrop: true,
+			draw_text: true,
 			width: Length::Fill,
 			height: Length::Fill,
 		}
+	}
+
+	pub(crate) fn backdrop_only(mut self) -> Self {
+		self.draw_backdrop = true;
+		self.draw_text = false;
+		self
+	}
+
+	pub(crate) fn text_only(mut self) -> Self {
+		self.draw_backdrop = false;
+		self.draw_text = true;
+		self
 	}
 
 	pub(crate) fn width(mut self, width: impl Into<Length>) -> Self {
@@ -92,55 +108,57 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 			bounds.y + scene_origin().y - self.scroll.y,
 		);
 
-		renderer.fill_quad(
-			renderer::Quad {
-				bounds,
-				..renderer::Quad::default()
-			},
-			OUTER_BACKGROUND,
-		);
-
-		renderer.fill_quad(
-			renderer::Quad {
-				bounds: Rectangle::new(
-					origin,
-					Size::new(
-						self.layout_width.max(1.0),
-						self.scene
-							.measured_height
-							.max(bounds.height - origin.y + bounds.y - 24.0),
-					),
-				),
-				..renderer::Quad::default()
-			},
-			TEXT_BACKGROUND,
-		);
-
-		renderer.fill_quad(
-			renderer::Quad {
-				bounds: Rectangle::new(Point::new(origin.x, bounds.y), Size::new(1.0, bounds.height)),
-				..renderer::Quad::default()
-			},
-			GUIDE_COLOR,
-		);
-
-		renderer.fill_quad(
-			renderer::Quad {
-				bounds: Rectangle::new(
-					origin,
-					Size::new(self.layout_width.max(1.0), self.scene.measured_height.max(1.0)),
-				),
-				border: iced::Border {
-					width: 1.0,
-					color: BORDER_COLOR,
-					..iced::Border::default()
+		if self.draw_backdrop {
+			renderer.fill_quad(
+				renderer::Quad {
+					bounds,
+					..renderer::Quad::default()
 				},
-				..renderer::Quad::default()
-			},
-			Color::TRANSPARENT,
-		);
+				OUTER_BACKGROUND,
+			);
 
-		if self.scene.draw_canvas_text {
+			renderer.fill_quad(
+				renderer::Quad {
+					bounds: Rectangle::new(
+						origin,
+						Size::new(
+							self.layout_width.max(1.0),
+							self.scene
+								.measured_height
+								.max(bounds.height - origin.y + bounds.y - 24.0),
+						),
+					),
+					..renderer::Quad::default()
+				},
+				TEXT_BACKGROUND,
+			);
+
+			renderer.fill_quad(
+				renderer::Quad {
+					bounds: Rectangle::new(Point::new(origin.x, bounds.y), Size::new(1.0, bounds.height)),
+					..renderer::Quad::default()
+				},
+				GUIDE_COLOR,
+			);
+
+			renderer.fill_quad(
+				renderer::Quad {
+					bounds: Rectangle::new(
+						origin,
+						Size::new(self.layout_width.max(1.0), self.scene.measured_height.max(1.0)),
+					),
+					border: iced::Border {
+						width: 1.0,
+						color: BORDER_COLOR,
+						..iced::Border::default()
+					},
+					..renderer::Quad::default()
+				},
+				Color::TRANSPARENT,
+			);
+		}
+
+		if self.draw_text && self.scene.draw_canvas_text {
 			renderer.fill_paragraph(&state.paragraph, origin, TEXT_COLOR, bounds);
 		}
 	}
