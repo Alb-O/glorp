@@ -1,6 +1,7 @@
 use iced::widget::canvas;
 use iced::{Color, Font, Pixels, Point, Rectangle, Size, Vector};
 
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 use crate::overlay::{
@@ -128,15 +129,251 @@ pub(super) fn draw_underlay_overlay(
 	frame: &mut canvas::Frame, editor: &crate::editor::EditorViewState, scroll: Vector,
 ) {
 	let origin = scrolled_origin(scroll);
+	draw_selection_underlay(frame, origin, &editor.overlays);
 	for primitive in editor
 		.overlays
 		.iter()
 		.filter(|primitive| primitive.layer() == OverlayLayer::UnderText)
 	{
+		if matches!(
+			primitive,
+			OverlayPrimitive::Rect {
+				kind: OverlayRectKind::EditorSelection(_),
+				..
+			}
+		) {
+			continue;
+		}
+
 		if let OverlayPrimitive::Rect { rect, kind, space, .. } = primitive {
 			draw_rect_primitive(frame, origin, *rect, *kind, *space);
 		}
 	}
+}
+
+fn draw_selection_underlay(frame: &mut canvas::Frame, origin: Point, overlays: &[OverlayPrimitive]) {
+	let mut normal = Vec::new();
+	let mut insert = Vec::new();
+
+	for primitive in overlays
+		.iter()
+		.filter(|primitive| primitive.layer() == OverlayLayer::UnderText)
+	{
+		let OverlayPrimitive::Rect {
+			rect,
+			kind: OverlayRectKind::EditorSelection(tone),
+			space,
+			..
+		} = primitive
+		else {
+			continue;
+		};
+
+		let point = rect_origin(origin, *rect, *space);
+		let rect = LayoutRect {
+			x: point.x,
+			y: point.y,
+			width: rect.width.max(1.0),
+			height: rect.height.max(1.0),
+		};
+
+		match tone {
+			EditorOverlayTone::Normal => normal.push(rect),
+			EditorOverlayTone::Insert => insert.push(rect),
+		}
+	}
+
+	draw_selection_group(frame, &normal, selection_palette(EditorOverlayTone::Normal));
+	draw_selection_group(frame, &insert, selection_palette(EditorOverlayTone::Insert));
+}
+
+fn draw_selection_group(frame: &mut canvas::Frame, rectangles: &[LayoutRect], palette: SelectionPalette) {
+	if rectangles.is_empty() {
+		return;
+	}
+
+	for rect in rectangles {
+		frame.fill_rectangle(
+			Point::new(rect.x, rect.y),
+			Size::new(rect.width.max(1.0), rect.height.max(1.0)),
+			palette.selection_fill,
+		);
+	}
+
+	for segment in merged_selection_outline(rectangles) {
+		let path = canvas::Path::line(segment.start, segment.end);
+		frame.stroke(
+			&path,
+			canvas::Stroke::default()
+				.with_width(1.0)
+				.with_color(palette.selection_stroke),
+		);
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct OutlineSegment {
+	start: Point,
+	end: Point,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct HorizontalSegment {
+	y: f32,
+	x0: f32,
+	x1: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct VerticalSegment {
+	x: f32,
+	y0: f32,
+	y1: f32,
+}
+
+fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
+	if rectangles.is_empty() {
+		return Vec::new();
+	}
+
+	let xs = unique_sorted_edges(rectangles.iter().flat_map(|rect| [rect.x, rect.x + rect.width]));
+	let ys = unique_sorted_edges(rectangles.iter().flat_map(|rect| [rect.y, rect.y + rect.height]));
+	if xs.len() < 2 || ys.len() < 2 {
+		return Vec::new();
+	}
+
+	let columns = xs.len() - 1;
+	let rows = ys.len() - 1;
+	let mut occupied = vec![false; rows * columns];
+
+	for row in 0..rows {
+		for column in 0..columns {
+			let x0 = xs[column];
+			let x1 = xs[column + 1];
+			let y0 = ys[row];
+			let y1 = ys[row + 1];
+			occupied[row * columns + column] = rectangles
+				.iter()
+				.any(|rect| x0 >= rect.x && x1 <= rect.x + rect.width && y0 >= rect.y && y1 <= rect.y + rect.height);
+		}
+	}
+
+	let mut horizontal = Vec::new();
+	let mut vertical = Vec::new();
+
+	for row in 0..rows {
+		for column in 0..columns {
+			if !occupied[row * columns + column] {
+				continue;
+			}
+
+			if row == 0 || !occupied[(row - 1) * columns + column] {
+				horizontal.push(HorizontalSegment {
+					y: ys[row],
+					x0: xs[column],
+					x1: xs[column + 1],
+				});
+			}
+
+			if row + 1 == rows || !occupied[(row + 1) * columns + column] {
+				horizontal.push(HorizontalSegment {
+					y: ys[row + 1],
+					x0: xs[column],
+					x1: xs[column + 1],
+				});
+			}
+
+			if column == 0 || !occupied[row * columns + column - 1] {
+				vertical.push(VerticalSegment {
+					x: xs[column],
+					y0: ys[row],
+					y1: ys[row + 1],
+				});
+			}
+
+			if column + 1 == columns || !occupied[row * columns + column + 1] {
+				vertical.push(VerticalSegment {
+					x: xs[column + 1],
+					y0: ys[row],
+					y1: ys[row + 1],
+				});
+			}
+		}
+	}
+
+	merge_horizontal_segments(horizontal)
+		.into_iter()
+		.map(|segment| OutlineSegment {
+			start: Point::new(segment.x0, segment.y),
+			end: Point::new(segment.x1, segment.y),
+		})
+		.chain(
+			merge_vertical_segments(vertical)
+				.into_iter()
+				.map(|segment| OutlineSegment {
+					start: Point::new(segment.x, segment.y0),
+					end: Point::new(segment.x, segment.y1),
+				}),
+		)
+		.collect()
+}
+
+fn unique_sorted_edges(edges: impl IntoIterator<Item = f32>) -> Vec<f32> {
+	let mut edges = edges.into_iter().collect::<Vec<_>>();
+	edges.sort_by(f32::total_cmp);
+	edges.dedup_by(|left, right| left.total_cmp(right) == Ordering::Equal);
+	edges
+}
+
+fn merge_horizontal_segments(mut segments: Vec<HorizontalSegment>) -> Vec<HorizontalSegment> {
+	segments.sort_by(|left, right| {
+		left.y
+			.total_cmp(&right.y)
+			.then_with(|| left.x0.total_cmp(&right.x0))
+			.then_with(|| left.x1.total_cmp(&right.x1))
+	});
+	merge_segments(
+		segments,
+		|left, right| left.y.total_cmp(&right.y) == Ordering::Equal && left.x1.total_cmp(&right.x0) != Ordering::Less,
+		|left, right| HorizontalSegment {
+			y: left.y,
+			x0: left.x0,
+			x1: left.x1.max(right.x1),
+		},
+	)
+}
+
+fn merge_vertical_segments(mut segments: Vec<VerticalSegment>) -> Vec<VerticalSegment> {
+	segments.sort_by(|left, right| {
+		left.x
+			.total_cmp(&right.x)
+			.then_with(|| left.y0.total_cmp(&right.y0))
+			.then_with(|| left.y1.total_cmp(&right.y1))
+	});
+	merge_segments(
+		segments,
+		|left, right| left.x.total_cmp(&right.x) == Ordering::Equal && left.y1.total_cmp(&right.y0) != Ordering::Less,
+		|left, right| VerticalSegment {
+			x: left.x,
+			y0: left.y0,
+			y1: left.y1.max(right.y1),
+		},
+	)
+}
+
+fn merge_segments<T: Copy>(segments: Vec<T>, can_merge: impl Fn(&T, &T) -> bool, merge: impl Fn(T, T) -> T) -> Vec<T> {
+	let mut merged = Vec::with_capacity(segments.len());
+	for segment in segments {
+		if let Some(last) = merged.last_mut()
+			&& can_merge(last, &segment)
+		{
+			*last = merge(*last, segment);
+			continue;
+		}
+
+		merged.push(segment);
+	}
+	merged
 }
 
 fn over_text_primitives(
@@ -345,5 +582,100 @@ fn selection_palette(_tone: EditorOverlayTone) -> SelectionPalette {
 		active_stroke: Color::from_rgba(0.66, 1.0, 0.9, 0.94),
 		caret_fill: Color::from_rgba(0.62, 1.0, 0.88, 1.0),
 		focus_stroke: Color::from_rgba(0.56, 0.94, 1.0, 0.84),
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::{OutlineSegment, merged_selection_outline};
+	use crate::overlay::LayoutRect;
+	use iced::Point;
+
+	#[test]
+	fn merged_selection_outline_collapses_shared_row_edges() {
+		let outline = merged_selection_outline(&[
+			LayoutRect {
+				x: 10.0,
+				y: 20.0,
+				width: 30.0,
+				height: 8.0,
+			},
+			LayoutRect {
+				x: 10.0,
+				y: 28.0,
+				width: 30.0,
+				height: 8.0,
+			},
+		]);
+
+		assert_eq!(
+			outline,
+			vec![
+				OutlineSegment {
+					start: Point::new(10.0, 20.0),
+					end: Point::new(40.0, 20.0),
+				},
+				OutlineSegment {
+					start: Point::new(10.0, 36.0),
+					end: Point::new(40.0, 36.0),
+				},
+				OutlineSegment {
+					start: Point::new(10.0, 20.0),
+					end: Point::new(10.0, 36.0),
+				},
+				OutlineSegment {
+					start: Point::new(40.0, 20.0),
+					end: Point::new(40.0, 36.0),
+				},
+			]
+		);
+	}
+
+	#[test]
+	fn merged_selection_outline_keeps_outer_step_edges_only() {
+		let outline = merged_selection_outline(&[
+			LayoutRect {
+				x: 10.0,
+				y: 20.0,
+				width: 40.0,
+				height: 8.0,
+			},
+			LayoutRect {
+				x: 10.0,
+				y: 28.0,
+				width: 20.0,
+				height: 8.0,
+			},
+		]);
+
+		assert_eq!(
+			outline,
+			vec![
+				OutlineSegment {
+					start: Point::new(10.0, 20.0),
+					end: Point::new(50.0, 20.0),
+				},
+				OutlineSegment {
+					start: Point::new(30.0, 28.0),
+					end: Point::new(50.0, 28.0),
+				},
+				OutlineSegment {
+					start: Point::new(10.0, 36.0),
+					end: Point::new(30.0, 36.0),
+				},
+				OutlineSegment {
+					start: Point::new(10.0, 20.0),
+					end: Point::new(10.0, 36.0),
+				},
+				OutlineSegment {
+					start: Point::new(30.0, 28.0),
+					end: Point::new(30.0, 36.0),
+				},
+				OutlineSegment {
+					start: Point::new(50.0, 20.0),
+					end: Point::new(50.0, 28.0),
+				},
+			]
+		);
 	}
 }
