@@ -2,9 +2,12 @@ use cosmic_text::{Buffer, Cursor, Edit as _, Editor as CosmicEditor, FontSystem}
 use iced::Point;
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::overlay::LayoutRect;
 use crate::scene::{SceneConfig, build_buffer};
+use crate::telemetry::duration_ms;
+use tracing::{debug, trace};
 
 use super::geometry::{insert_cursor_block, insert_cursor_rectangle};
 use super::layout::BufferLayoutSnapshot;
@@ -102,10 +105,19 @@ impl EditorLayout {
 	}
 
 	pub(super) fn apply_edit(&mut self, font_system: &mut FontSystem, text: &str, edit: &TextEdit) {
+		let started = Instant::now();
 		if edit_changes_line_structure(text, edit) {
 			let mut next_text = text.to_string();
 			next_text.replace_range(edit.range.clone(), &edit.inserted);
 			self.buffer = Arc::new(build_buffer(font_system, &next_text, self.config));
+			debug!(
+				duration_ms = duration_ms(started.elapsed()),
+				text_bytes = next_text.len(),
+				inserted_bytes = edit.inserted.len(),
+				range_start = edit.range.start,
+				range_end = edit.range.end,
+				"layout edit rebuilt full buffer"
+			);
 			return;
 		}
 
@@ -124,6 +136,14 @@ impl EditorLayout {
 		}
 
 		buffer.shape_until_scroll(font_system, false);
+		trace!(
+			duration_ms = duration_ms(started.elapsed()),
+			text_bytes = text.len(),
+			inserted_bytes = edit.inserted.len(),
+			range_start = edit.range.start,
+			range_end = edit.range.end,
+			"layout edit updated retained buffer"
+		);
 	}
 
 	#[cfg(test)]

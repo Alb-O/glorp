@@ -19,9 +19,12 @@ use iced::Point;
 use std::fmt::{self, Display};
 use std::ops::Range;
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind};
 use crate::scene::SceneConfig;
+use crate::telemetry::duration_ms;
+use tracing::{debug, trace, trace_span, warn};
 
 use self::document::DocumentState;
 use self::geometry::{cluster_rectangle, selection_rectangles};
@@ -275,9 +278,41 @@ impl EditorEngine {
 	}
 
 	pub(crate) fn apply(&mut self, font_system: &mut FontSystem, intent: EditorIntent) -> EditorOutcome {
+		let _span = trace_span!("editor.apply", intent = ?intent).entered();
 		let previous_view = self.layout_model.layout.view_state();
+		let apply_started = Instant::now();
 		let result = apply_intent(self, font_system, intent);
+		let reducer_elapsed = apply_started.elapsed();
+		let refresh_started = Instant::now();
 		self.refresh_view_state();
+		let refresh_elapsed = refresh_started.elapsed();
+		let total_elapsed = apply_started.elapsed();
+		let total_ms = duration_ms(total_elapsed);
+		if total_ms >= 16.7 {
+			warn!(
+				reducer_ms = duration_ms(reducer_elapsed),
+				refresh_ms = duration_ms(refresh_elapsed),
+				total_ms,
+				text_bytes = self.text().len(),
+				"editor apply over frame budget"
+			);
+		} else if total_ms >= 8.0 {
+			debug!(
+				reducer_ms = duration_ms(reducer_elapsed),
+				refresh_ms = duration_ms(refresh_elapsed),
+				total_ms,
+				text_bytes = self.text().len(),
+				"editor apply over warning threshold"
+			);
+		} else {
+			trace!(
+				reducer_ms = duration_ms(reducer_elapsed),
+				refresh_ms = duration_ms(refresh_elapsed),
+				total_ms,
+				text_bytes = self.text().len(),
+				"editor apply"
+			);
+		}
 		EditorOutcome::from_apply_result(&previous_view, self.layout_model.layout.view_state_ref(), result)
 	}
 
@@ -336,7 +371,25 @@ impl EditorEngine {
 	}
 
 	fn layout_snapshot(&self) -> BufferLayoutSnapshot {
-		self.layout_model.layout.snapshot(self.text())
+		let started = Instant::now();
+		let snapshot = self.layout_model.layout.snapshot(self.text());
+		let elapsed_ms = duration_ms(started.elapsed());
+		if elapsed_ms >= 8.0 {
+			debug!(
+				duration_ms = elapsed_ms,
+				clusters = snapshot.clusters().len(),
+				text_bytes = self.text().len(),
+				"layout snapshot"
+			);
+		} else {
+			trace!(
+				duration_ms = elapsed_ms,
+				clusters = snapshot.clusters().len(),
+				text_bytes = self.text().len(),
+				"layout snapshot"
+			);
+		}
+		snapshot
 	}
 
 	fn reset_normal_selection(&mut self) {
@@ -420,7 +473,9 @@ impl EditorEngine {
 	}
 
 	fn refresh_view_state(&mut self) {
+		let started = Instant::now();
 		let layout = self.layout_snapshot();
+		let layout_elapsed = started.elapsed();
 		let selection = self.selection().cloned();
 		let selection_head = selection.as_ref().map(EditorSelection::head);
 		let tone = EditorOverlayTone::from(self.mode());
@@ -430,13 +485,34 @@ impl EditorEngine {
 			})
 			.flatten();
 		let viewport_target = self.active_viewport_target(&layout);
+		let overlay_started = Instant::now();
+		let overlays = self.build_overlays(&layout, selection.as_ref(), insert_cursor, viewport_target, tone);
+		let overlay_elapsed = overlay_started.elapsed();
 		self.layout_model.layout.set_view_state(EditorViewState {
 			mode: self.mode(),
 			selection: selection.as_ref().map(EditorSelection::range_cloned),
 			selection_head,
-			overlays: self.build_overlays(&layout, selection.as_ref(), insert_cursor, viewport_target, tone),
+			overlays,
 			viewport_target,
 		});
+		let total_ms = duration_ms(started.elapsed());
+		if total_ms >= 8.0 {
+			debug!(
+				layout_ms = duration_ms(layout_elapsed),
+				overlay_ms = duration_ms(overlay_elapsed),
+				total_ms,
+				text_bytes = self.text().len(),
+				"refresh view state"
+			);
+		} else {
+			trace!(
+				layout_ms = duration_ms(layout_elapsed),
+				overlay_ms = duration_ms(overlay_elapsed),
+				total_ms,
+				text_bytes = self.text().len(),
+				"refresh view state"
+			);
+		}
 	}
 
 	fn build_overlays(
@@ -539,8 +615,36 @@ impl EditorEngine {
 	}
 
 	fn apply_buffer_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
+		let started = Instant::now();
 		let text = self.text().to_string();
+		let clone_elapsed = started.elapsed();
+		let apply_started = Instant::now();
 		self.layout_model.layout.apply_edit(font_system, &text, edit);
+		let apply_elapsed = apply_started.elapsed();
+		let total_ms = duration_ms(started.elapsed());
+		if total_ms >= 8.0 {
+			debug!(
+				cloned_bytes = text.len(),
+				clone_ms = duration_ms(clone_elapsed),
+				layout_apply_ms = duration_ms(apply_elapsed),
+				total_ms,
+				inserted_bytes = edit.inserted.len(),
+				range_start = edit.range.start,
+				range_end = edit.range.end,
+				"apply buffer edit"
+			);
+		} else {
+			trace!(
+				cloned_bytes = text.len(),
+				clone_ms = duration_ms(clone_elapsed),
+				layout_apply_ms = duration_ms(apply_elapsed),
+				total_ms,
+				inserted_bytes = edit.inserted.len(),
+				range_start = edit.range.start,
+				range_end = edit.range.end,
+				"apply buffer edit"
+			);
+		}
 	}
 
 	fn insert_selection(&self, layout: &BufferLayoutSnapshot, head: usize) -> Option<EditorSelection> {
