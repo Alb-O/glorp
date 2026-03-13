@@ -317,12 +317,56 @@ fn insert_mode_caret_moves_to_the_trailing_edge_at_line_end() {
 	let caret = view
 		.caret_rectangle
 		.expect("line-end insert mode should expose a caret rectangle");
-	let active = view
+	let block = view
 		.viewport_target
-		.expect("line-end insert mode should retain the last cluster");
+		.expect("line-end insert mode should expose a caret block");
+	let layout = editor.layout_snapshot();
+	let active = layout
+		.cluster(
+			layout
+				.cluster_at_insert_head(3)
+				.expect("line-end insert should resolve a cluster"),
+		)
+		.expect("line-end insert should retain the last cluster");
 
+	assert!(view.selection_rectangles.is_empty());
+	assert!(block.width > caret.width);
 	assert!(caret.x > active.x);
 	assert!(caret.x >= active.x + active.width - caret.width);
+}
+
+#[test]
+fn insert_mode_caret_stays_on_the_previous_row_before_a_newline() {
+	let (mut font_system, mut editor) = editor("ab\ncd");
+
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+	editor.apply(&mut font_system, motion(EditorMotion::Right));
+
+	let view = editor.view_state();
+	let caret = view
+		.caret_rectangle
+		.expect("newline-boundary insert mode should expose a caret rectangle");
+	let active = view
+		.viewport_target
+		.expect("newline-boundary insert mode should expose a caret target");
+	let layout = editor.layout_snapshot();
+	let previous = layout
+		.cluster(
+			layout
+				.cluster_at_insert_head(2)
+				.expect("newline boundary should resolve a prior cluster"),
+		)
+		.expect("newline boundary should use the previous row cluster");
+
+	assert_eq!(view.selection_head, Some(2));
+	assert_eq!(view.selection, Some(1..2));
+	assert_eq!(active.x, caret.x);
+	assert_eq!(active.y, caret.y);
+	assert!(active.width > caret.width);
+	assert!(view.selection_rectangles.is_empty());
+	assert_eq!(caret.y, previous.y);
+	assert!(caret.x > previous.x);
+	assert!(caret.x >= previous.x + previous.width - caret.width);
 }
 
 #[test]

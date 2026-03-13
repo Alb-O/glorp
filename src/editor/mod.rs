@@ -399,6 +399,10 @@ impl EditorEngine {
 	}
 
 	fn active_viewport_target(&self, layout: &BufferLayoutSnapshot) -> Option<EditorSelectionRect> {
+		if matches!(self.mode(), EditorMode::Insert) {
+			return self.layout_model.layout.insert_cursor_block(self.text(), self.caret());
+		}
+
 		self.active_selection(layout).map(|cluster| EditorSelectionRect {
 			x: cluster.x,
 			y: cluster.y,
@@ -411,15 +415,28 @@ impl EditorEngine {
 		let layout = self.layout_snapshot();
 		let selection = self.selection().cloned();
 		let selection_head = selection.as_ref().map(EditorSelection::head);
+		let insert_cursor = matches!(self.mode(), EditorMode::Insert)
+			.then(|| {
+				selection_head.and_then(|head| self.layout_model.layout.insert_cursor_rectangle(self.text(), head))
+			})
+			.flatten();
 		self.layout_model.layout.set_view_state(EditorViewState {
 			mode: self.mode(),
 			selection: selection.as_ref().map(EditorSelection::range_cloned),
 			selection_head,
-			selection_rectangles: selection
-				.as_ref()
-				.map(|selection| layout.selection_rectangles(selection.range()))
-				.unwrap_or_else(|| Arc::from([])),
-			caret_rectangle: selection_head.and_then(|head| layout.caret_rectangle(head)),
+			selection_rectangles: if matches!(self.mode(), EditorMode::Insert) {
+				Arc::from([])
+			} else {
+				selection
+					.as_ref()
+					.map(|selection| layout.selection_rectangles(selection.range()))
+					.unwrap_or_else(|| Arc::from([]))
+			},
+			caret_rectangle: if matches!(self.mode(), EditorMode::Insert) {
+				insert_cursor
+			} else {
+				selection_head.and_then(|head| layout.caret_rectangle(head))
+			},
 			viewport_target: self.active_viewport_target(&layout),
 		});
 	}
@@ -479,11 +496,8 @@ impl EditorEngine {
 	}
 
 	fn insert_selection(&self, layout: &BufferLayoutSnapshot, head: usize) -> Option<EditorSelection> {
-		// Insert mode keeps showing the cluster at the insertion head so entering
-		// insert at a boundary does not visually jump to the previous cluster.
 		layout
-			.cluster_at_or_after(head)
-			.or_else(|| layout.cluster_before(head))
+			.cluster_at_insert_head(head)
 			.and_then(|index| layout.cluster(index))
 			.map(|cluster| EditorSelection::new(cluster.byte_range.clone(), head))
 	}

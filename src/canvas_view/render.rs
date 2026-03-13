@@ -125,6 +125,9 @@ pub(super) fn draw_overlay(
 ) {
 	let origin = scrolled_origin(scroll);
 	let palette = selection_palette(canvas.editor.mode);
+	let insert_block = matches!(canvas.editor.mode, EditorMode::Insert)
+		.then(|| canvas.editor.viewport_target.or(canvas.editor.caret_rectangle))
+		.flatten();
 
 	for selection in canvas.editor.selection_rectangles.iter() {
 		fill_selection_rect(
@@ -137,11 +140,18 @@ pub(super) fn draw_overlay(
 		);
 	}
 
-	if let Some(active) = canvas.editor.viewport_target {
+	if let Some(active) = canvas.editor.viewport_target.filter(|_| insert_block.is_none()) {
 		fill_selection_rect(frame, origin, active, palette.active_fill, palette.active_stroke, 1.5);
 	}
 
-	if focused && matches!(canvas.editor.mode, EditorMode::Insert) {
+	if let Some(insert_block) = insert_block {
+		let stroke = if focused {
+			palette.active_stroke
+		} else {
+			palette.selection_stroke
+		};
+		fill_selection_rect(frame, origin, insert_block, palette.caret_fill, stroke, 1.5);
+	} else if focused && matches!(canvas.editor.mode, EditorMode::Insert) {
 		if let Some(caret) = canvas.editor.caret_rectangle {
 			frame.fill_rectangle(
 				Point::new(origin.x + caret.x, origin.y + caret.y),

@@ -7,13 +7,21 @@ use crate::scene::{SceneConfig, build_buffer};
 
 use super::layout::BufferLayoutSnapshot;
 use super::text::byte_to_cursor;
-use super::{EditorMode, EditorViewState, TextEdit};
+use super::{EditorMode, EditorSelectionRect, EditorViewState, TextEdit};
 
 #[derive(Debug, Clone)]
 pub(super) struct EditorLayout {
 	buffer: Arc<Buffer>,
 	config: SceneConfig,
 	view_state: EditorViewState,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct InsertCursorGeometry {
+	x: f32,
+	y: f32,
+	height: f32,
+	block_width: f32,
 }
 
 impl EditorLayout {
@@ -93,6 +101,28 @@ impl EditorLayout {
 		self.buffer.hit(point.x, point.y)
 	}
 
+	pub(super) fn insert_cursor_rectangle(&self, text: &str, byte: usize) -> Option<EditorSelectionRect> {
+		let geometry = self.insert_cursor_geometry(text, byte)?;
+
+		Some(EditorSelectionRect {
+			x: geometry.x,
+			y: geometry.y,
+			width: 2.0,
+			height: geometry.height,
+		})
+	}
+
+	pub(super) fn insert_cursor_block(&self, text: &str, byte: usize) -> Option<EditorSelectionRect> {
+		let geometry = self.insert_cursor_geometry(text, byte)?;
+
+		Some(EditorSelectionRect {
+			x: geometry.x,
+			y: geometry.y,
+			width: geometry.block_width.max(2.0),
+			height: geometry.height,
+		})
+	}
+
 	pub(super) fn apply_edit(&mut self, font_system: &mut FontSystem, text: &str, edit: &TextEdit) {
 		if edit_changes_line_structure(text, edit) {
 			let mut next_text = text.to_string();
@@ -142,6 +172,74 @@ impl EditorLayout {
 		buffer.set_size(font_system, Some(width), None);
 		buffer.shape_until_scroll(font_system, false);
 	}
+
+	fn insert_cursor_geometry(&self, text: &str, byte: usize) -> Option<InsertCursorGeometry> {
+		let cursor = byte_to_cursor(text, byte);
+		let line_height = self.buffer.metrics().line_height.max(1.0);
+		let default_width = (self.config.font_size * 0.6).max(2.0);
+		let scroll = self.buffer.scroll();
+		let line = self.buffer.lines.get(cursor.line)?;
+		let layout = line.layout_opt()?;
+
+		let (visual_line, offset, block_width) = layout
+			.iter()
+			.enumerate()
+			.find_map(|(index, line)| {
+				let start = line.glyphs.first().map(|glyph| glyph.start).unwrap_or(0);
+				let end = line.glyphs.last().map(|glyph| glyph.end).unwrap_or(0);
+				let is_cursor_before_start = start > cursor.index;
+				let is_cursor_before_end = cursor.index <= end;
+
+				if is_cursor_before_start {
+					index.checked_sub(1).map(|previous| {
+						let previous_line = &layout[previous];
+						let width = previous_line
+							.glyphs
+							.last()
+							.map(|glyph| glyph.w.max(2.0))
+							.unwrap_or(default_width);
+
+						(previous, previous_line.w, width)
+					})
+				} else if is_cursor_before_end {
+					let offset = line
+						.glyphs
+						.iter()
+						.take_while(|glyph| cursor.index > glyph.start)
+						.map(|glyph| glyph.w)
+						.sum();
+					let width = line
+						.glyphs
+						.iter()
+						.find(|glyph| cursor.index <= glyph.start)
+						.or_else(|| line.glyphs.last())
+						.map(|glyph| glyph.w.max(2.0))
+						.unwrap_or(default_width);
+
+					Some((index, offset, width))
+				} else {
+					None
+				}
+			})
+			.unwrap_or((
+				layout.len().saturating_sub(1),
+				layout.last().map(|line| line.w).unwrap_or(0.0),
+				layout
+					.last()
+					.and_then(|line| line.glyphs.last())
+					.map(|glyph| glyph.w.max(2.0))
+					.unwrap_or(default_width),
+			));
+		let y = (visual_lines_offset(cursor.line, &self.buffer) + visual_line as i32) as f32 * line_height
+			- scroll.vertical;
+
+		Some(InsertCursorGeometry {
+			x: offset,
+			y,
+			height: line_height,
+			block_width,
+		})
+	}
 }
 
 fn edit_changes_line_structure(text: &str, edit: &TextEdit) -> bool {
@@ -149,4 +247,17 @@ fn edit_changes_line_structure(text: &str, edit: &TextEdit) -> bool {
 	text.get(edit.range.clone())
 		.is_some_and(|removed| removed.contains('\n'))
 		|| edit.inserted.contains('\n')
+}
+
+fn visual_lines_offset(line: usize, buffer: &Buffer) -> i32 {
+	let scroll = buffer.scroll();
+	let start = scroll.line.min(line);
+	let end = scroll.line.max(line);
+	let visual_lines: usize = buffer.lines[start..]
+		.iter()
+		.take(end - start)
+		.map(|line| line.layout_opt().map(Vec::len).unwrap_or_default())
+		.sum();
+
+	visual_lines as i32 * if scroll.line < line { 1 } else { -1 }
 }

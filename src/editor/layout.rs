@@ -210,6 +210,19 @@ impl BufferLayoutSnapshot {
 		})
 	}
 
+	pub(super) fn ends_hard_line(&self, byte: usize) -> bool {
+		byte.checked_add(1)
+			.is_some_and(|next| self.line_byte_offsets[1..].binary_search(&next).is_ok())
+	}
+
+	pub(super) fn cluster_at_insert_head(&self, byte: usize) -> Option<usize> {
+		if self.ends_hard_line(byte) {
+			return self.cluster_before(byte.saturating_add(1));
+		}
+
+		self.cluster_at_or_after(byte).or_else(|| self.cluster_before(byte))
+	}
+
 	pub(super) fn selection_rectangles(&self, range: &Range<usize>) -> Arc<[EditorSelectionRect]> {
 		let selected = self
 			.clusters
