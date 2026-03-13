@@ -164,6 +164,10 @@ pub fn run() -> iced::Result {
 		.run()
 }
 
+pub fn init_tracing() {
+	telemetry::init_tracing();
+}
+
 fn app_theme(_playground: &Playground) -> Theme {
 	Theme::TokyoNightStorm
 }

@@ -10,17 +10,27 @@ use pollster::block_on;
 
 use std::env;
 use std::hint::black_box;
+use std::time::Duration;
 
-criterion_group!(
-	benches,
-	benchmark_headless_playground,
-	benchmark_headless_script_sequences
-);
+criterion_group! {
+	name = benches;
+	config = configured_criterion();
+	targets = benchmark_headless_playground, benchmark_headless_script_sequences
+}
 criterion_main!(benches);
 
 const VIEWPORT_SCALE_FACTOR: f32 = 1.0;
 const VIEWPORT_PHYSICAL_WIDTH: u32 = 1600;
 const VIEWPORT_PHYSICAL_HEIGHT: u32 = 1000;
+
+fn configured_criterion() -> Criterion {
+	liney::init_tracing();
+
+	Criterion::default()
+		.sample_size(10)
+		.warm_up_time(Duration::from_millis(500))
+		.measurement_time(Duration::from_millis(500))
+}
 
 fn benchmark_headless_playground(c: &mut Criterion) {
 	let mut group = c.benchmark_group("playground/headless");
