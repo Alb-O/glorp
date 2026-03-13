@@ -6,13 +6,15 @@ use crate::editor::text::{is_word_char, next_char, previous_char};
 
 impl EditorEngine {
 	pub(super) fn pointer_cluster_index(&self, layout: &BufferLayoutSnapshot, point: Point) -> Option<usize> {
+		if !layout.has_run_at_y(point.y) {
+			// `cosmic-text` can clamp far-away hits onto nearby text; ignore clicks that
+			// are outside any laid-out line band so blank canvas space stays inert.
+			return None;
+		}
+
 		self.buffer_hit(point)
 			.and_then(|cursor| layout.cluster_index_for_cursor(cursor))
-			.or_else(|| {
-				layout
-					.nearest_cluster_at(point.y, point.x)
-					.or_else(|| (!layout.clusters().is_empty()).then_some(0))
-			})
+			.or_else(|| layout.nearest_cluster_at(point.y, point.x))
 	}
 
 	pub(super) fn extend_pointer_selection(&mut self, layout: &BufferLayoutSnapshot, position: Point) {

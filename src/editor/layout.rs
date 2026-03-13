@@ -203,6 +203,13 @@ impl BufferLayoutSnapshot {
 		self.nearest_cluster_in_run(run_index, preferred_x)
 	}
 
+	pub(super) fn has_run_at_y(&self, y: f32) -> bool {
+		self.runs.iter().any(|run| {
+			let run_bottom = run.line_top + run.line_height;
+			y >= run.line_top && y <= run_bottom
+		})
+	}
+
 	pub(super) fn selection_rectangles(&self, range: &Range<usize>) -> Arc<[EditorSelectionRect]> {
 		let selected = self
 			.clusters

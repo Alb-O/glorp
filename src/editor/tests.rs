@@ -298,6 +298,24 @@ fn insert_mode_caret_moves_to_the_trailing_edge_at_line_end() {
 }
 
 #[test]
+fn pointer_miss_does_not_jump_to_first_cluster() {
+	let (mut font_system, mut editor) = editor("alpha");
+
+	editor.apply(&mut font_system, motion(EditorMotion::Right));
+	assert_eq!(editor.view_state().selection, Some(1..2));
+
+	editor.apply(
+		&mut font_system,
+		pointer(EditorPointerIntent::BeginSelection {
+			position: Point::new(900.0, 900.0),
+			select_word: false,
+		}),
+	);
+
+	assert_eq!(editor.view_state().selection, Some(1..2));
+}
+
+#[test]
 fn live_selection_rectangles_track_wrapped_width_changes() {
 	let text = "alpha beta gamma delta epsilon zeta eta theta";
 	let (mut font_system, mut editor) = editor(text);
