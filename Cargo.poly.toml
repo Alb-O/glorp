@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 cosmic-text = true
 iced = { features = ["advanced", "canvas"] }
+tracing = true
+tracing-subscriber = { features = ["env-filter"] }
 
 [dev-dependencies]
 criterion = true

@@ -11,6 +11,7 @@ use std::time::Instant;
 
 use iced::widget::canvas;
 use iced::{Rectangle, Theme, Vector, mouse};
+use tracing::trace_span;
 
 use crate::editor::EditorViewState;
 use crate::overlay::OverlayPrimitive;
@@ -47,6 +48,13 @@ impl canvas::Program<Message> for GlyphCanvas {
 	fn update(
 		&self, state: &mut Self::State, event: &canvas::Event, bounds: Rectangle, cursor: mouse::Cursor,
 	) -> Option<canvas::Action<Message>> {
+		let _span = trace_span!(
+			"canvas.update",
+			scene_revision = self.scene_revision,
+			bounds_width = bounds.width,
+			bounds_height = bounds.height
+		)
+		.entered();
 		let started = Instant::now();
 		let max_scroll = max_scroll(bounds, &self.scene, self.layout_width);
 		let action = decode_event(
@@ -71,6 +79,16 @@ impl canvas::Program<Message> for GlyphCanvas {
 	) -> Vec<canvas::Geometry> {
 		let started = Instant::now();
 		let cache_miss = state.cache_miss(self.scene_revision, self.scroll);
+		let _span = trace_span!(
+			"canvas.draw",
+			scene_revision = self.scene_revision,
+			cache_miss,
+			scroll_x = self.scroll.x,
+			scroll_y = self.scroll.y,
+			bounds_width = bounds.width,
+			bounds_height = bounds.height
+		)
+		.entered();
 
 		if cache_miss {
 			state.refresh_cache_key(self.scene_revision, self.scroll);

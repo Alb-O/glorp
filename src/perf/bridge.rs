@@ -2,6 +2,10 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use tracing::{debug, trace, warn};
+
+use crate::telemetry::duration_ms;
+
 const PENDING_LIMIT: usize = 512;
 
 #[derive(Debug, Default)]
@@ -31,6 +35,15 @@ impl CanvasPerfSink {
 		};
 
 		push_bounded(&mut pending.canvas_update, duration, PENDING_LIMIT);
+
+		let elapsed_ms = duration_ms(duration);
+		if elapsed_ms >= 16.7 {
+			warn!(duration_ms = elapsed_ms, "canvas update over frame budget");
+		} else if elapsed_ms >= 8.0 {
+			debug!(duration_ms = elapsed_ms, "canvas update over warning threshold");
+		} else {
+			trace!(duration_ms = elapsed_ms, "canvas update");
+		}
 	}
 
 	pub(crate) fn record_canvas_draw(
@@ -51,6 +64,24 @@ impl CanvasPerfSink {
 			},
 			PENDING_LIMIT,
 		);
+
+		let total_ms = duration_ms(total);
+		let static_build_ms = static_build.map(duration_ms);
+		let overlay_ms = duration_ms(overlay);
+
+		if total_ms >= 16.7 {
+			warn!(
+				total_ms,
+				static_build_ms, overlay_ms, cache_miss, "canvas draw over frame budget"
+			);
+		} else if total_ms >= 8.0 {
+			debug!(
+				total_ms,
+				static_build_ms, overlay_ms, cache_miss, "canvas draw over warning threshold"
+			);
+		} else {
+			trace!(total_ms, static_build_ms, overlay_ms, cache_miss, "canvas draw");
+		}
 	}
 
 	pub(super) fn drain(&self) -> PendingSamples {

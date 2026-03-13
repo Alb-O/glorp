@@ -3,10 +3,12 @@ use iced::{Size, Subscription, Task, futures, stream};
 use std::time::{Duration, Instant};
 
 use crate::editor::{EditorIntent, EditorOutcome, EditorPointerIntent};
+use crate::telemetry::duration_ms;
 use crate::types::{
 	CanvasEvent, ControlsMessage, Message, PerfMessage, SamplePreset, ShellMessage, SidebarMessage, SidebarTab,
 	ViewportMessage,
 };
+use tracing::{debug, trace, trace_span, warn};
 
 use super::Playground;
 use super::state::{EditorDispatchSource, RESIZE_REFLOW_INTERVAL};
@@ -47,6 +49,8 @@ impl Playground {
 	}
 
 	pub(crate) fn update(&mut self, message: Message) -> Task<Message> {
+		let _span = trace_span!("playground.update", message = message_kind(&message)).entered();
+
 		match message {
 			Message::Controls(message) => self.handle_controls_message(message),
 			Message::Sidebar(message) => self.handle_sidebar_message(message),
@@ -145,7 +149,14 @@ impl Playground {
 		let started = Instant::now();
 		self.session.reset_with_preset(preset.text(), config);
 		self.viewport.mark_scene_applied(Instant::now());
-		self.finish_scene_refresh(SceneRefreshReason::PresetLoaded, started.elapsed());
+		let elapsed = started.elapsed();
+		self.finish_scene_refresh(SceneRefreshReason::PresetLoaded, elapsed);
+		trace!(
+			preset = %preset,
+			duration_ms = duration_ms(elapsed),
+			text_bytes = self.session.text().len(),
+			"preset loaded"
+		);
 	}
 
 	fn handle_canvas_viewport_resized(&mut self, size: Size) {
@@ -158,18 +169,78 @@ impl Playground {
 
 		self.viewport.clamp_scroll(self.session.scene());
 
+		if width_changed || refresh_ready.is_some() {
+			trace!(
+				canvas_width = size.width,
+				canvas_height = size.height,
+				layout_width = self.viewport.layout_width,
+				width_changed,
+				refresh_ready = refresh_ready.is_some(),
+				"canvas viewport resized"
+			);
+		}
+
 		if refresh_ready.is_some() {
 			self.rebuild_scene(SceneRefreshReason::ResizeReflow);
 		}
 	}
 
 	fn dispatch_editor_intent(&mut self, intent: EditorIntent, source: EditorDispatchSource) {
+		let _span = trace_span!("editor.intent", intent = ?intent, source = ?source).entered();
 		let command_started = Instant::now();
 		let apply_started = Instant::now();
 		let outcome = self.session.apply_editor_intent(intent);
-		self.perf.record_editor_apply(apply_started.elapsed());
+		let document_changed = outcome.document_changed;
+		let view_changed = outcome.view_changed;
+		let selection_changed = outcome.selection_changed;
+		let mode_changed = outcome.mode_changed;
+		let requires_scene_rebuild = outcome.requires_scene_rebuild;
+		let apply_elapsed = apply_started.elapsed();
+		self.perf.record_editor_apply(apply_elapsed);
 		self.handle_editor_outcome(outcome, source);
-		self.perf.record_editor_command(command_started.elapsed());
+		let command_elapsed = command_started.elapsed();
+		self.perf.record_editor_command(command_elapsed);
+
+		let apply_ms = duration_ms(apply_elapsed);
+		let command_ms = duration_ms(command_elapsed);
+
+		if command_ms >= 16.7 {
+			warn!(
+				apply_ms,
+				command_ms,
+				document_changed,
+				view_changed,
+				selection_changed,
+				mode_changed,
+				requires_scene_rebuild,
+				text_bytes = self.session.text().len(),
+				"editor command over frame budget"
+			);
+		} else if command_ms >= 8.0 {
+			debug!(
+				apply_ms,
+				command_ms,
+				document_changed,
+				view_changed,
+				selection_changed,
+				mode_changed,
+				requires_scene_rebuild,
+				text_bytes = self.session.text().len(),
+				"editor command over warning threshold"
+			);
+		} else {
+			trace!(
+				apply_ms,
+				command_ms,
+				document_changed,
+				view_changed,
+				selection_changed,
+				mode_changed,
+				requires_scene_rebuild,
+				text_bytes = self.session.text().len(),
+				"editor command applied"
+			);
+		}
 	}
 
 	fn handle_editor_outcome(&mut self, outcome: EditorOutcome, source: EditorDispatchSource) {
@@ -188,11 +259,37 @@ impl Playground {
 	}
 
 	fn rebuild_scene(&mut self, reason: SceneRefreshReason) {
+		let _span = trace_span!("scene.rebuild", reason = ?reason).entered();
 		let config = self.scene_config();
 		let started = Instant::now();
 		self.session.rebuild(config);
 		self.viewport.mark_scene_applied(Instant::now());
-		self.finish_scene_refresh(reason, started.elapsed());
+		let elapsed = started.elapsed();
+		self.finish_scene_refresh(reason, elapsed);
+
+		let elapsed_ms = duration_ms(elapsed);
+		if elapsed_ms >= 16.7 {
+			warn!(
+				duration_ms = elapsed_ms,
+				scene_width = self.session.scene().measured_width,
+				scene_height = self.session.scene().measured_height,
+				"scene rebuild over frame budget"
+			);
+		} else if elapsed_ms >= 8.0 {
+			debug!(
+				duration_ms = elapsed_ms,
+				scene_width = self.session.scene().measured_width,
+				scene_height = self.session.scene().measured_height,
+				"scene rebuild over warning threshold"
+			);
+		} else {
+			trace!(
+				duration_ms = elapsed_ms,
+				scene_width = self.session.scene().measured_width,
+				scene_height = self.session.scene().measured_height,
+				"scene rebuilt"
+			);
+		}
 	}
 
 	fn finish_scene_refresh(&mut self, reason: SceneRefreshReason, duration: Duration) {
@@ -235,5 +332,17 @@ fn editor_dispatch_source(intent: &EditorIntent) -> EditorDispatchSource {
 		EditorIntent::Pointer(EditorPointerIntent::DragSelection(_)) => EditorDispatchSource::PointerDrag,
 		EditorIntent::Pointer(EditorPointerIntent::EndSelection) => EditorDispatchSource::PointerRelease,
 		_ => EditorDispatchSource::Keyboard,
+	}
+}
+
+fn message_kind(message: &Message) -> &'static str {
+	match message {
+		Message::Controls(_) => "controls",
+		Message::Sidebar(_) => "sidebar",
+		Message::Canvas(_) => "canvas",
+		Message::Editor(_) => "editor",
+		Message::Perf(_) => "perf",
+		Message::Viewport(_) => "viewport",
+		Message::Shell(_) => "shell",
 	}
 }

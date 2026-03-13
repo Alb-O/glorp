@@ -75,6 +75,7 @@ mod editor;
 mod overlay;
 mod perf;
 mod scene;
+mod telemetry;
 mod text_view;
 mod types;
 mod ui;
@@ -149,6 +150,8 @@ impl HeadlessScriptScenario {
 }
 
 pub fn run() -> iced::Result {
+	telemetry::init_tracing();
+
 	let settings = iced::Settings {
 		default_font: Font::with_name("Noto Sans CJK SC"),
 		..Default::default()
