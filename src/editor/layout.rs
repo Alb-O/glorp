@@ -259,6 +259,18 @@ impl BufferLayoutSnapshot {
 
 		BufferCaretMetrics { run_index: 0, x: 0.0 }
 	}
+
+	pub(super) fn caret_rectangle(&self, byte: usize) -> Option<EditorSelectionRect> {
+		let metrics = self.caret_metrics(byte);
+		let run = self.runs.get(metrics.run_index)?;
+
+		Some(EditorSelectionRect {
+			x: metrics.x,
+			y: run.line_top,
+			width: 2.0,
+			height: run.line_height.max(1.0),
+		})
+	}
 }
 
 fn build_buffer_clusters(

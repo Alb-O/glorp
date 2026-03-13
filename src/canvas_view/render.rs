@@ -1,6 +1,7 @@
 use iced::widget::canvas;
 use iced::{Color, Font, Pixels, Point, Rectangle, Size, Vector};
 
+use crate::editor::{EditorMode, EditorSelectionRect};
 use crate::scene::PathCommand;
 use crate::types::CanvasTarget;
 
@@ -123,20 +124,31 @@ pub(super) fn draw_overlay(
 	frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas, focused: bool, scroll: Vector,
 ) {
 	let origin = scrolled_origin(scroll);
+	let palette = selection_palette(canvas.editor.mode);
 
 	for selection in canvas.editor.selection_rectangles.iter() {
-		frame.fill_rectangle(
-			Point::new(origin.x + selection.x, origin.y + selection.y),
-			Size::new(selection.width.max(1.0), selection.height.max(1.0)),
-			Color::from_rgba(1.0, 0.92, 0.45, 0.35),
+		fill_selection_rect(
+			frame,
+			origin,
+			*selection,
+			palette.selection_fill,
+			palette.selection_stroke,
+			1.0,
 		);
-		frame.stroke_rectangle(
-			Point::new(origin.x + selection.x, origin.y + selection.y),
-			Size::new(selection.width.max(1.0), selection.height.max(1.0)),
-			canvas::Stroke::default()
-				.with_width(1.0)
-				.with_color(Color::from_rgba(1.0, 0.95, 0.7, 0.92)),
-		);
+	}
+
+	if let Some(active) = canvas.editor.viewport_target {
+		fill_selection_rect(frame, origin, active, palette.active_fill, palette.active_stroke, 1.5);
+	}
+
+	if focused && matches!(canvas.editor.mode, EditorMode::Insert) {
+		if let Some(caret) = canvas.editor.caret_rectangle {
+			frame.fill_rectangle(
+				Point::new(origin.x + caret.x, origin.y + caret.y),
+				Size::new(caret.width.max(1.5), caret.height.max(1.0)),
+				palette.caret_fill,
+			);
+		}
 	}
 
 	if canvas.show_inspector_overlays {
@@ -155,7 +167,7 @@ pub(super) fn draw_overlay(
 			Size::new(canvas.layout_width.max(1.0), canvas.scene.measured_height.max(1.0)),
 			canvas::Stroke::default()
 				.with_width(1.0)
-				.with_color(Color::from_rgba(0.96, 0.92, 0.7, 0.85)),
+				.with_color(palette.focus_stroke),
 		);
 	}
 
@@ -170,6 +182,52 @@ pub(super) fn draw_overlay(
 		font: Font::MONOSPACE,
 		..canvas::Text::default()
 	});
+}
+
+#[derive(Debug, Clone, Copy)]
+struct SelectionPalette {
+	selection_fill: Color,
+	selection_stroke: Color,
+	active_fill: Color,
+	active_stroke: Color,
+	caret_fill: Color,
+	focus_stroke: Color,
+}
+
+fn selection_palette(mode: EditorMode) -> SelectionPalette {
+	match mode {
+		EditorMode::Normal => SelectionPalette {
+			selection_fill: Color::from_rgba(1.0, 0.84, 0.28, 0.22),
+			selection_stroke: Color::from_rgba(1.0, 0.92, 0.6, 0.74),
+			active_fill: Color::from_rgba(1.0, 0.74, 0.14, 0.5),
+			active_stroke: Color::from_rgba(1.0, 0.96, 0.78, 0.98),
+			caret_fill: Color::from_rgba(1.0, 0.92, 0.45, 1.0),
+			focus_stroke: Color::from_rgba(1.0, 0.9, 0.55, 0.88),
+		},
+		EditorMode::Insert => SelectionPalette {
+			selection_fill: Color::from_rgba(0.28, 0.74, 1.0, 0.18),
+			selection_stroke: Color::from_rgba(0.6, 0.9, 1.0, 0.66),
+			active_fill: Color::from_rgba(0.1, 0.86, 0.72, 0.28),
+			active_stroke: Color::from_rgba(0.66, 1.0, 0.9, 0.94),
+			caret_fill: Color::from_rgba(0.62, 1.0, 0.88, 1.0),
+			focus_stroke: Color::from_rgba(0.56, 0.94, 1.0, 0.84),
+		},
+	}
+}
+
+fn fill_selection_rect(
+	frame: &mut canvas::Frame, origin: Point, rect: EditorSelectionRect, fill: Color, stroke: Color, stroke_width: f32,
+) {
+	frame.fill_rectangle(
+		Point::new(origin.x + rect.x, origin.y + rect.y),
+		Size::new(rect.width.max(1.0), rect.height.max(1.0)),
+		fill,
+	);
+	frame.stroke_rectangle(
+		Point::new(origin.x + rect.x, origin.y + rect.y),
+		Size::new(rect.width.max(1.0), rect.height.max(1.0)),
+		canvas::Stroke::default().with_width(stroke_width).with_color(stroke),
+	);
 }
 
 fn draw_target_overlay(

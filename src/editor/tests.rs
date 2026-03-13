@@ -260,6 +260,44 @@ fn mode_transition_sets_mode_changed_and_viewport_target() {
 }
 
 #[test]
+fn insert_mode_exposes_a_caret_rectangle() {
+	let (mut font_system, mut editor) = editor("abc");
+
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+
+	let view = editor.view_state();
+	let caret = view
+		.caret_rectangle
+		.expect("insert mode should expose a caret rectangle");
+	let active = view
+		.viewport_target
+		.expect("insert mode should expose an active cluster");
+
+	assert_eq!(caret.y, active.y);
+	assert!(caret.height >= active.height);
+	assert_eq!(caret.x, active.x);
+}
+
+#[test]
+fn insert_mode_caret_moves_to_the_trailing_edge_at_line_end() {
+	let (mut font_system, mut editor) = editor("abc");
+
+	editor.apply(&mut font_system, motion(EditorMotion::LineEnd));
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+
+	let view = editor.view_state();
+	let caret = view
+		.caret_rectangle
+		.expect("line-end insert mode should expose a caret rectangle");
+	let active = view
+		.viewport_target
+		.expect("line-end insert mode should retain the last cluster");
+
+	assert!(caret.x > active.x);
+	assert!(caret.x >= active.x + active.width - caret.width);
+}
+
+#[test]
 fn live_selection_rectangles_track_wrapped_width_changes() {
 	let text = "alpha beta gamma delta epsilon zeta eta theta";
 	let (mut font_system, mut editor) = editor(text);

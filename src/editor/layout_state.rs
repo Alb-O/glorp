@@ -26,6 +26,7 @@ impl EditorLayout {
 				selection: None,
 				selection_head: None,
 				selection_rectangles: Arc::from([]),
+				caret_rectangle: None,
 				viewport_target: None,
 			},
 		}
@@ -79,6 +80,7 @@ impl EditorLayout {
 			selection: None,
 			selection_head: None,
 			selection_rectangles: Arc::from([]),
+			caret_rectangle: None,
 			viewport_target: None,
 		};
 	}

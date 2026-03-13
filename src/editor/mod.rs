@@ -50,6 +50,7 @@ pub(crate) struct EditorViewState {
 	pub(crate) selection: Option<Range<usize>>,
 	pub(crate) selection_head: Option<usize>,
 	pub(crate) selection_rectangles: Arc<[EditorSelectionRect]>,
+	pub(crate) caret_rectangle: Option<EditorSelectionRect>,
 	pub(crate) viewport_target: Option<EditorSelectionRect>,
 }
 
@@ -408,14 +409,17 @@ impl EditorEngine {
 
 	fn refresh_view_state(&mut self) {
 		let layout = self.layout_snapshot();
+		let selection = self.selection().cloned();
+		let selection_head = selection.as_ref().map(EditorSelection::head);
 		self.layout_model.layout.set_view_state(EditorViewState {
 			mode: self.mode(),
-			selection: self.selection_range(),
-			selection_head: self.selection().map(EditorSelection::head),
-			selection_rectangles: self
-				.selection()
+			selection: selection.as_ref().map(EditorSelection::range_cloned),
+			selection_head,
+			selection_rectangles: selection
+				.as_ref()
 				.map(|selection| layout.selection_rectangles(selection.range()))
 				.unwrap_or_else(|| Arc::from([])),
+			caret_rectangle: selection_head.and_then(|head| layout.caret_rectangle(head)),
 			viewport_target: self.active_viewport_target(&layout),
 		});
 	}
