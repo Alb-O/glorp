@@ -1,7 +1,8 @@
 use super::{
 	EditorEditIntent, EditorEngine, EditorHistoryIntent, EditorIntent, EditorMode, EditorModeIntent, EditorMotion,
-	EditorPointerIntent, TextEdit,
+	EditorPointerIntent, TextEdit, geometry::selection_rectangles,
 };
+use crate::overlay::{EditorOverlayTone, LayoutRect, OverlayPrimitive, OverlayRectKind};
 use crate::scene::{LayoutScene, make_font_system, scene_config};
 use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
 use iced::Point;
@@ -39,6 +40,27 @@ fn history(intent: EditorHistoryIntent) -> EditorIntent {
 
 fn pointer(intent: EditorPointerIntent) -> EditorIntent {
 	EditorIntent::Pointer(intent)
+}
+
+fn rects(view: &super::EditorViewState, kind: OverlayRectKind) -> Vec<LayoutRect> {
+	view.overlays
+		.iter()
+		.filter_map(|primitive| match primitive {
+			OverlayPrimitive::Rect {
+				rect,
+				kind: primitive_kind,
+				..
+			} if *primitive_kind == kind => Some(*rect),
+			_ => None,
+		})
+		.collect()
+}
+
+fn first_rect(view: &super::EditorViewState, kind: OverlayRectKind) -> LayoutRect {
+	rects(view, kind)
+		.into_iter()
+		.next()
+		.expect("expected overlay rectangle")
 }
 
 #[test]
@@ -294,9 +316,7 @@ fn insert_mode_exposes_a_caret_rectangle() {
 	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
 
 	let view = editor.view_state();
-	let caret = view
-		.caret_rectangle
-		.expect("insert mode should expose a caret rectangle");
+	let caret = first_rect(&view, OverlayRectKind::EditorCaret(EditorOverlayTone::Insert));
 	let active = view
 		.viewport_target
 		.expect("insert mode should expose an active cluster");
@@ -314,9 +334,7 @@ fn insert_mode_caret_moves_to_the_trailing_edge_at_line_end() {
 	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
 
 	let view = editor.view_state();
-	let caret = view
-		.caret_rectangle
-		.expect("line-end insert mode should expose a caret rectangle");
+	let caret = first_rect(&view, OverlayRectKind::EditorCaret(EditorOverlayTone::Insert));
 	let block = view
 		.viewport_target
 		.expect("line-end insert mode should expose a caret block");
@@ -329,7 +347,7 @@ fn insert_mode_caret_moves_to_the_trailing_edge_at_line_end() {
 		)
 		.expect("line-end insert should retain the last cluster");
 
-	assert!(view.selection_rectangles.is_empty());
+	assert!(rects(&view, OverlayRectKind::EditorSelection(EditorOverlayTone::Insert)).is_empty());
 	assert!(block.width > caret.width);
 	assert!(caret.x > active.x);
 	assert!(caret.x >= active.x + active.width - caret.width);
@@ -343,9 +361,7 @@ fn insert_mode_caret_stays_on_the_previous_row_before_a_newline() {
 	editor.apply(&mut font_system, motion(EditorMotion::Right));
 
 	let view = editor.view_state();
-	let caret = view
-		.caret_rectangle
-		.expect("newline-boundary insert mode should expose a caret rectangle");
+	let caret = first_rect(&view, OverlayRectKind::EditorCaret(EditorOverlayTone::Insert));
 	let active = view
 		.viewport_target
 		.expect("newline-boundary insert mode should expose a caret target");
@@ -363,7 +379,7 @@ fn insert_mode_caret_stays_on_the_previous_row_before_a_newline() {
 	assert_eq!(active.x, caret.x);
 	assert_eq!(active.y, caret.y);
 	assert!(active.width > caret.width);
-	assert!(view.selection_rectangles.is_empty());
+	assert!(rects(&view, OverlayRectKind::EditorSelection(EditorOverlayTone::Insert)).is_empty());
 	assert_eq!(caret.y, previous.y);
 	assert!(caret.x > previous.x);
 	assert!(caret.x >= previous.x + previous.width - caret.width);
@@ -396,21 +412,17 @@ fn live_selection_rectangles_track_wrapped_width_changes() {
 		editor.apply(&mut font_system, motion(EditorMotion::Right));
 	}
 
-	let before = editor
-		.view_state()
-		.selection_rectangles
-		.first()
-		.copied()
-		.expect("selection geometry should exist before resize");
+	let before = first_rect(
+		&editor.view_state(),
+		OverlayRectKind::EditorSelection(EditorOverlayTone::Normal),
+	);
 
 	editor.sync_buffer_width(&mut font_system, 110.0);
 
-	let after = editor
-		.view_state()
-		.selection_rectangles
-		.first()
-		.copied()
-		.expect("selection geometry should exist after resize");
+	let after = first_rect(
+		&editor.view_state(),
+		OverlayRectKind::EditorSelection(EditorOverlayTone::Normal),
+	);
 
 	assert!(
 		after.y > before.y || (after.y == before.y && after.x < before.x),
@@ -424,12 +436,10 @@ fn drag_selection_spans_multiple_wrapped_rectangles() {
 	let (mut font_system, mut editor) = editor(text);
 	editor.sync_buffer_width(&mut font_system, 130.0);
 
-	let start = editor
-		.view_state()
-		.selection_rectangles
-		.first()
-		.copied()
-		.expect("initial selection should have a rectangle");
+	let start = first_rect(
+		&editor.view_state(),
+		OverlayRectKind::EditorSelection(EditorOverlayTone::Normal),
+	);
 
 	editor.apply(
 		&mut font_system,
@@ -445,7 +455,7 @@ fn drag_selection_spans_multiple_wrapped_rectangles() {
 	editor.apply(&mut font_system, pointer(EditorPointerIntent::EndSelection));
 
 	let view = editor.view_state();
-	assert!(view.selection_rectangles.len() >= 2);
+	assert!(rects(&view, OverlayRectKind::EditorSelection(EditorOverlayTone::Normal)).len() >= 2);
 	assert!(
 		view.selection
 			.as_ref()
@@ -503,7 +513,7 @@ fn rtl_selection_rectangles_keep_positive_width() {
 
 	let range = rtl_span[0].byte_range.start.min(rtl_span[1].byte_range.start)
 		..rtl_span[0].byte_range.end.max(rtl_span[1].byte_range.end);
-	let rectangles = layout.selection_rectangles(&range);
+	let rectangles = selection_rectangles(&layout, &range);
 
 	assert!(!rectangles.is_empty());
 	assert!(rectangles.iter().all(|rect| rect.width > 0.0));
@@ -517,12 +527,10 @@ fn double_click_selects_a_full_word() {
 		editor.apply(&mut font_system, motion(EditorMotion::Right));
 	}
 
-	let rect = editor
-		.view_state()
-		.selection_rectangles
-		.first()
-		.copied()
-		.expect("selection should have a rectangle");
+	let rect = first_rect(
+		&editor.view_state(),
+		OverlayRectKind::EditorSelection(EditorOverlayTone::Normal),
+	);
 
 	editor.apply(
 		&mut font_system,

@@ -1,5 +1,6 @@
 mod document;
 mod editing;
+mod geometry;
 mod history;
 mod layout;
 mod layout_state;
@@ -19,9 +20,11 @@ use std::fmt::{self, Display};
 use std::ops::Range;
 use std::sync::Arc;
 
+use crate::overlay::{EditorOverlayTone, LayoutRect, OverlayPrimitive, OverlayRectKind};
 use crate::scene::SceneConfig;
 
 use self::document::DocumentState;
+use self::geometry::{cluster_rectangle, selection_rectangles};
 use self::history::{EditorSnapshot, HistoryEntry};
 use self::layout::{BufferClusterInfo, BufferLayoutSnapshot};
 use self::layout_state::EditorLayout;
@@ -49,17 +52,8 @@ pub(crate) struct EditorViewState {
 	pub(crate) mode: EditorMode,
 	pub(crate) selection: Option<Range<usize>>,
 	pub(crate) selection_head: Option<usize>,
-	pub(crate) selection_rectangles: Arc<[EditorSelectionRect]>,
-	pub(crate) caret_rectangle: Option<EditorSelectionRect>,
-	pub(crate) viewport_target: Option<EditorSelectionRect>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct EditorSelectionRect {
-	pub(crate) x: f32,
-	pub(crate) y: f32,
-	pub(crate) width: f32,
-	pub(crate) height: f32,
+	pub(crate) overlays: Arc<[OverlayPrimitive]>,
+	pub(crate) viewport_target: Option<LayoutRect>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,7 +150,7 @@ pub(crate) struct EditorOutcome {
 	pub(crate) selection_changed: bool,
 	pub(crate) mode_changed: bool,
 	pub(crate) requires_scene_rebuild: bool,
-	pub(crate) viewport_target: Option<EditorSelectionRect>,
+	pub(crate) viewport_target: Option<LayoutRect>,
 	pub(crate) text_edit: Option<TextEdit>,
 }
 
@@ -195,6 +189,19 @@ impl EditorOutcome {
 			viewport_target: next_view.viewport_target,
 			text_edit: result.text_edit,
 		}
+	}
+}
+
+impl EditorViewState {
+	pub(crate) fn overlay_count(&self, kind: OverlayRectKind) -> usize {
+		self.overlays
+			.iter()
+			.filter(|primitive| {
+				primitive
+					.as_rect()
+					.is_some_and(|(_, primitive_kind, _)| primitive_kind == kind)
+			})
+			.count()
 	}
 }
 
@@ -287,7 +294,10 @@ impl EditorEngine {
 					self.mode(),
 					selection.range(),
 					self.preview_range(selection.range()),
-					self.layout_model.layout.view_state_ref().selection_rectangles.len(),
+					self.layout_model
+						.layout
+						.view_state_ref()
+						.overlay_count(OverlayRectKind::EditorSelection(EditorOverlayTone::Normal)),
 					self.caret(),
 					self.pointer_anchor().unwrap_or(selection.range().start),
 					undo_depth,
@@ -307,7 +317,10 @@ impl EditorEngine {
 						self.mode(),
 						selection.range(),
 						self.preview_range(selection.range()),
-						self.layout_model.layout.view_state_ref().selection_rectangles.len(),
+						self.layout_model
+							.layout
+							.view_state_ref()
+							.overlay_count(OverlayRectKind::EditorSelection(EditorOverlayTone::Insert)),
 						selection.head(),
 						undo_depth,
 						redo_depth,
@@ -398,47 +411,70 @@ impl EditorEngine {
 		});
 	}
 
-	fn active_viewport_target(&self, layout: &BufferLayoutSnapshot) -> Option<EditorSelectionRect> {
+	fn active_viewport_target(&self, layout: &BufferLayoutSnapshot) -> Option<LayoutRect> {
 		if matches!(self.mode(), EditorMode::Insert) {
 			return self.layout_model.layout.insert_cursor_block(self.text(), self.caret());
 		}
 
-		self.active_selection(layout).map(|cluster| EditorSelectionRect {
-			x: cluster.x,
-			y: cluster.y,
-			width: cluster.width.max(1.0),
-			height: cluster.height.max(1.0),
-		})
+		self.active_selection(layout).map(cluster_rectangle)
 	}
 
 	fn refresh_view_state(&mut self) {
 		let layout = self.layout_snapshot();
 		let selection = self.selection().cloned();
 		let selection_head = selection.as_ref().map(EditorSelection::head);
+		let tone = EditorOverlayTone::from(self.mode());
 		let insert_cursor = matches!(self.mode(), EditorMode::Insert)
 			.then(|| {
 				selection_head.and_then(|head| self.layout_model.layout.insert_cursor_rectangle(self.text(), head))
 			})
 			.flatten();
+		let viewport_target = self.active_viewport_target(&layout);
 		self.layout_model.layout.set_view_state(EditorViewState {
 			mode: self.mode(),
 			selection: selection.as_ref().map(EditorSelection::range_cloned),
 			selection_head,
-			selection_rectangles: if matches!(self.mode(), EditorMode::Insert) {
-				Arc::from([])
-			} else {
-				selection
-					.as_ref()
-					.map(|selection| layout.selection_rectangles(selection.range()))
-					.unwrap_or_else(|| Arc::from([]))
-			},
-			caret_rectangle: if matches!(self.mode(), EditorMode::Insert) {
-				insert_cursor
-			} else {
-				selection_head.and_then(|head| layout.caret_rectangle(head))
-			},
-			viewport_target: self.active_viewport_target(&layout),
+			overlays: self.build_overlays(&layout, selection.as_ref(), insert_cursor, viewport_target, tone),
+			viewport_target,
 		});
+	}
+
+	fn build_overlays(
+		&self, layout: &BufferLayoutSnapshot, selection: Option<&EditorSelection>, insert_cursor: Option<LayoutRect>,
+		viewport_target: Option<LayoutRect>, tone: EditorOverlayTone,
+	) -> Arc<[OverlayPrimitive]> {
+		let mut overlays = Vec::new();
+
+		if matches!(self.mode(), EditorMode::Insert) {
+			if let Some(insert_block) = viewport_target {
+				overlays.push(OverlayPrimitive::scene_rect(
+					insert_block,
+					OverlayRectKind::EditorInsertBlock(tone),
+				));
+			}
+
+			if let Some(caret) = insert_cursor {
+				overlays.push(OverlayPrimitive::scene_rect(caret, OverlayRectKind::EditorCaret(tone)));
+			}
+		} else {
+			if let Some(selection) = selection {
+				overlays.extend(
+					selection_rectangles(layout, selection.range())
+						.iter()
+						.copied()
+						.map(|rect| OverlayPrimitive::scene_rect(rect, OverlayRectKind::EditorSelection(tone))),
+				);
+			}
+
+			if let Some(active) = viewport_target {
+				overlays.push(OverlayPrimitive::scene_rect(
+					active,
+					OverlayRectKind::EditorActive(tone),
+				));
+			}
+		}
+
+		overlays.into()
 	}
 
 	fn selection(&self) -> Option<&EditorSelection> {

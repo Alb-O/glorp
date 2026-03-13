@@ -6,15 +6,17 @@ mod state;
 pub(crate) use geometry::{scene_origin, scene_viewport_size};
 pub(crate) use state::CanvasState;
 
+use std::sync::Arc;
 use std::time::Instant;
 
 use iced::widget::canvas;
 use iced::{Rectangle, Theme, Vector, mouse};
 
 use crate::editor::EditorViewState;
+use crate::overlay::OverlayPrimitive;
 use crate::perf::CanvasPerfSink;
 use crate::scene::LayoutScene;
-use crate::types::{CanvasTarget, Message};
+use crate::types::Message;
 
 use self::geometry::max_scroll;
 use self::input::decode_event;
@@ -24,11 +26,9 @@ use self::render::{draw_overlay, draw_static_scene};
 pub(crate) struct GlyphCanvas {
 	pub(crate) scene: LayoutScene,
 	pub(crate) layout_width: f32,
-	pub(crate) show_inspector_overlays: bool,
 	pub(crate) show_baselines: bool,
 	pub(crate) show_hitboxes: bool,
-	pub(crate) hovered_target: Option<CanvasTarget>,
-	pub(crate) selected_target: Option<CanvasTarget>,
+	pub(crate) inspect_overlays: Arc<[OverlayPrimitive]>,
 	pub(crate) editor: EditorViewState,
 	pub(crate) scene_revision: u64,
 	pub(crate) scroll: Vector,

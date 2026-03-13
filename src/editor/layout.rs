@@ -1,16 +1,14 @@
 use cosmic_text::{Buffer, Cursor, LayoutGlyph};
 
 use std::ops::Range;
-use std::sync::Arc;
 
-use super::EditorSelectionRect;
 use crate::editor::text::line_byte_offsets;
 
 #[derive(Debug, Clone)]
 pub(super) struct BufferRunInfo {
 	cluster_range: Range<usize>,
-	line_height: f32,
-	line_top: f32,
+	pub(super) line_height: f32,
+	pub(super) line_top: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -26,20 +24,6 @@ pub(super) struct BufferClusterInfo {
 impl BufferClusterInfo {
 	pub(super) fn center_x(&self) -> f32 {
 		self.x + (self.width * 0.5)
-	}
-}
-
-impl EditorSelectionRect {
-	fn from_span(start: &BufferClusterInfo, end: &BufferClusterInfo) -> Self {
-		let left = start.x.min(end.x);
-		let right = (start.x + start.width).max(end.x + end.width);
-
-		Self {
-			x: left,
-			y: start.y.min(end.y),
-			width: (right - left).max(1.0),
-			height: start.height.max(end.height),
-		}
 	}
 }
 
@@ -223,37 +207,6 @@ impl BufferLayoutSnapshot {
 		self.cluster_at_or_after(byte).or_else(|| self.cluster_before(byte))
 	}
 
-	pub(super) fn selection_rectangles(&self, range: &Range<usize>) -> Arc<[EditorSelectionRect]> {
-		let selected = self
-			.clusters
-			.iter()
-			.filter(|cluster| cluster.byte_range.end > range.start && cluster.byte_range.start < range.end)
-			.collect::<Vec<_>>();
-		if selected.is_empty() {
-			return Arc::from([]);
-		}
-
-		let mut rectangles = Vec::new();
-		let mut span_start = selected[0];
-		let mut span_end = selected[0];
-
-		for cluster in selected.into_iter().skip(1) {
-			let same_run = cluster.run_index == span_end.run_index;
-			let contiguous = cluster.byte_range.start <= span_end.byte_range.end;
-			if same_run && contiguous {
-				span_end = cluster;
-				continue;
-			}
-
-			rectangles.push(EditorSelectionRect::from_span(span_start, span_end));
-			span_start = cluster;
-			span_end = cluster;
-		}
-
-		rectangles.push(EditorSelectionRect::from_span(span_start, span_end));
-		rectangles.into()
-	}
-
 	pub(super) fn caret_metrics(&self, byte: usize) -> BufferCaretMetrics {
 		if self.clusters.is_empty() {
 			return BufferCaretMetrics { run_index: 0, x: 0.0 };
@@ -278,18 +231,6 @@ impl BufferLayoutSnapshot {
 		}
 
 		BufferCaretMetrics { run_index: 0, x: 0.0 }
-	}
-
-	pub(super) fn caret_rectangle(&self, byte: usize) -> Option<EditorSelectionRect> {
-		let metrics = self.caret_metrics(byte);
-		let run = self.runs.get(metrics.run_index)?;
-
-		Some(EditorSelectionRect {
-			x: metrics.x,
-			y: run.line_top,
-			width: 2.0,
-			height: run.line_height.max(1.0),
-		})
 	}
 }
 

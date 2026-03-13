@@ -2,6 +2,7 @@ use iced::widget::{pane_grid, responsive};
 use iced::{Element, Length};
 
 use std::fmt::Write as _;
+use std::sync::Arc;
 
 use crate::types::{Message, ShellMessage, SidebarTab};
 use crate::ui::{
@@ -58,14 +59,23 @@ impl Playground {
 	}
 
 	fn view_canvas(&self, stacked: bool) -> Element<'static, Message> {
+		let inspect_overlays = if self.sidebar.active_tab == SidebarTab::Inspect {
+			self.session.inspect_overlay_primitives(
+				self.sidebar.hovered_target,
+				self.sidebar.selected_target,
+				self.viewport.layout_width,
+				self.controls.show_hitboxes,
+			)
+		} else {
+			Arc::from([])
+		};
+
 		view_canvas_pane(CanvasPaneProps {
 			scene: self.session.scene().clone(),
 			layout_width: self.viewport.layout_width,
-			show_inspector_overlays: self.sidebar.active_tab == SidebarTab::Inspect,
 			show_baselines: self.controls.show_baselines,
 			show_hitboxes: self.controls.show_hitboxes,
-			hovered_target: self.sidebar.hovered_target,
-			selected_target: self.sidebar.selected_target,
+			inspect_overlays,
 			editor: self.session.view_state(),
 			scene_revision: self.viewport.scene_revision,
 			scroll: self.viewport.canvas_scroll,

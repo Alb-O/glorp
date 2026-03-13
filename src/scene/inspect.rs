@@ -3,6 +3,7 @@ use cosmic_text::{Buffer, Command, FontSystem, LayoutGlyph, SwashCache, fontdb};
 use std::ops::Range;
 use std::sync::{Arc, OnceLock};
 
+use crate::overlay::{LayoutRect, OverlayPrimitive, OverlayRectKind};
 use crate::types::CanvasTarget;
 
 use super::text::debug_snippet;
@@ -80,6 +81,111 @@ impl LayoutScene {
 			.get(range.clone())
 			.map(debug_snippet)
 			.unwrap_or_else(|| "<invalid utf8 slice>".to_string())
+	}
+
+	pub(crate) fn inspect_overlay_primitives(
+		&self, hovered_target: Option<CanvasTarget>, selected_target: Option<CanvasTarget>, layout_width: f32,
+		show_hitboxes: bool,
+	) -> Arc<[OverlayPrimitive]> {
+		let mut overlays = Vec::new();
+
+		if let Some(target) = hovered_target {
+			overlays.extend(self.target_overlay_primitives(target, false, layout_width, show_hitboxes));
+		}
+
+		if let Some(target) = selected_target {
+			overlays.extend(self.target_overlay_primitives(target, true, layout_width, show_hitboxes));
+		}
+
+		overlays.into()
+	}
+
+	fn target_overlay_primitives(
+		&self, target: CanvasTarget, selected: bool, layout_width: f32, show_hitboxes: bool,
+	) -> Vec<OverlayPrimitive> {
+		match target {
+			CanvasTarget::Run(run_index) => {
+				let Some(run) = self.runs.get(run_index) else {
+					return Vec::new();
+				};
+
+				vec![OverlayPrimitive::scene_rect(
+					LayoutRect {
+						x: 0.0,
+						y: run.line_top,
+						width: layout_width.max(run.line_width).max(1.0),
+						height: run.line_height.max(1.0),
+					},
+					if selected {
+						OverlayRectKind::InspectRunSelected
+					} else {
+						OverlayRectKind::InspectRunHover
+					},
+				)]
+			}
+			CanvasTarget::Glyph { run_index, glyph_index } => {
+				let Some(rect) = self.target_rect(target) else {
+					return Vec::new();
+				};
+				let mut overlays = vec![OverlayPrimitive::scene_rect(
+					rect,
+					if selected {
+						OverlayRectKind::InspectGlyphSelected
+					} else {
+						OverlayRectKind::InspectGlyphHover
+					},
+				)];
+
+				if show_hitboxes {
+					overlays.push(OverlayPrimitive::scene_rect(
+						rect,
+						if selected {
+							OverlayRectKind::InspectGlyphHitboxSelected
+						} else {
+							OverlayRectKind::InspectGlyphHitboxHover
+						},
+					));
+				}
+
+				if self.glyph(run_index, glyph_index).is_some() {
+					return overlays;
+				}
+
+				overlays
+			}
+		}
+	}
+
+	fn target_rect(&self, target: CanvasTarget) -> Option<LayoutRect> {
+		match target {
+			CanvasTarget::Run(run_index) => {
+				let run = self.runs.get(run_index)?;
+				Some(LayoutRect {
+					x: 0.0,
+					y: run.line_top,
+					width: self.max_width.max(run.line_width).max(1.0),
+					height: run.line_height.max(1.0),
+				})
+			}
+			CanvasTarget::Glyph { run_index, glyph_index } => self
+				.glyph(run_index, glyph_index)
+				.map(|glyph| LayoutRect {
+					x: glyph.x,
+					y: glyph.y,
+					width: glyph.width.max(1.0),
+					height: glyph.height.max(1.0),
+				})
+				.or_else(|| {
+					self.cluster_index_for_target(target)
+						.and_then(|index| self.cluster(index))
+						.map(|cluster| LayoutRect {
+							x: cluster.x,
+							y: cluster.y,
+							width: cluster.width.max(1.0),
+							height: cluster.height.max(1.0),
+						})
+				}),
+		}
 	}
 }
 

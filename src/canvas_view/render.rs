@@ -1,9 +1,12 @@
 use iced::widget::canvas;
 use iced::{Color, Font, Pixels, Point, Rectangle, Size, Vector};
 
-use crate::editor::{EditorMode, EditorSelectionRect};
+use std::sync::Arc;
+
+use crate::overlay::{
+	EditorOverlayTone, LayoutRect, OverlayLabelKind, OverlayPrimitive, OverlayRectKind, OverlaySpace,
+};
 use crate::scene::PathCommand;
-use crate::types::CanvasTarget;
 
 use super::GlyphCanvas;
 use super::geometry::{glyph_intersects_viewport, run_intersects_viewport, scrolled_origin, visible_scene_bounds};
@@ -100,98 +103,79 @@ pub(super) fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, ca
 			}
 		}
 	}
-
-	let footer = format!(
-		"runs={} glyphs={} clusters={} fonts={} width={:.1} height={:.1}",
-		canvas.scene.runs.len(),
-		canvas.scene.glyph_count,
-		canvas.scene.clusters().len(),
-		canvas.scene.font_count,
-		canvas.scene.measured_width,
-		canvas.scene.measured_height,
-	);
-	frame.fill_text(canvas::Text {
-		content: footer,
-		position: Point::new(24.0, bounds.height - 24.0),
-		color: Color::from_rgb8(180, 190, 210),
-		size: Pixels(14.0),
-		font: Font::MONOSPACE,
-		..canvas::Text::default()
-	});
 }
 
 pub(super) fn draw_overlay(
 	frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas, focused: bool, scroll: Vector,
 ) {
 	let origin = scrolled_origin(scroll);
-	let palette = selection_palette(canvas.editor.mode);
-	let insert_block = matches!(canvas.editor.mode, EditorMode::Insert)
-		.then(|| canvas.editor.viewport_target.or(canvas.editor.caret_rectangle))
-		.flatten();
 
-	for selection in canvas.editor.selection_rectangles.iter() {
-		fill_selection_rect(
-			frame,
-			origin,
-			*selection,
-			palette.selection_fill,
-			palette.selection_stroke,
-			1.0,
-		);
-	}
-
-	if let Some(active) = canvas.editor.viewport_target.filter(|_| insert_block.is_none()) {
-		fill_selection_rect(frame, origin, active, palette.active_fill, palette.active_stroke, 1.5);
-	}
-
-	if let Some(insert_block) = insert_block {
-		let stroke = if focused {
-			palette.active_stroke
-		} else {
-			palette.selection_stroke
-		};
-		fill_selection_rect(frame, origin, insert_block, palette.caret_fill, stroke, 1.5);
-	} else if focused && matches!(canvas.editor.mode, EditorMode::Insert) {
-		if let Some(caret) = canvas.editor.caret_rectangle {
-			frame.fill_rectangle(
-				Point::new(origin.x + caret.x, origin.y + caret.y),
-				Size::new(caret.width.max(1.5), caret.height.max(1.0)),
-				palette.caret_fill,
-			);
+	for primitive in overlay_primitives(bounds, canvas, focused, scroll) {
+		match primitive {
+			OverlayPrimitive::Rect { rect, kind, space } => draw_rect_primitive(frame, origin, rect, kind, space),
+			OverlayPrimitive::Label {
+				position,
+				kind,
+				text,
+				space,
+			} => draw_label_primitive(frame, origin, position, kind, text, space),
 		}
 	}
+}
 
-	if canvas.show_inspector_overlays {
-		if let Some(target) = canvas.hovered_target {
-			draw_target_overlay(frame, canvas, origin, target, false);
-		}
-
-		if let Some(target) = canvas.selected_target {
-			draw_target_overlay(frame, canvas, origin, target, true);
-		}
-	}
+fn overlay_primitives(bounds: Rectangle, canvas: &GlyphCanvas, focused: bool, scroll: Vector) -> Vec<OverlayPrimitive> {
+	let mut overlays = Vec::with_capacity(canvas.editor.overlays.len() + canvas.inspect_overlays.len() + 3);
+	overlays.extend(canvas.editor.overlays.iter().cloned());
+	overlays.extend(canvas.inspect_overlays.iter().cloned());
 
 	if focused {
-		frame.stroke_rectangle(
-			origin,
-			Size::new(canvas.layout_width.max(1.0), canvas.scene.measured_height.max(1.0)),
-			canvas::Stroke::default()
-				.with_width(1.0)
-				.with_color(palette.focus_stroke),
-		);
+		overlays.push(OverlayPrimitive::scene_rect(
+			LayoutRect {
+				x: 0.0,
+				y: 0.0,
+				width: canvas.layout_width.max(1.0),
+				height: canvas.scene.measured_height.max(1.0),
+			},
+			OverlayRectKind::EditorFocusFrame(EditorOverlayTone::from(canvas.editor.mode)),
+		));
 	}
 
-	frame.fill_text(canvas::Text {
-		content: format!(
+	overlays.push(OverlayPrimitive::viewport_label(
+		Point::new(24.0, bounds.height - 24.0),
+		OverlayLabelKind::SceneFooter,
+		format!(
+			"runs={} glyphs={} clusters={} fonts={} width={:.1} height={:.1}",
+			canvas.scene.runs.len(),
+			canvas.scene.glyph_count,
+			canvas.scene.clusters().len(),
+			canvas.scene.font_count,
+			canvas.scene.measured_width,
+			canvas.scene.measured_height,
+		),
+	));
+	overlays.push(OverlayPrimitive::viewport_label(
+		Point::new(bounds.width - 170.0, bounds.height - 24.0),
+		OverlayLabelKind::CanvasStatus,
+		format!(
 			"mode={} focus={focused} scroll={:.0},{:.0}",
 			canvas.editor.mode, scroll.x, scroll.y
 		),
-		position: Point::new(bounds.width - 170.0, bounds.height - 24.0),
-		color: Color::from_rgb8(210, 214, 228),
-		size: Pixels(14.0),
-		font: Font::MONOSPACE,
-		..canvas::Text::default()
-	});
+	));
+
+	overlays
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RectStyle {
+	fill: Option<Color>,
+	stroke: Option<(Color, f32)>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LabelStyle {
+	color: Color,
+	size: Pixels,
+	font: Font,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -204,9 +188,138 @@ struct SelectionPalette {
 	focus_stroke: Color,
 }
 
-fn selection_palette(mode: EditorMode) -> SelectionPalette {
-	match mode {
-		EditorMode::Normal => SelectionPalette {
+fn draw_rect_primitive(
+	frame: &mut canvas::Frame, origin: Point, rect: LayoutRect, kind: OverlayRectKind, space: OverlaySpace,
+) {
+	let point = rect_origin(origin, rect, space);
+	let size = Size::new(rect.width.max(1.0), rect.height.max(1.0));
+	let style = rect_style(kind);
+
+	if let Some(fill) = style.fill {
+		frame.fill_rectangle(point, size, fill);
+	}
+
+	if let Some((stroke, stroke_width)) = style.stroke {
+		frame.stroke_rectangle(
+			point,
+			size,
+			canvas::Stroke::default().with_width(stroke_width).with_color(stroke),
+		);
+	}
+}
+
+fn draw_label_primitive(
+	frame: &mut canvas::Frame, origin: Point, position: Point, kind: OverlayLabelKind, text: Arc<str>,
+	space: OverlaySpace,
+) {
+	let position = point_in_space(origin, position, space);
+	let style = label_style(kind);
+	frame.fill_text(canvas::Text {
+		content: text.to_string(),
+		position,
+		color: style.color,
+		size: style.size,
+		font: style.font,
+		..canvas::Text::default()
+	});
+}
+
+fn rect_origin(origin: Point, rect: LayoutRect, space: OverlaySpace) -> Point {
+	match space {
+		OverlaySpace::Scene => Point::new(origin.x + rect.x, origin.y + rect.y),
+		OverlaySpace::Viewport => Point::new(rect.x, rect.y),
+	}
+}
+
+fn point_in_space(origin: Point, position: Point, space: OverlaySpace) -> Point {
+	match space {
+		OverlaySpace::Scene => Point::new(origin.x + position.x, origin.y + position.y),
+		OverlaySpace::Viewport => position,
+	}
+}
+
+fn rect_style(kind: OverlayRectKind) -> RectStyle {
+	match kind {
+		OverlayRectKind::EditorSelection(tone) => {
+			let palette = selection_palette(tone);
+			RectStyle {
+				fill: Some(palette.selection_fill),
+				stroke: Some((palette.selection_stroke, 1.0)),
+			}
+		}
+		OverlayRectKind::EditorActive(tone) => {
+			let palette = selection_palette(tone);
+			RectStyle {
+				fill: Some(palette.active_fill),
+				stroke: Some((palette.active_stroke, 1.5)),
+			}
+		}
+		OverlayRectKind::EditorInsertBlock(tone) => {
+			let palette = selection_palette(tone);
+			RectStyle {
+				fill: Some(palette.caret_fill),
+				stroke: Some((palette.active_stroke, 1.5)),
+			}
+		}
+		OverlayRectKind::EditorCaret(tone) => {
+			let palette = selection_palette(tone);
+			RectStyle {
+				fill: Some(palette.caret_fill),
+				stroke: None,
+			}
+		}
+		OverlayRectKind::EditorFocusFrame(tone) => {
+			let palette = selection_palette(tone);
+			RectStyle {
+				fill: None,
+				stroke: Some((palette.focus_stroke, 1.0)),
+			}
+		}
+		OverlayRectKind::InspectRunHover => RectStyle {
+			fill: Some(Color::from_rgba(0.4, 0.8, 1.0, 0.1)),
+			stroke: None,
+		},
+		OverlayRectKind::InspectRunSelected => RectStyle {
+			fill: Some(Color::from_rgba(1.0, 0.85, 0.2, 0.14)),
+			stroke: None,
+		},
+		OverlayRectKind::InspectGlyphHover => RectStyle {
+			fill: Some(Color::from_rgba(0.4, 0.8, 1.0, 0.18)),
+			stroke: None,
+		},
+		OverlayRectKind::InspectGlyphSelected => RectStyle {
+			fill: Some(Color::from_rgba(1.0, 0.85, 0.2, 0.25)),
+			stroke: None,
+		},
+		OverlayRectKind::InspectGlyphHitboxHover => RectStyle {
+			fill: None,
+			stroke: Some((Color::from_rgba(0.5, 0.85, 1.0, 0.95), 1.0)),
+		},
+		OverlayRectKind::InspectGlyphHitboxSelected => RectStyle {
+			fill: None,
+			stroke: Some((Color::from_rgba(1.0, 0.9, 0.2, 0.95), 1.0)),
+		},
+	}
+}
+
+fn label_style(kind: OverlayLabelKind) -> LabelStyle {
+	match kind {
+		OverlayLabelKind::SceneFooter => LabelStyle {
+			color: Color::from_rgb8(180, 190, 210),
+			size: Pixels(14.0),
+			font: Font::MONOSPACE,
+		},
+		OverlayLabelKind::CanvasStatus => LabelStyle {
+			color: Color::from_rgb8(210, 214, 228),
+			size: Pixels(14.0),
+			font: Font::MONOSPACE,
+		},
+	}
+}
+
+fn selection_palette(tone: EditorOverlayTone) -> SelectionPalette {
+	match tone {
+		EditorOverlayTone::Normal => SelectionPalette {
 			selection_fill: Color::from_rgba(1.0, 0.84, 0.28, 0.22),
 			selection_stroke: Color::from_rgba(1.0, 0.92, 0.6, 0.74),
 			active_fill: Color::from_rgba(1.0, 0.74, 0.14, 0.5),
@@ -214,7 +327,7 @@ fn selection_palette(mode: EditorMode) -> SelectionPalette {
 			caret_fill: Color::from_rgba(1.0, 0.92, 0.45, 1.0),
 			focus_stroke: Color::from_rgba(1.0, 0.9, 0.55, 0.88),
 		},
-		EditorMode::Insert => SelectionPalette {
+		EditorOverlayTone::Insert => SelectionPalette {
 			selection_fill: Color::from_rgba(0.28, 0.74, 1.0, 0.18),
 			selection_stroke: Color::from_rgba(0.6, 0.9, 1.0, 0.66),
 			active_fill: Color::from_rgba(0.1, 0.86, 0.72, 0.28),
@@ -222,86 +335,5 @@ fn selection_palette(mode: EditorMode) -> SelectionPalette {
 			caret_fill: Color::from_rgba(0.62, 1.0, 0.88, 1.0),
 			focus_stroke: Color::from_rgba(0.56, 0.94, 1.0, 0.84),
 		},
-	}
-}
-
-fn fill_selection_rect(
-	frame: &mut canvas::Frame, origin: Point, rect: EditorSelectionRect, fill: Color, stroke: Color, stroke_width: f32,
-) {
-	frame.fill_rectangle(
-		Point::new(origin.x + rect.x, origin.y + rect.y),
-		Size::new(rect.width.max(1.0), rect.height.max(1.0)),
-		fill,
-	);
-	frame.stroke_rectangle(
-		Point::new(origin.x + rect.x, origin.y + rect.y),
-		Size::new(rect.width.max(1.0), rect.height.max(1.0)),
-		canvas::Stroke::default().with_width(stroke_width).with_color(stroke),
-	);
-}
-
-fn draw_target_overlay(
-	frame: &mut canvas::Frame, canvas: &GlyphCanvas, origin: Point, target: CanvasTarget, selected: bool,
-) {
-	match target {
-		CanvasTarget::Run(run_index) => {
-			let Some(run) = canvas.scene.runs.get(run_index) else {
-				return;
-			};
-
-			frame.fill_rectangle(
-				Point::new(origin.x, origin.y + run.line_top),
-				Size::new(
-					canvas.layout_width.max(run.line_width).max(1.0),
-					run.line_height.max(1.0),
-				),
-				if selected {
-					Color::from_rgba(1.0, 0.85, 0.2, 0.14)
-				} else {
-					Color::from_rgba(0.4, 0.8, 1.0, 0.1)
-				},
-			);
-		}
-		CanvasTarget::Glyph { run_index, glyph_index } => {
-			let (glyph_origin, glyph_size) = if let Some(glyph) = canvas.scene.glyph(run_index, glyph_index) {
-				(
-					Point::new(origin.x + glyph.x, origin.y + glyph.y),
-					Size::new(glyph.width.max(1.0), glyph.height.max(1.0)),
-				)
-			} else if let Some(cluster) = canvas
-				.scene
-				.cluster_index_for_target(target)
-				.and_then(|index| canvas.scene.cluster(index))
-			{
-				(
-					Point::new(origin.x + cluster.x, origin.y + cluster.y),
-					Size::new(cluster.width.max(1.0), cluster.height.max(1.0)),
-				)
-			} else {
-				return;
-			};
-
-			frame.fill_rectangle(
-				glyph_origin,
-				glyph_size,
-				if selected {
-					Color::from_rgba(1.0, 0.85, 0.2, 0.25)
-				} else {
-					Color::from_rgba(0.4, 0.8, 1.0, 0.18)
-				},
-			);
-
-			if canvas.show_hitboxes {
-				frame.stroke_rectangle(
-					glyph_origin,
-					Size::new(glyph_size.width.max(0.5), glyph_size.height.max(0.5)),
-					canvas::Stroke::default().with_width(1.0).with_color(if selected {
-						Color::from_rgba(1.0, 0.9, 0.2, 0.95)
-					} else {
-						Color::from_rgba(0.5, 0.85, 1.0, 0.95)
-					}),
-				);
-			}
-		}
 	}
 }

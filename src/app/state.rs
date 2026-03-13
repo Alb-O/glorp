@@ -4,7 +4,7 @@ use iced::{Size, Vector};
 use std::time::{Duration, Instant};
 
 use crate::canvas_view::scene_viewport_size;
-use crate::editor::EditorSelectionRect;
+use crate::overlay::LayoutRect;
 use crate::scene::{LayoutScene, SceneConfig, scene_config};
 use crate::types::{CanvasTarget, FontChoice, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
 use crate::ui::default_sidebar_ratio;
@@ -180,7 +180,7 @@ impl ViewportState {
 		self.canvas_scroll = self.clamped_scroll(self.canvas_scroll, scene);
 	}
 
-	pub(super) fn reveal_target(&mut self, target: Option<EditorSelectionRect>, scene: &LayoutScene) {
+	pub(super) fn reveal_target(&mut self, target: Option<LayoutRect>, scene: &LayoutScene) {
 		let Some(target) = target else {
 			self.clamp_scroll(scene);
 			return;

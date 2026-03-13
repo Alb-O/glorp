@@ -1,7 +1,9 @@
 use cosmic_text::FontSystem;
 
 use crate::editor::{EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorViewState};
+use crate::overlay::OverlayPrimitive;
 use crate::scene::{LayoutScene, LayoutSceneModel, SceneConfig, make_font_system};
+use crate::types::CanvasTarget;
 
 pub(super) struct SceneSession {
 	editor: EditorEngine,
@@ -44,6 +46,15 @@ impl SceneSession {
 
 	pub(super) fn selection_details(&self) -> String {
 		self.editor.selection_details()
+	}
+
+	pub(super) fn inspect_overlay_primitives(
+		&self, hovered_target: Option<CanvasTarget>, selected_target: Option<CanvasTarget>, layout_width: f32,
+		show_hitboxes: bool,
+	) -> std::sync::Arc<[OverlayPrimitive]> {
+		self.scene
+			.scene()
+			.inspect_overlay_primitives(hovered_target, selected_target, layout_width, show_hitboxes)
 	}
 
 	pub(super) fn sync_width(&mut self, width: f32) {

@@ -3,10 +3,11 @@ use iced::{Element, Length, Size, Vector};
 
 use crate::canvas_view::GlyphCanvas;
 use crate::editor::EditorViewState;
+use crate::overlay::OverlayPrimitive;
 use crate::perf::CanvasPerfSink;
 use crate::scene::LayoutScene;
 use crate::text_view::SceneTextLayer;
-use crate::types::{CanvasTarget, Message, ViewportMessage};
+use crate::types::{Message, ViewportMessage};
 use crate::ui::tokens::{SIDEBAR_WIDTH, surface_style};
 
 const STACK_LAYOUT_BREAKPOINT: f32 = 1120.0;
@@ -16,11 +17,9 @@ const MIN_CANVAS_WIDTH: f32 = 620.0;
 pub(crate) struct CanvasPaneProps {
 	pub(crate) scene: LayoutScene,
 	pub(crate) layout_width: f32,
-	pub(crate) show_inspector_overlays: bool,
 	pub(crate) show_baselines: bool,
 	pub(crate) show_hitboxes: bool,
-	pub(crate) hovered_target: Option<CanvasTarget>,
-	pub(crate) selected_target: Option<CanvasTarget>,
+	pub(crate) inspect_overlays: std::sync::Arc<[OverlayPrimitive]>,
 	pub(crate) editor: EditorViewState,
 	pub(crate) scene_revision: u64,
 	pub(crate) scroll: Vector,
@@ -58,11 +57,9 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	let canvas_view = canvas(GlyphCanvas {
 		scene: props.scene,
 		layout_width: props.layout_width,
-		show_inspector_overlays: props.show_inspector_overlays,
 		show_baselines: props.show_baselines,
 		show_hitboxes: props.show_hitboxes,
-		hovered_target: props.hovered_target,
-		selected_target: props.selected_target,
+		inspect_overlays: props.inspect_overlays,
 		editor: props.editor,
 		scene_revision: props.scene_revision,
 		scroll: props.scroll,
