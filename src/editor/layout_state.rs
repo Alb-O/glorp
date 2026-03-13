@@ -94,6 +94,13 @@ impl EditorLayout {
 	}
 
 	pub(super) fn apply_edit(&mut self, font_system: &mut FontSystem, text: &str, edit: &TextEdit) {
+		if edit_changes_line_structure(text, edit) {
+			let mut next_text = text.to_string();
+			next_text.replace_range(edit.range.clone(), &edit.inserted);
+			self.buffer = Arc::new(build_buffer(font_system, &next_text, self.config));
+			return;
+		}
+
 		let start = byte_to_cursor(text, edit.range.start);
 		let end = byte_to_cursor(text, edit.range.end);
 		let buffer = Arc::make_mut(&mut self.buffer);
@@ -135,4 +142,11 @@ impl EditorLayout {
 		buffer.set_size(font_system, Some(width), None);
 		buffer.shape_until_scroll(font_system, false);
 	}
+}
+
+fn edit_changes_line_structure(text: &str, edit: &TextEdit) -> bool {
+	// This editor's hard-line model treats only `\n` as a structural line break.
+	text.get(edit.range.clone())
+		.is_some_and(|removed| removed.contains('\n'))
+		|| edit.inserted.contains('\n')
 }

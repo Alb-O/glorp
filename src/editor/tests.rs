@@ -213,6 +213,34 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 }
 
 #[test]
+fn deleting_a_full_line_rebuilds_without_a_zombie_visual_row() {
+	let text = "alpha\nbeta\ngamma";
+	let config = scene_config(
+		FontChoice::SansSerif,
+		ShapingChoice::Advanced,
+		WrapChoice::None,
+		RenderMode::CanvasOnly,
+		24.0,
+		32.0,
+		400.0,
+	);
+	let mut font_system = make_font_system();
+	let mut editor = EditorEngine::new(&mut font_system, text, config);
+
+	editor.apply_document_edit(
+		&mut font_system,
+		&TextEdit {
+			range: 6..11,
+			inserted: String::new(),
+		},
+	);
+
+	assert_eq!(editor.text(), "alpha\ngamma");
+	assert_eq!(editor.buffer_text(), "alpha\ngamma");
+	assert_eq!(editor.buffer().layout_runs().count(), 2);
+}
+
+#[test]
 fn motion_intents_report_view_without_document_change() {
 	let (mut font_system, mut editor) = editor("abc");
 
