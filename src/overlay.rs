@@ -17,6 +17,12 @@ pub(crate) enum OverlaySpace {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OverlayLayer {
+	UnderText,
+	OverText,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EditorOverlayTone {
 	Normal,
 	Insert,
@@ -58,37 +64,54 @@ pub(crate) enum OverlayPrimitive {
 		rect: LayoutRect,
 		kind: OverlayRectKind,
 		space: OverlaySpace,
+		layer: OverlayLayer,
 	},
 	Label {
 		position: Point,
 		kind: OverlayLabelKind,
 		text: Arc<str>,
 		space: OverlaySpace,
+		layer: OverlayLayer,
 	},
 }
 
 impl OverlayPrimitive {
-	pub(crate) fn scene_rect(rect: LayoutRect, kind: OverlayRectKind) -> Self {
+	pub(crate) fn scene_rect(rect: LayoutRect, kind: OverlayRectKind, layer: OverlayLayer) -> Self {
 		Self::Rect {
 			rect,
 			kind,
 			space: OverlaySpace::Scene,
+			layer,
 		}
 	}
 
-	pub(crate) fn viewport_label(position: Point, kind: OverlayLabelKind, text: impl Into<Arc<str>>) -> Self {
+	pub(crate) fn viewport_label(
+		position: Point, kind: OverlayLabelKind, text: impl Into<Arc<str>>, layer: OverlayLayer,
+	) -> Self {
 		Self::Label {
 			position,
 			kind,
 			text: text.into(),
 			space: OverlaySpace::Viewport,
+			layer,
 		}
 	}
 
-	pub(crate) fn as_rect(&self) -> Option<(LayoutRect, OverlayRectKind, OverlaySpace)> {
+	pub(crate) fn as_rect(&self) -> Option<(LayoutRect, OverlayRectKind, OverlaySpace, OverlayLayer)> {
 		match self {
-			Self::Rect { rect, kind, space } => Some((*rect, *kind, *space)),
+			Self::Rect {
+				rect,
+				kind,
+				space,
+				layer,
+			} => Some((*rect, *kind, *space, *layer)),
 			Self::Label { .. } => None,
+		}
+	}
+
+	pub(crate) fn layer(&self) -> OverlayLayer {
+		match self {
+			Self::Rect { layer, .. } | Self::Label { layer, .. } => *layer,
 		}
 	}
 }

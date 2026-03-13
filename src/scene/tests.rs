@@ -1,5 +1,5 @@
 use super::{LayoutScene, make_font_system, scene_config};
-use crate::overlay::{OverlayPrimitive, OverlayRectKind};
+use crate::overlay::{OverlayLayer, OverlayPrimitive, OverlayRectKind};
 use crate::types::CanvasTarget;
 use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
 
@@ -73,6 +73,7 @@ fn inspect_overlays_emit_run_and_glyph_primitives() {
 		primitive,
 		OverlayPrimitive::Rect {
 			kind: OverlayRectKind::InspectRunHover,
+			layer: OverlayLayer::OverText,
 			..
 		}
 	)));
@@ -80,6 +81,7 @@ fn inspect_overlays_emit_run_and_glyph_primitives() {
 		primitive,
 		OverlayPrimitive::Rect {
 			kind: OverlayRectKind::InspectGlyphSelected,
+			layer: OverlayLayer::OverText,
 			..
 		}
 	)));
@@ -87,6 +89,7 @@ fn inspect_overlays_emit_run_and_glyph_primitives() {
 		primitive,
 		OverlayPrimitive::Rect {
 			kind: OverlayRectKind::InspectGlyphHitboxSelected,
+			layer: OverlayLayer::OverText,
 			..
 		}
 	)));
@@ -131,6 +134,7 @@ fn inspect_overlays_fall_back_to_clusters_without_lazy_runs() {
 		&overlays[0],
 		OverlayPrimitive::Rect {
 			kind: OverlayRectKind::InspectGlyphSelected,
+			layer: OverlayLayer::OverText,
 			..
 		}
 	));

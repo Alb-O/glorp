@@ -4,7 +4,7 @@ use iced::{Color, Font, Pixels, Point, Rectangle, Size, Vector};
 use std::sync::Arc;
 
 use crate::overlay::{
-	EditorOverlayTone, LayoutRect, OverlayLabelKind, OverlayPrimitive, OverlayRectKind, OverlaySpace,
+	EditorOverlayTone, LayoutRect, OverlayLabelKind, OverlayLayer, OverlayPrimitive, OverlayRectKind, OverlaySpace,
 };
 use crate::scene::PathCommand;
 
@@ -112,12 +112,13 @@ pub(super) fn draw_overlay(
 
 	for primitive in over_text_primitives(bounds, canvas, focused, scroll) {
 		match primitive {
-			OverlayPrimitive::Rect { rect, kind, space } => draw_rect_primitive(frame, origin, rect, kind, space),
+			OverlayPrimitive::Rect { rect, kind, space, .. } => draw_rect_primitive(frame, origin, rect, kind, space),
 			OverlayPrimitive::Label {
 				position,
 				kind,
 				text,
 				space,
+				..
 			} => draw_label_primitive(frame, origin, position, kind, text, space),
 		}
 	}
@@ -127,8 +128,12 @@ pub(super) fn draw_underlay_overlay(
 	frame: &mut canvas::Frame, editor: &crate::editor::EditorViewState, scroll: Vector,
 ) {
 	let origin = scrolled_origin(scroll);
-	for primitive in editor.overlays.iter().filter(is_under_text_primitive) {
-		if let OverlayPrimitive::Rect { rect, kind, space } = primitive {
+	for primitive in editor
+		.overlays
+		.iter()
+		.filter(|primitive| primitive.layer() == OverlayLayer::UnderText)
+	{
+		if let OverlayPrimitive::Rect { rect, kind, space, .. } = primitive {
 			draw_rect_primitive(frame, origin, *rect, *kind, *space);
 		}
 	}
@@ -149,6 +154,7 @@ fn over_text_primitives(
 				height: canvas.scene.measured_height.max(1.0),
 			},
 			OverlayRectKind::EditorFocusFrame(EditorOverlayTone::from(canvas.editor.mode)),
+			OverlayLayer::OverText,
 		));
 	}
 
@@ -164,6 +170,7 @@ fn over_text_primitives(
 			canvas.scene.measured_width,
 			canvas.scene.measured_height,
 		),
+		OverlayLayer::OverText,
 	));
 	overlays.push(OverlayPrimitive::viewport_label(
 		Point::new(bounds.width - 170.0, bounds.height - 24.0),
@@ -172,22 +179,10 @@ fn over_text_primitives(
 			"mode={} focus={focused} scroll={:.0},{:.0}",
 			canvas.editor.mode, scroll.x, scroll.y
 		),
+		OverlayLayer::OverText,
 	));
 
 	overlays
-}
-
-fn is_under_text_primitive(primitive: &&OverlayPrimitive) -> bool {
-	matches!(
-		primitive,
-		OverlayPrimitive::Rect {
-			kind: OverlayRectKind::EditorSelection(_)
-				| OverlayRectKind::EditorActive(_)
-				| OverlayRectKind::EditorInsertBlock(_)
-				| OverlayRectKind::EditorCaret(_),
-			..
-		}
-	)
 }
 
 #[derive(Debug, Clone, Copy)]

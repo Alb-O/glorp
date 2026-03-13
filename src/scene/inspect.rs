@@ -3,7 +3,7 @@ use cosmic_text::{Buffer, Command, FontSystem, LayoutGlyph, SwashCache, fontdb};
 use std::ops::Range;
 use std::sync::{Arc, OnceLock};
 
-use crate::overlay::{LayoutRect, OverlayPrimitive, OverlayRectKind};
+use crate::overlay::{LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind};
 use crate::types::CanvasTarget;
 
 use super::text::debug_snippet;
@@ -121,6 +121,7 @@ impl LayoutScene {
 					} else {
 						OverlayRectKind::InspectRunHover
 					},
+					OverlayLayer::OverText,
 				)]
 			}
 			CanvasTarget::Glyph { run_index, glyph_index } => {
@@ -134,6 +135,7 @@ impl LayoutScene {
 					} else {
 						OverlayRectKind::InspectGlyphHover
 					},
+					OverlayLayer::OverText,
 				)];
 
 				if show_hitboxes {
@@ -144,6 +146,7 @@ impl LayoutScene {
 						} else {
 							OverlayRectKind::InspectGlyphHitboxHover
 						},
+						OverlayLayer::OverText,
 					));
 				}
 

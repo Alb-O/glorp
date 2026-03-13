@@ -20,7 +20,7 @@ use std::fmt::{self, Display};
 use std::ops::Range;
 use std::sync::Arc;
 
-use crate::overlay::{EditorOverlayTone, LayoutRect, OverlayPrimitive, OverlayRectKind};
+use crate::overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind};
 use crate::scene::SceneConfig;
 
 use self::document::DocumentState;
@@ -199,7 +199,7 @@ impl EditorViewState {
 			.filter(|primitive| {
 				primitive
 					.as_rect()
-					.is_some_and(|(_, primitive_kind, _)| primitive_kind == kind)
+					.is_some_and(|(_, primitive_kind, _, _)| primitive_kind == kind)
 			})
 			.count()
 	}
@@ -450,11 +450,16 @@ impl EditorEngine {
 				overlays.push(OverlayPrimitive::scene_rect(
 					insert_block,
 					OverlayRectKind::EditorInsertBlock(tone),
+					OverlayLayer::UnderText,
 				));
 			}
 
 			if let Some(caret) = insert_cursor {
-				overlays.push(OverlayPrimitive::scene_rect(caret, OverlayRectKind::EditorCaret(tone)));
+				overlays.push(OverlayPrimitive::scene_rect(
+					caret,
+					OverlayRectKind::EditorCaret(tone),
+					OverlayLayer::UnderText,
+				));
 			}
 		} else {
 			if let Some(selection) = selection {
@@ -462,7 +467,13 @@ impl EditorEngine {
 					selection_rectangles(layout, selection.range())
 						.iter()
 						.copied()
-						.map(|rect| OverlayPrimitive::scene_rect(rect, OverlayRectKind::EditorSelection(tone))),
+						.map(|rect| {
+							OverlayPrimitive::scene_rect(
+								rect,
+								OverlayRectKind::EditorSelection(tone),
+								OverlayLayer::UnderText,
+							)
+						}),
 				);
 			}
 
@@ -470,6 +481,7 @@ impl EditorEngine {
 				overlays.push(OverlayPrimitive::scene_rect(
 					active,
 					OverlayRectKind::EditorActive(tone),
+					OverlayLayer::UnderText,
 				));
 			}
 		}

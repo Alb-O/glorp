@@ -164,7 +164,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 
 		if self.draw_text && self.scene.draw_canvas_text {
 			renderer.fill_paragraph(&state.paragraph, origin, TEXT_COLOR, bounds);
-			if let Some(clip) = insert_overlay_bounds(origin, self.editor.mode, self.editor.viewport_target) {
+			if let Some(clip) = insert_repaint_clip(origin, self.editor.mode, self.editor.viewport_target) {
 				renderer.fill_paragraph(&state.paragraph, origin, INSERT_GLYPH_COLOR, clip);
 			}
 		}
@@ -231,7 +231,7 @@ fn text_spec(scene: &LayoutScene, layout_width: f32) -> iced::advanced::text::Te
 	}
 }
 
-fn insert_overlay_bounds(
+fn insert_repaint_clip(
 	origin: Point, mode: EditorMode, target: Option<crate::overlay::LayoutRect>,
 ) -> Option<Rectangle> {
 	matches!(mode, EditorMode::Insert).then_some(())?;
@@ -240,4 +240,51 @@ fn insert_overlay_bounds(
 		Point::new(origin.x + target.x, origin.y + target.y),
 		Size::new(target.width.max(1.0), target.height.max(1.0)),
 	))
+}
+
+#[cfg(test)]
+mod tests {
+	use super::insert_repaint_clip;
+	use crate::editor::EditorMode;
+	use crate::overlay::LayoutRect;
+	use iced::{Point, Rectangle, Size};
+
+	#[test]
+	fn insert_repaint_clip_requires_insert_mode() {
+		let clip = insert_repaint_clip(
+			Point::new(10.0, 20.0),
+			EditorMode::Normal,
+			Some(LayoutRect {
+				x: 2.0,
+				y: 4.0,
+				width: 8.0,
+				height: 12.0,
+			}),
+		);
+
+		assert_eq!(clip, None);
+	}
+
+	#[test]
+	fn insert_repaint_clip_requires_a_target_rect() {
+		let clip = insert_repaint_clip(Point::new(10.0, 20.0), EditorMode::Insert, None);
+
+		assert_eq!(clip, None);
+	}
+
+	#[test]
+	fn insert_repaint_clip_offsets_from_scene_origin_and_clamps_size() {
+		let clip = insert_repaint_clip(
+			Point::new(10.0, 20.0),
+			EditorMode::Insert,
+			Some(LayoutRect {
+				x: 2.5,
+				y: 4.5,
+				width: 0.0,
+				height: -3.0,
+			}),
+		);
+
+		assert_eq!(clip, Some(Rectangle::new(Point::new(12.5, 24.5), Size::new(1.0, 1.0))));
+	}
 }
