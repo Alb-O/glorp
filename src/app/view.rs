@@ -45,6 +45,10 @@ impl Playground {
 		.into()
 	}
 
+	pub fn headless_view(&self) -> Element<'_, ()> {
+		self.view().map(|_| ())
+	}
+
 	fn view_sidebar(&self, stacked: bool) -> Element<'_, Message> {
 		let (undo_depth, redo_depth) = self.session.history_depths();
 		view_sidebar(SidebarProps {

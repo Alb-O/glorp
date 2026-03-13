@@ -1,36 +1,15 @@
-#![allow(dead_code, missing_docs, unused_imports, unused_mut)]
-
-#[path = "../src/app/mod.rs"]
-mod app;
-#[path = "../src/canvas_view/mod.rs"]
-mod canvas_view;
-#[path = "../src/editor/mod.rs"]
-mod editor;
-#[path = "../src/overlay.rs"]
-mod overlay;
-#[path = "../src/perf/mod.rs"]
-mod perf;
-#[path = "../src/scene/mod.rs"]
-mod scene;
-#[path = "../src/text_view.rs"]
-mod text_view;
-#[path = "../src/types.rs"]
-mod types;
-#[path = "../src/ui/mod.rs"]
-mod ui;
+#![allow(missing_docs)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use iced::advanced::renderer::{Headless, Style};
 use iced::mouse;
 use iced::{Color, Font, Pixels, Size, Theme};
 use iced_runtime::{UserInterface, user_interface};
+use liney::{HeadlessScenario, Playground};
 use pollster::block_on;
 
 use std::env;
 use std::hint::black_box;
-
-use app::Playground;
-use types::{CanvasEvent, ControlsMessage, Message, SamplePreset, SidebarMessage, SidebarTab, ViewportMessage};
 
 criterion_group!(benches, benchmark_headless_playground);
 criterion_main!(benches);
@@ -42,7 +21,7 @@ const VIEWPORT_PHYSICAL_HEIGHT: u32 = 1000;
 fn benchmark_headless_playground(c: &mut Criterion) {
 	let mut group = c.benchmark_group("playground/headless");
 
-	for scenario in Scenario::ALL {
+	for scenario in HeadlessScenario::ALL {
 		let mut harness = Harness::new(scenario);
 		let renderer = harness.renderer_name.clone();
 
@@ -56,27 +35,6 @@ fn benchmark_headless_playground(c: &mut Criterion) {
 	group.finish();
 }
 
-#[derive(Debug, Clone, Copy)]
-enum Scenario {
-	Default,
-	Tall,
-	TallInspect,
-	TallPerf,
-}
-
-impl Scenario {
-	const ALL: [Self; 4] = [Self::Default, Self::Tall, Self::TallInspect, Self::TallPerf];
-
-	fn label(self) -> &'static str {
-		match self {
-			Self::Default => "default",
-			Self::Tall => "tall",
-			Self::TallInspect => "tall-inspect",
-			Self::TallPerf => "tall-perf",
-		}
-	}
-}
-
 struct Harness {
 	playground: Playground,
 	renderer: iced::Renderer,
@@ -88,9 +46,9 @@ struct Harness {
 }
 
 impl Harness {
-	fn new(scenario: Scenario) -> Self {
+	fn new(scenario: HeadlessScenario) -> Self {
 		let backend = env::var("LINEY_HEADLESS_BACKEND").ok();
-		let mut renderer = block_on(<iced::Renderer as Headless>::new(
+		let renderer = block_on(<iced::Renderer as Headless>::new(
 			Font::DEFAULT,
 			Pixels::from(16),
 			backend.as_deref(),
@@ -102,7 +60,7 @@ impl Harness {
 			VIEWPORT_PHYSICAL_WIDTH as f32 / VIEWPORT_SCALE_FACTOR,
 			VIEWPORT_PHYSICAL_HEIGHT as f32 / VIEWPORT_SCALE_FACTOR,
 		);
-		let (mut playground, _) = Playground::new();
+		let playground = Playground::headless();
 
 		let mut harness = Self {
 			playground,
@@ -117,36 +75,13 @@ impl Harness {
 		harness
 	}
 
-	fn configure(&mut self, scenario: Scenario) {
-		self.apply(Message::Viewport(ViewportMessage::CanvasResized(self.viewport_logical)));
-
-		match scenario {
-			Scenario::Default => {}
-			Scenario::Tall => {
-				self.apply(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
-			}
-			Scenario::TallInspect => {
-				self.apply(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
-				self.apply(Message::Controls(ControlsMessage::ShowHitboxesChanged(true)));
-				self.apply(Message::Controls(ControlsMessage::ShowBaselinesChanged(true)));
-				self.apply(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
-				self.apply(Message::Canvas(CanvasEvent::Hovered(Some(
-					types::CanvasTarget::Glyph {
-						run_index: 0,
-						glyph_index: 0,
-					},
-				))));
-			}
-			Scenario::TallPerf => {
-				self.apply(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
-				self.apply(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Perf)));
-			}
-		}
+	fn configure(&mut self, scenario: HeadlessScenario) {
+		self.playground.configure_headless_scenario(scenario);
 	}
 
 	fn render_frame(&mut self) -> usize {
 		let mut user_interface = UserInterface::build(
-			self.playground.view(),
+			self.playground.headless_view(),
 			self.viewport_logical,
 			std::mem::take(&mut self.cache),
 			&mut self.renderer,
@@ -166,9 +101,5 @@ impl Harness {
 		self.renderer
 			.screenshot(self.viewport_physical, VIEWPORT_SCALE_FACTOR, Color::BLACK)
 			.len()
-	}
-
-	fn apply(&mut self, message: Message) {
-		let _ = self.playground.update(message);
 	}
 }
