@@ -7,6 +7,15 @@ edition = "2024"
 cosmic-text = true
 iced = { features = ["advanced", "canvas"] }
 
+[dev-dependencies]
+criterion = true
+iced_runtime = true
+pollster = true
+
+[[bench]]
+name = "headless"
+harness = false
+
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
 opt-level = 1
