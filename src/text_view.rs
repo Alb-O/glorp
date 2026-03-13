@@ -8,12 +8,14 @@ use iced::advanced::{Layout, Renderer as _, mouse};
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
 
 use crate::canvas_view::scene_origin;
+use crate::editor::{EditorMode, EditorViewState};
 use crate::scene::LayoutScene;
 use crate::types::Message;
 
 const OUTER_BACKGROUND: Color = Color::from_rgb8(20, 24, 32);
 const TEXT_BACKGROUND: Color = Color::from_rgb8(28, 34, 46);
 const TEXT_COLOR: Color = Color::from_rgba(0.4, 0.8, 1.0, 0.9);
+const INSERT_GLYPH_COLOR: Color = Color::from_rgb8(8, 14, 24);
 const GUIDE_COLOR: Color = Color::from_rgba(0.6, 0.7, 1.0, 0.18);
 const BORDER_COLOR: Color = Color::from_rgba(0.8, 0.8, 0.9, 0.65);
 
@@ -26,6 +28,7 @@ struct ParagraphState {
 #[derive(Debug, Clone)]
 pub(crate) struct SceneTextLayer {
 	scene: LayoutScene,
+	editor: EditorViewState,
 	layout_width: f32,
 	scroll: Vector,
 	draw_backdrop: bool,
@@ -35,9 +38,10 @@ pub(crate) struct SceneTextLayer {
 }
 
 impl SceneTextLayer {
-	pub(crate) fn new(scene: LayoutScene, layout_width: f32, scroll: Vector) -> Self {
+	pub(crate) fn new(scene: LayoutScene, editor: EditorViewState, layout_width: f32, scroll: Vector) -> Self {
 		Self {
 			scene,
+			editor,
 			layout_width,
 			scroll,
 			draw_backdrop: true,
@@ -160,6 +164,9 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 
 		if self.draw_text && self.scene.draw_canvas_text {
 			renderer.fill_paragraph(&state.paragraph, origin, TEXT_COLOR, bounds);
+			if let Some(clip) = insert_overlay_bounds(origin, self.editor.mode, self.editor.viewport_target) {
+				renderer.fill_paragraph(&state.paragraph, origin, INSERT_GLYPH_COLOR, clip);
+			}
 		}
 	}
 }
@@ -222,4 +229,15 @@ fn text_spec(scene: &LayoutScene, layout_width: f32) -> iced::advanced::text::Te
 		shaping: scene.shaping.to_iced(),
 		wrapping: scene.wrapping.to_iced(),
 	}
+}
+
+fn insert_overlay_bounds(
+	origin: Point, mode: EditorMode, target: Option<crate::overlay::LayoutRect>,
+) -> Option<Rectangle> {
+	matches!(mode, EditorMode::Insert).then_some(())?;
+	let target = target?;
+	Some(Rectangle::new(
+		Point::new(origin.x + target.x, origin.y + target.y),
+		Size::new(target.width.max(1.0), target.height.max(1.0)),
+	))
 }

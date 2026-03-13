@@ -50,20 +50,30 @@ pub(crate) fn view_stacked_shell<'a>(
 
 /// Renders the canvas pane inside the shared app surface.
 pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
-	let backdrop = SceneTextLayer::new(props.scene.clone(), props.layout_width, props.scroll)
-		.backdrop_only()
-		.width(Length::Fill)
-		.height(Length::Fill);
+	let backdrop = SceneTextLayer::new(
+		props.scene.clone(),
+		props.editor.clone(),
+		props.layout_width,
+		props.scroll,
+	)
+	.backdrop_only()
+	.width(Length::Fill)
+	.height(Length::Fill);
 	let underlay = canvas(crate::canvas_view::GlyphCanvasUnderlay {
 		editor: props.editor.clone(),
 		scroll: props.scroll,
 	})
 	.width(Length::Fill)
 	.height(Length::Fill);
-	let text_layer = SceneTextLayer::new(props.scene.clone(), props.layout_width, props.scroll)
-		.text_only()
-		.width(Length::Fill)
-		.height(Length::Fill);
+	let text_layer = SceneTextLayer::new(
+		props.scene.clone(),
+		props.editor.clone(),
+		props.layout_width,
+		props.scroll,
+	)
+	.text_only()
+	.width(Length::Fill)
+	.height(Length::Fill);
 
 	let canvas_view = canvas(GlyphCanvas {
 		scene: props.scene,
