@@ -97,18 +97,29 @@ impl Playground {
 			}
 			ControlsMessage::ShowBaselinesChanged(show_baselines) => {
 				self.controls.show_baselines = show_baselines;
-				self.viewport.scene_revision += 1;
+				if show_baselines && self.scene_dirty {
+					self.rebuild_scene(SceneRefreshReason::ControlsChanged);
+				} else {
+					self.viewport.scene_revision += 1;
+				}
 			}
 			ControlsMessage::ShowHitboxesChanged(show_hitboxes) => {
 				self.controls.show_hitboxes = show_hitboxes;
-				self.viewport.scene_revision += 1;
+				if show_hitboxes && self.scene_dirty {
+					self.rebuild_scene(SceneRefreshReason::ControlsChanged);
+				} else {
+					self.viewport.scene_revision += 1;
+				}
 			}
 		}
 	}
 
 	fn handle_sidebar_message(&mut self, message: SidebarMessage) {
 		match message {
-			SidebarMessage::SelectTab(tab) => self.sidebar.set_active_tab(tab),
+			SidebarMessage::SelectTab(tab) => {
+				self.sidebar.set_active_tab(tab);
+				self.ensure_scene_current(SceneRefreshReason::DocumentEdited);
+			}
 		}
 	}
 
@@ -149,6 +160,7 @@ impl Playground {
 		let started = Instant::now();
 		self.session.reset_with_preset(preset.text(), config);
 		self.viewport.mark_scene_applied(Instant::now());
+		self.scene_dirty = false;
 		let elapsed = started.elapsed();
 		self.finish_scene_refresh(SceneRefreshReason::PresetLoaded, elapsed);
 		trace!(
@@ -167,7 +179,7 @@ impl Playground {
 			self.session.sync_width(self.viewport.layout_width);
 		}
 
-		self.viewport.clamp_scroll(self.session.scene());
+		self.viewport.clamp_scroll_to_metrics(self.session.viewport_metrics());
 
 		if width_changed || refresh_ready.is_some() {
 			trace!(
@@ -249,12 +261,16 @@ impl Playground {
 		}
 
 		if outcome.requires_scene_rebuild {
-			self.rebuild_scene(SceneRefreshReason::DocumentEdited);
+			if self.requires_immediate_scene_refresh() {
+				self.rebuild_scene(SceneRefreshReason::DocumentEdited);
+			} else {
+				self.scene_dirty = true;
+			}
 		}
 
 		if source.reveals_viewport() && outcome.view_changed {
 			self.viewport
-				.reveal_target(outcome.viewport_target, self.session.scene());
+				.reveal_target_with_metrics(outcome.viewport_target, self.session.viewport_metrics());
 		}
 	}
 
@@ -264,6 +280,7 @@ impl Playground {
 		let started = Instant::now();
 		self.session.rebuild(config);
 		self.viewport.mark_scene_applied(Instant::now());
+		self.scene_dirty = false;
 		let elapsed = started.elapsed();
 		self.finish_scene_refresh(reason, elapsed);
 
@@ -301,6 +318,19 @@ impl Playground {
 		if reason.records_resize_reflow() {
 			self.perf.record_resize_reflow(duration);
 		}
+	}
+
+	fn ensure_scene_current(&mut self, reason: SceneRefreshReason) {
+		if self.scene_dirty && self.requires_immediate_scene_refresh() {
+			self.rebuild_scene(reason);
+		}
+	}
+
+	fn requires_immediate_scene_refresh(&self) -> bool {
+		self.sidebar.active_tab != SidebarTab::Controls
+			|| self.controls.show_baselines
+			|| self.controls.show_hitboxes
+			|| self.controls.render_mode.draw_outlines()
 	}
 }
 

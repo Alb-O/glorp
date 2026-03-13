@@ -1,4 +1,4 @@
-use super::{EditorEngine, EditorMode};
+use super::{ApplyResult, EditorEngine, EditorMode};
 use crate::editor::layout::BufferLayoutSnapshot;
 use crate::editor::text::{next_char_boundary, previous_char_boundary};
 
@@ -117,11 +117,11 @@ impl EditorEngine {
 		}
 	}
 
-	pub(super) fn exit_insert(&mut self) {
+	pub(super) fn exit_insert(&mut self) -> ApplyResult {
 		if matches!(self.mode(), EditorMode::Normal) {
 			self.set_preferred_x(None);
 			self.clear_pointer_anchor();
-			return;
+			return ApplyResult::default();
 		}
 
 		let layout = self.layout_snapshot();
@@ -132,5 +132,9 @@ impl EditorEngine {
 		self.set_selection(selection);
 		self.set_preferred_x(None);
 		self.clear_pointer_anchor();
+		ApplyResult {
+			text_edit: None,
+			layout: Some(layout),
+		}
 	}
 }

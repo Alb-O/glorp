@@ -8,8 +8,7 @@ use iced::advanced::{Layout, Renderer as _, mouse};
 use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
 
 use crate::canvas_view::scene_origin;
-use crate::editor::{EditorMode, EditorViewState};
-use crate::scene::LayoutScene;
+use crate::editor::{EditorMode, EditorTextLayerState, EditorViewState};
 use crate::types::Message;
 
 const OUTER_BACKGROUND: Color = Color::from_rgb8(20, 24, 32);
@@ -27,7 +26,7 @@ struct ParagraphState {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneTextLayer {
-	scene: LayoutScene,
+	text_layer: EditorTextLayerState,
 	editor: EditorViewState,
 	layout_width: f32,
 	scroll: Vector,
@@ -38,9 +37,11 @@ pub(crate) struct SceneTextLayer {
 }
 
 impl SceneTextLayer {
-	pub(crate) fn new(scene: LayoutScene, editor: EditorViewState, layout_width: f32, scroll: Vector) -> Self {
+	pub(crate) fn new(
+		text_layer: EditorTextLayerState, editor: EditorViewState, layout_width: f32, scroll: Vector,
+	) -> Self {
 		Self {
-			scene,
+			text_layer,
 			editor,
 			layout_width,
 			scroll,
@@ -81,8 +82,11 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 
 	fn state(&self) -> iced::advanced::widget::tree::State {
 		iced::advanced::widget::tree::State::new(ParagraphState {
-			paragraph: iced::advanced::graphics::text::Paragraph::with_text(text_spec(&self.scene, self.layout_width)),
-			text: self.scene.text.clone(),
+			paragraph: iced::advanced::graphics::text::Paragraph::with_text(text_spec(
+				&self.text_layer,
+				self.layout_width,
+			)),
+			text: self.text_layer.text.clone(),
 		})
 	}
 
@@ -92,12 +96,12 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 
 	fn layout(&mut self, tree: &mut Tree, _renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
 		let state = tree.state.downcast_mut::<ParagraphState>();
-		sync_paragraph_state(&self.scene, self.layout_width, state);
+		sync_paragraph_state(&self.text_layer, self.layout_width, state);
 
 		layout::Node::new(limits.resolve(
 			self.width,
 			self.height,
-			Size::new(self.layout_width.max(1.0), self.scene.measured_height.max(1.0)),
+			Size::new(self.layout_width.max(1.0), self.text_layer.measured_height.max(1.0)),
 		))
 	}
 
@@ -127,7 +131,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 						origin,
 						Size::new(
 							self.layout_width.max(1.0),
-							self.scene
+							self.text_layer
 								.measured_height
 								.max(bounds.height - origin.y + bounds.y - 24.0),
 						),
@@ -149,7 +153,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 				renderer::Quad {
 					bounds: Rectangle::new(
 						origin,
-						Size::new(self.layout_width.max(1.0), self.scene.measured_height.max(1.0)),
+						Size::new(self.layout_width.max(1.0), self.text_layer.measured_height.max(1.0)),
 					),
 					border: iced::Border {
 						width: 1.0,
@@ -162,7 +166,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 			);
 		}
 
-		if self.draw_text && self.scene.draw_canvas_text {
+		if self.draw_text && self.text_layer.render_mode.draw_canvas_text() {
 			renderer.fill_paragraph(&state.paragraph, origin, TEXT_COLOR, bounds);
 			if let Some(clip) = insert_repaint_clip(origin, self.editor.mode, self.editor.viewport_target) {
 				renderer.fill_paragraph(&state.paragraph, origin, INSERT_GLYPH_COLOR, clip);
@@ -177,20 +181,20 @@ impl<'a> From<SceneTextLayer> for Element<'a, Message> {
 	}
 }
 
-fn sync_paragraph_state(scene: &LayoutScene, layout_width: f32, state: &mut ParagraphState) {
-	if state.text != scene.text {
-		state.paragraph = iced::advanced::graphics::text::Paragraph::with_text(text_spec(scene, layout_width));
-		state.text = scene.text.clone();
+fn sync_paragraph_state(text_layer: &EditorTextLayerState, layout_width: f32, state: &mut ParagraphState) {
+	if state.text != text_layer.text {
+		state.paragraph = iced::advanced::graphics::text::Paragraph::with_text(text_spec(text_layer, layout_width));
+		state.text = text_layer.text.clone();
 		return;
 	}
 
-	sync_paragraph_with_width(scene, layout_width, &mut state.paragraph);
+	sync_paragraph_with_width(text_layer, layout_width, &mut state.paragraph);
 }
 
 fn sync_paragraph_with_width(
-	scene: &LayoutScene, layout_width: f32, paragraph: &mut iced::advanced::graphics::text::Paragraph,
+	text_layer: &EditorTextLayerState, layout_width: f32, paragraph: &mut iced::advanced::graphics::text::Paragraph,
 ) {
-	let text = text_spec(scene, layout_width);
+	let text = text_spec(text_layer, layout_width);
 	match paragraph.compare(iced::advanced::text::Text {
 		content: (),
 		bounds: text.bounds,
@@ -210,24 +214,24 @@ fn sync_paragraph_with_width(
 	}
 }
 
-fn text_spec(scene: &LayoutScene, layout_width: f32) -> iced::advanced::text::Text<&str> {
+fn text_spec(text_layer: &EditorTextLayerState, layout_width: f32) -> iced::advanced::text::Text<&str> {
 	iced::advanced::text::Text {
-		content: &scene.text,
+		content: &text_layer.text,
 		bounds: Size::new(
-			if matches!(scene.wrapping, crate::types::WrapChoice::None) {
+			if matches!(text_layer.wrapping, crate::types::WrapChoice::None) {
 				f32::INFINITY
 			} else {
 				layout_width
 			},
 			f32::INFINITY,
 		),
-		size: iced::Pixels(scene.font_size),
-		line_height: iced::advanced::text::LineHeight::Absolute(iced::Pixels(scene.line_height)),
-		font: scene.font_choice.to_iced_font(),
+		size: iced::Pixels(text_layer.font_size),
+		line_height: iced::advanced::text::LineHeight::Absolute(iced::Pixels(text_layer.line_height)),
+		font: text_layer.font_choice.to_iced_font(),
 		align_x: iced::advanced::text::Alignment::Left,
 		align_y: iced::alignment::Vertical::Top,
-		shaping: scene.shaping.to_iced(),
-		wrapping: scene.wrapping.to_iced(),
+		shaping: text_layer.shaping.to_iced(),
+		wrapping: text_layer.wrapping.to_iced(),
 	}
 }
 

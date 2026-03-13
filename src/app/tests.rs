@@ -87,6 +87,30 @@ fn text_edits_flip_the_preset_to_custom() {
 }
 
 #[test]
+fn controls_tab_defers_scene_rebuild_until_inspect_needs_it() {
+	let (mut playground, _) = Playground::new();
+	let revision_before = playground.viewport.scene_revision;
+	let scene_text_before = playground.session.scene().text.to_string();
+
+	let _ = playground.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+	let _ = playground.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
+		"!".to_string(),
+	))));
+
+	assert!(playground.scene_dirty);
+	assert_eq!(playground.viewport.scene_revision, revision_before);
+	assert_eq!(playground.session.text().len(), scene_text_before.len() + 1);
+	assert!(playground.session.text().contains('!'));
+	assert_eq!(playground.session.scene().text.as_ref(), scene_text_before);
+
+	let _ = playground.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+
+	assert!(!playground.scene_dirty);
+	assert!(playground.viewport.scene_revision > revision_before);
+	assert_eq!(playground.session.scene().text.as_ref(), playground.session.text());
+}
+
+#[test]
 fn leaving_inspect_clears_hover_and_selection() {
 	let (mut playground, _) = Playground::new();
 

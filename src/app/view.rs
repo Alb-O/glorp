@@ -76,6 +76,7 @@ impl Playground {
 
 		view_canvas_pane(CanvasPaneProps {
 			scene: self.session.scene().clone(),
+			text_layer: self.session.text_layer_state(),
 			layout_width: self.viewport.layout_width,
 			show_baselines: self.controls.show_baselines,
 			show_hitboxes: self.controls.show_hitboxes,

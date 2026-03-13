@@ -6,33 +6,37 @@ use crate::editor::text::{clamp_char_boundary, next_char_boundary, previous_char
 impl EditorEngine {
 	pub(super) fn undo(&mut self, font_system: &mut FontSystem) -> ApplyResult {
 		let Some(entry) = self.state.document.undo() else {
-			return ApplyResult { text_edit: None };
+			return ApplyResult::default();
 		};
 
 		self.apply_document_edit(font_system, &entry.inverse);
 		self.restore_snapshot(&entry.before);
+		let next_layout = self.layout_snapshot();
 
 		ApplyResult {
 			text_edit: Some(entry.inverse),
+			layout: Some(next_layout),
 		}
 	}
 
 	pub(super) fn redo(&mut self, font_system: &mut FontSystem) -> ApplyResult {
 		let Some(entry) = self.state.document.redo() else {
-			return ApplyResult { text_edit: None };
+			return ApplyResult::default();
 		};
 
 		self.apply_document_edit(font_system, &entry.forward);
 		self.restore_snapshot(&entry.after);
+		let next_layout = self.layout_snapshot();
 
 		ApplyResult {
 			text_edit: Some(entry.forward),
+			layout: Some(next_layout),
 		}
 	}
 
 	pub(super) fn delete_selection(&mut self, font_system: &mut FontSystem) -> ApplyResult {
 		let Some(selection) = self.selection_range() else {
-			return ApplyResult { text_edit: None };
+			return ApplyResult::default();
 		};
 
 		let before = self.history_snapshot();
@@ -56,6 +60,7 @@ impl EditorEngine {
 
 		ApplyResult {
 			text_edit: Some(text_edit),
+			layout: Some(next_layout),
 		}
 	}
 
@@ -64,7 +69,7 @@ impl EditorEngine {
 			EditorMode::Normal => self.delete_selection(font_system),
 			EditorMode::Insert => {
 				let Some(previous) = previous_char_boundary(self.text(), self.caret()) else {
-					return ApplyResult { text_edit: None };
+					return ApplyResult::default();
 				};
 
 				let before = self.history_snapshot();
@@ -82,6 +87,7 @@ impl EditorEngine {
 
 				ApplyResult {
 					text_edit: Some(text_edit),
+					layout: Some(next_layout),
 				}
 			}
 		}
@@ -92,7 +98,7 @@ impl EditorEngine {
 			EditorMode::Normal => self.delete_selection(font_system),
 			EditorMode::Insert => {
 				let Some(next) = next_char_boundary(self.text(), self.caret()) else {
-					return ApplyResult { text_edit: None };
+					return ApplyResult::default();
 				};
 
 				let before = self.history_snapshot();
@@ -109,6 +115,7 @@ impl EditorEngine {
 
 				ApplyResult {
 					text_edit: Some(text_edit),
+					layout: Some(next_layout),
 				}
 			}
 		}
@@ -116,7 +123,7 @@ impl EditorEngine {
 
 	pub(super) fn insert_text(&mut self, font_system: &mut FontSystem, text: String) -> ApplyResult {
 		if text.is_empty() {
-			return ApplyResult { text_edit: None };
+			return ApplyResult::default();
 		}
 
 		if !matches!(self.mode(), EditorMode::Insert) {
@@ -138,6 +145,7 @@ impl EditorEngine {
 
 		ApplyResult {
 			text_edit: Some(text_edit),
+			layout: Some(next_layout),
 		}
 	}
 }

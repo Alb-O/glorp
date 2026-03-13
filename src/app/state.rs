@@ -4,6 +4,7 @@ use iced::{Size, Vector};
 use std::time::{Duration, Instant};
 
 use crate::canvas_view::scene_viewport_size;
+use crate::editor::EditorViewportMetrics;
 use crate::overlay::LayoutRect;
 use crate::scene::{LayoutScene, SceneConfig, scene_config};
 use crate::types::{CanvasTarget, FontChoice, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
@@ -180,14 +181,18 @@ impl ViewportState {
 		self.canvas_scroll = self.clamped_scroll(self.canvas_scroll, scene);
 	}
 
-	pub(super) fn reveal_target(&mut self, target: Option<LayoutRect>, scene: &LayoutScene) {
+	pub(super) fn clamp_scroll_to_metrics(&mut self, metrics: EditorViewportMetrics) {
+		self.canvas_scroll = self.clamped_scroll_to_metrics(self.canvas_scroll, metrics);
+	}
+
+	pub(super) fn reveal_target_with_metrics(&mut self, target: Option<LayoutRect>, metrics: EditorViewportMetrics) {
 		let Some(target) = target else {
-			self.clamp_scroll(scene);
+			self.clamp_scroll_to_metrics(metrics);
 			return;
 		};
 
 		let viewport = self.canvas_viewport;
-		let mut scroll = self.clamped_scroll(self.canvas_scroll, scene);
+		let mut scroll = self.clamped_scroll_to_metrics(self.canvas_scroll, metrics);
 		let margin_x = 24.0;
 		let margin_y = 24.0;
 		let left = target.x;
@@ -207,7 +212,7 @@ impl ViewportState {
 			scroll.y = (bottom - viewport.height + margin_y).max(0.0);
 		}
 
-		self.canvas_scroll = self.clamped_scroll(scroll, scene);
+		self.canvas_scroll = self.clamped_scroll_to_metrics(scroll, metrics);
 	}
 
 	pub(super) fn finish_scene_refresh(&mut self, scene: &LayoutScene, reset_scroll: bool) {
@@ -220,12 +225,23 @@ impl ViewportState {
 	}
 
 	fn clamped_scroll(&self, scroll: Vector, scene: &LayoutScene) -> Vector {
-		let max_x = if matches!(scene.wrapping, WrapChoice::None) {
-			(scene.measured_width.max(self.layout_width) - self.canvas_viewport.width).max(0.0)
+		self.clamped_scroll_to_metrics(
+			scroll,
+			EditorViewportMetrics {
+				wrapping: scene.wrapping,
+				measured_width: scene.measured_width,
+				measured_height: scene.measured_height,
+			},
+		)
+	}
+
+	fn clamped_scroll_to_metrics(&self, scroll: Vector, metrics: EditorViewportMetrics) -> Vector {
+		let max_x = if matches!(metrics.wrapping, WrapChoice::None) {
+			(metrics.measured_width.max(self.layout_width) - self.canvas_viewport.width).max(0.0)
 		} else {
 			(self.layout_width - self.canvas_viewport.width).max(0.0)
 		};
-		let max_y = (scene.measured_height - self.canvas_viewport.height).max(0.0);
+		let max_y = (metrics.measured_height - self.canvas_viewport.height).max(0.0);
 
 		Vector::new(scroll.x.clamp(0.0, max_x), scroll.y.clamp(0.0, max_y))
 	}

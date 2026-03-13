@@ -12,7 +12,7 @@ use tracing::{debug, trace};
 use super::geometry::{insert_cursor_block, insert_cursor_rectangle};
 use super::layout::BufferLayoutSnapshot;
 use super::text::byte_to_cursor;
-use super::{EditorMode, EditorViewState, TextEdit};
+use super::{EditorMode, EditorTextLayerState, EditorViewState, EditorViewportMetrics, TextEdit};
 
 #[derive(Debug, Clone)]
 pub(super) struct EditorLayout {
@@ -52,19 +52,20 @@ impl EditorLayout {
 		self.view_state = view_state;
 	}
 
-	pub(super) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) {
+	pub(super) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) -> bool {
 		if self.config == config {
-			return;
+			return false;
 		}
 
 		if self.width_only_config_change(config) {
 			self.resize_buffer(font_system, config.max_width);
 			self.config = config;
-			return;
+			return true;
 		}
 
 		self.config = config;
 		self.buffer = Arc::new(build_buffer(font_system, text, config));
+		true
 	}
 
 	pub(super) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) {
@@ -90,6 +91,30 @@ impl EditorLayout {
 
 	pub(super) fn snapshot(&self, text: &str) -> BufferLayoutSnapshot {
 		BufferLayoutSnapshot::new(&self.buffer, text)
+	}
+
+	pub(super) fn viewport_metrics(&self) -> EditorViewportMetrics {
+		let (measured_width, measured_height) = measure_buffer(&self.buffer);
+		EditorViewportMetrics {
+			wrapping: self.config.wrapping,
+			measured_width,
+			measured_height,
+		}
+	}
+
+	pub(super) fn text_layer_state(&self, text: &str) -> EditorTextLayerState {
+		let metrics = self.viewport_metrics();
+		EditorTextLayerState {
+			text: Arc::<str>::from(text),
+			font_choice: self.config.font_choice,
+			shaping: self.config.shaping,
+			wrapping: self.config.wrapping,
+			render_mode: self.config.render_mode,
+			font_size: self.config.font_size,
+			line_height: self.config.line_height,
+			measured_width: metrics.measured_width,
+			measured_height: metrics.measured_height,
+		}
 	}
 
 	pub(super) fn hit(&self, point: Point) -> Option<Cursor> {
@@ -177,4 +202,16 @@ fn edit_changes_line_structure(text: &str, edit: &TextEdit) -> bool {
 	text.get(edit.range.clone())
 		.is_some_and(|removed| removed.contains('\n'))
 		|| edit.inserted.contains('\n')
+}
+
+fn measure_buffer(buffer: &Buffer) -> (f32, f32) {
+	let mut measured_width: f32 = 0.0;
+	let mut measured_height: f32 = 0.0;
+
+	for run in buffer.layout_runs() {
+		measured_width = measured_width.max(run.line_w);
+		measured_height = measured_height.max(run.line_top + run.line_height);
+	}
+
+	(measured_width, measured_height)
 }

@@ -19,6 +19,7 @@ use self::state::{ControlsState, ShellState, SidebarState, ViewportState};
 
 pub struct Playground {
 	session: SceneSession,
+	scene_dirty: bool,
 	controls: ControlsState,
 	sidebar: SidebarState,
 	viewport: ViewportState,
@@ -35,6 +36,7 @@ impl Playground {
 		(
 			Self {
 				session,
+				scene_dirty: false,
 				controls,
 				sidebar: SidebarState::new(),
 				viewport,

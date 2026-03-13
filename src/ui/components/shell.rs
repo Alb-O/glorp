@@ -2,7 +2,7 @@ use iced::widget::{Stack, canvas, column, container, sensor};
 use iced::{Element, Length, Size, Vector};
 
 use crate::canvas_view::GlyphCanvas;
-use crate::editor::EditorViewState;
+use crate::editor::{EditorTextLayerState, EditorViewState};
 use crate::overlay::OverlayPrimitive;
 use crate::perf::CanvasPerfSink;
 use crate::scene::LayoutScene;
@@ -16,6 +16,7 @@ const MIN_CANVAS_WIDTH: f32 = 620.0;
 /// Props for the canvas pane.
 pub(crate) struct CanvasPaneProps {
 	pub(crate) scene: LayoutScene,
+	pub(crate) text_layer: EditorTextLayerState,
 	pub(crate) layout_width: f32,
 	pub(crate) show_baselines: bool,
 	pub(crate) show_hitboxes: bool,
@@ -51,7 +52,7 @@ pub(crate) fn view_stacked_shell<'a>(
 /// Renders the canvas pane inside the shared app surface.
 pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
 	let backdrop = SceneTextLayer::new(
-		props.scene.clone(),
+		props.text_layer.clone(),
 		props.editor.clone(),
 		props.layout_width,
 		props.scroll,
@@ -65,15 +66,10 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	})
 	.width(Length::Fill)
 	.height(Length::Fill);
-	let text_layer = SceneTextLayer::new(
-		props.scene.clone(),
-		props.editor.clone(),
-		props.layout_width,
-		props.scroll,
-	)
-	.text_only()
-	.width(Length::Fill)
-	.height(Length::Fill);
+	let text_layer = SceneTextLayer::new(props.text_layer, props.editor.clone(), props.layout_width, props.scroll)
+		.text_only()
+		.width(Length::Fill)
+		.height(Length::Fill);
 
 	let canvas_view = canvas(GlyphCanvas {
 		scene: props.scene,

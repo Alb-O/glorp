@@ -24,6 +24,7 @@ use std::time::Instant;
 use crate::overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind};
 use crate::scene::SceneConfig;
 use crate::telemetry::duration_ms;
+use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
 use tracing::{debug, trace, trace_span, warn};
 
 use self::document::DocumentState;
@@ -157,9 +158,30 @@ pub(crate) struct EditorOutcome {
 	pub(crate) text_edit: Option<TextEdit>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default)]
 struct ApplyResult {
 	text_edit: Option<TextEdit>,
+	layout: Option<BufferLayoutSnapshot>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct EditorViewportMetrics {
+	pub(crate) wrapping: WrapChoice,
+	pub(crate) measured_width: f32,
+	pub(crate) measured_height: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct EditorTextLayerState {
+	pub(crate) text: Arc<str>,
+	pub(crate) font_choice: FontChoice,
+	pub(crate) shaping: ShapingChoice,
+	pub(crate) wrapping: WrapChoice,
+	pub(crate) render_mode: RenderMode,
+	pub(crate) font_size: f32,
+	pub(crate) line_height: f32,
+	pub(crate) measured_width: f32,
+	pub(crate) measured_height: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -233,7 +255,7 @@ impl EditorEngine {
 			state,
 		};
 		editor.reset_normal_selection();
-		editor.refresh_view_state();
+		editor.refresh_view_state(None);
 		editor
 	}
 
@@ -255,13 +277,14 @@ impl EditorEngine {
 
 	pub(crate) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, config: SceneConfig) {
 		let text = self.text().to_string();
-		self.layout_model.layout.sync_buffer_config(font_system, &text, config);
-		self.refresh_view_state();
+		if self.layout_model.layout.sync_buffer_config(font_system, &text, config) {
+			self.refresh_view_state(None);
+		}
 	}
 
 	pub(crate) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) {
 		self.layout_model.layout.sync_buffer_width(font_system, width);
-		self.refresh_view_state();
+		self.refresh_view_state(None);
 	}
 
 	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
@@ -270,21 +293,29 @@ impl EditorEngine {
 		let text = self.text().to_string();
 		self.layout_model.layout.reset(font_system, &text, config);
 		self.reset_normal_selection();
-		self.refresh_view_state();
+		self.refresh_view_state(None);
 	}
 
 	pub(crate) fn view_state(&self) -> EditorViewState {
 		self.layout_model.layout.view_state()
 	}
 
+	pub(crate) fn viewport_metrics(&self) -> EditorViewportMetrics {
+		self.layout_model.layout.viewport_metrics()
+	}
+
+	pub(crate) fn text_layer_state(&self) -> EditorTextLayerState {
+		self.layout_model.layout.text_layer_state(self.text())
+	}
+
 	pub(crate) fn apply(&mut self, font_system: &mut FontSystem, intent: EditorIntent) -> EditorOutcome {
 		let _span = trace_span!("editor.apply", intent = ?intent).entered();
 		let previous_view = self.layout_model.layout.view_state();
 		let apply_started = Instant::now();
-		let result = apply_intent(self, font_system, intent);
+		let ApplyResult { text_edit, layout } = apply_intent(self, font_system, intent);
 		let reducer_elapsed = apply_started.elapsed();
 		let refresh_started = Instant::now();
-		self.refresh_view_state();
+		self.refresh_view_state(layout);
 		let refresh_elapsed = refresh_started.elapsed();
 		let total_elapsed = apply_started.elapsed();
 		let total_ms = duration_ms(total_elapsed);
@@ -313,7 +344,14 @@ impl EditorEngine {
 				"editor apply"
 			);
 		}
-		EditorOutcome::from_apply_result(&previous_view, self.layout_model.layout.view_state_ref(), result)
+		EditorOutcome::from_apply_result(
+			&previous_view,
+			self.layout_model.layout.view_state_ref(),
+			ApplyResult {
+				text_edit,
+				layout: None,
+			},
+		)
 	}
 
 	pub(crate) fn selection_details(&self) -> String {
@@ -472,9 +510,9 @@ impl EditorEngine {
 		self.active_selection(layout).map(cluster_rectangle)
 	}
 
-	fn refresh_view_state(&mut self) {
+	fn refresh_view_state(&mut self, layout: Option<BufferLayoutSnapshot>) {
 		let started = Instant::now();
-		let layout = self.layout_snapshot();
+		let layout = layout.unwrap_or_else(|| self.layout_snapshot());
 		let layout_elapsed = started.elapsed();
 		let selection = self.selection().cloned();
 		let selection_head = selection.as_ref().map(EditorSelection::head);
@@ -607,7 +645,11 @@ impl EditorEngine {
 
 	fn enter_insert_at(&mut self, caret: usize) {
 		let layout = self.layout_snapshot();
-		self.set_insert_head(&layout, caret);
+		self.enter_insert_with_layout(&layout, caret);
+	}
+
+	fn enter_insert_with_layout(&mut self, layout: &BufferLayoutSnapshot, caret: usize) {
+		self.set_insert_head(layout, caret);
 	}
 
 	fn buffer_hit(&self, point: Point) -> Option<cosmic_text::Cursor> {

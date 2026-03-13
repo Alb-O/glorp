@@ -44,11 +44,7 @@ pub(crate) struct LayoutSceneModel {
 #[derive(Debug, Clone)]
 pub(crate) struct LayoutScene {
 	pub(crate) text: Arc<str>,
-	pub(crate) font_choice: FontChoice,
-	pub(crate) shaping: ShapingChoice,
 	pub(crate) wrapping: WrapChoice,
-	pub(crate) font_size: f32,
-	pub(crate) line_height: f32,
 	pub(crate) max_width: f32,
 	pub(crate) measured_width: f32,
 	pub(crate) measured_height: f32,
@@ -57,7 +53,6 @@ pub(crate) struct LayoutScene {
 	pub(crate) runs: Arc<[RunInfo]>,
 	pub(crate) clusters: Arc<[ClusterInfo]>,
 	pub(crate) warnings: Arc<[String]>,
-	pub(crate) draw_canvas_text: bool,
 	pub(crate) draw_outlines: bool,
 	inspect: Arc<SceneInspectCache>,
 }

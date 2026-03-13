@@ -1,6 +1,8 @@
 use cosmic_text::FontSystem;
 
-use crate::editor::{EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorViewState};
+use crate::editor::{
+	EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorTextLayerState, EditorViewState, EditorViewportMetrics,
+};
 use crate::overlay::OverlayPrimitive;
 use crate::scene::{LayoutScene, LayoutSceneModel, SceneConfig, make_font_system};
 use crate::types::CanvasTarget;
@@ -38,6 +40,14 @@ impl SceneSession {
 
 	pub(super) fn view_state(&self) -> EditorViewState {
 		self.editor.view_state()
+	}
+
+	pub(super) fn viewport_metrics(&self) -> EditorViewportMetrics {
+		self.editor.viewport_metrics()
+	}
+
+	pub(super) fn text_layer_state(&self) -> EditorTextLayerState {
+		self.editor.text_layer_state()
 	}
 
 	pub(super) fn history_depths(&self) -> (usize, usize) {

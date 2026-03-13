@@ -139,11 +139,7 @@ impl LayoutScene {
 
 		Self {
 			text: Arc::<str>::from(text),
-			font_choice: config.font_choice,
-			shaping: config.shaping,
 			wrapping: config.wrapping,
-			font_size: config.font_size,
-			line_height: config.line_height,
 			max_width: config.max_width,
 			measured_width,
 			measured_height,
@@ -152,7 +148,6 @@ impl LayoutScene {
 			runs: runs.into(),
 			clusters: clusters.into(),
 			warnings: warnings.into(),
-			draw_canvas_text: config.render_mode.draw_canvas_text(),
 			draw_outlines,
 			inspect,
 		}
@@ -162,7 +157,7 @@ impl LayoutScene {
 #[cfg(test)]
 impl LayoutScene {
 	pub(crate) fn new_for_test(
-		text: impl Into<Arc<str>>, font_choice: crate::types::FontChoice, shaping: crate::types::ShapingChoice,
+		text: impl Into<Arc<str>>, _font_choice: crate::types::FontChoice, _shaping: crate::types::ShapingChoice,
 		wrapping: crate::types::WrapChoice, render_mode: crate::types::RenderMode, font_size: f32, line_height: f32,
 		max_width: f32, measured_width: f32, measured_height: f32, glyph_count: usize, font_count: usize,
 		runs: Vec<RunInfo>, clusters: Vec<super::ClusterInfo>,
@@ -171,11 +166,7 @@ impl LayoutScene {
 
 		Self {
 			text: text.clone(),
-			font_choice,
-			shaping,
 			wrapping,
-			font_size,
-			line_height,
 			max_width,
 			measured_width,
 			measured_height,
@@ -184,7 +175,6 @@ impl LayoutScene {
 			runs: runs.into(),
 			clusters: clusters.into(),
 			warnings: Vec::new().into(),
-			draw_canvas_text: render_mode.draw_canvas_text(),
 			draw_outlines: render_mode.draw_outlines(),
 			inspect: Arc::new(SceneInspectCache {
 				buffer: Arc::new(Buffer::new_empty(Metrics::new(
