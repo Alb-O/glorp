@@ -1,9 +1,14 @@
-use iced::widget::{canvas, column, container, row, text};
-use iced::{Color, Element, Font, Length, Pixels, Point, Rectangle, Size, Theme};
-
-use crate::perf::{PerfDashboard, PerfGraphSeries};
-use crate::types::Message;
-use crate::ui::{panel_scrollable, panel_style};
+use {
+	crate::{
+		perf::{PerfDashboard, PerfGraphSeries},
+		types::Message,
+		ui::{panel_scrollable, panel_style},
+	},
+	iced::{
+		Color, Element, Font, Length, Pixels, Point, Rectangle, Size, Theme,
+		widget::{canvas, column, container, row, text},
+	},
+};
 
 /// Props for the performance inspection tab.
 pub(crate) struct PerfTabProps {

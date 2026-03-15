@@ -1,10 +1,13 @@
-use super::Playground;
-use super::headless::{
-	headless_delete_seed_char_count, headless_incremental_line_break_steps, headless_incremental_typing_steps,
-	headless_large_paste_chunk_len, headless_undo_redo_steps,
+use {
+	super::{
+		Playground,
+		headless::{
+			headless_delete_seed_char_count, headless_incremental_line_break_steps, headless_incremental_typing_steps,
+			headless_large_paste_chunk_len, headless_undo_redo_steps,
+		},
+	},
+	crate::{HeadlessScriptScenario, types::SidebarTab},
 };
-use crate::HeadlessScriptScenario;
-use crate::types::SidebarTab;
 
 #[test]
 fn large_paste_script_scenario_applies_one_large_edit() {

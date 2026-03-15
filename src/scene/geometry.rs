@@ -1,9 +1,9 @@
-use cosmic_text::LayoutGlyph;
-use iced::Point;
-
-use crate::types::CanvasTarget;
-
-use super::{ClusterInfo, LayoutScene};
+use {
+	super::{ClusterInfo, LayoutScene},
+	crate::types::CanvasTarget,
+	cosmic_text::LayoutGlyph,
+	iced::Point,
+};
 
 impl LayoutScene {
 	pub(crate) fn hit_test(&self, local: Point) -> Option<CanvasTarget> {

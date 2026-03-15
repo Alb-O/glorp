@@ -1,16 +1,18 @@
-use iced::widget::canvas;
-use iced::{Color, Font, Pixels, Point, Rectangle, Size, Vector};
-
-use std::cmp::Ordering;
-use std::sync::Arc;
-
-use crate::overlay::{
-	EditorOverlayTone, LayoutRect, OverlayLabelKind, OverlayLayer, OverlayPrimitive, OverlayRectKind, OverlaySpace,
+use {
+	super::{
+		GlyphCanvas,
+		geometry::{glyph_intersects_viewport, run_intersects_viewport, scrolled_origin, visible_scene_bounds},
+	},
+	crate::{
+		overlay::{
+			EditorOverlayTone, LayoutRect, OverlayLabelKind, OverlayLayer, OverlayPrimitive, OverlayRectKind,
+			OverlaySpace,
+		},
+		scene::PathCommand,
+	},
+	iced::{Color, Font, Pixels, Point, Rectangle, Size, Vector, widget::canvas},
+	std::{cmp::Ordering, sync::Arc},
 };
-use crate::scene::PathCommand;
-
-use super::GlyphCanvas;
-use super::geometry::{glyph_intersects_viewport, run_intersects_viewport, scrolled_origin, visible_scene_bounds};
 
 pub(super) fn draw_static_scene(frame: &mut canvas::Frame, bounds: Rectangle, canvas: &GlyphCanvas, scroll: Vector) {
 	let origin = scrolled_origin(scroll);
@@ -587,9 +589,11 @@ fn selection_palette(_tone: EditorOverlayTone) -> SelectionPalette {
 
 #[cfg(test)]
 mod tests {
-	use super::{OutlineSegment, merged_selection_outline};
-	use crate::overlay::LayoutRect;
-	use iced::Point;
+	use {
+		super::{OutlineSegment, merged_selection_outline},
+		crate::overlay::LayoutRect,
+		iced::Point,
+	};
 
 	#[test]
 	fn merged_selection_outline_collapses_shared_row_edges() {

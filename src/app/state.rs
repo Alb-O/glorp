@@ -1,14 +1,15 @@
-use iced::widget::pane_grid;
-use iced::{Size, Vector};
-
-use std::time::{Duration, Instant};
-
-use crate::canvas_view::scene_viewport_size;
-use crate::editor::EditorViewportMetrics;
-use crate::overlay::LayoutRect;
-use crate::scene::{LayoutScene, SceneConfig, scene_config};
-use crate::types::{CanvasTarget, FontChoice, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
-use crate::ui::default_sidebar_ratio;
+use {
+	crate::{
+		canvas_view::scene_viewport_size,
+		editor::EditorViewportMetrics,
+		overlay::LayoutRect,
+		scene::{LayoutScene, SceneConfig, scene_config},
+		types::{CanvasTarget, FontChoice, RenderMode, SamplePreset, ShapingChoice, SidebarTab, WrapChoice},
+		ui::default_sidebar_ratio,
+	},
+	iced::{Size, Vector, widget::pane_grid},
+	std::time::{Duration, Instant},
+};
 
 pub(super) const RESIZE_REFLOW_INTERVAL: Duration = Duration::from_millis(16);
 const DEFAULT_CANVAS_HEIGHT: f32 = 320.0;

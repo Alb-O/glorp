@@ -1,8 +1,9 @@
-use cosmic_text::FontSystem;
-
-use super::{
-	ApplyResult, EditorEditIntent, EditorEngine, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion,
-	EditorPointerIntent,
+use {
+	super::{
+		ApplyResult, EditorEditIntent, EditorEngine, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion,
+		EditorPointerIntent,
+	},
+	cosmic_text::FontSystem,
 };
 
 pub(super) fn apply_intent(

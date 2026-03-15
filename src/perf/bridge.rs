@@ -1,10 +1,12 @@
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-
-use tracing::{debug, trace, warn};
-
-use crate::telemetry::duration_ms;
+use {
+	crate::telemetry::duration_ms,
+	std::{
+		collections::VecDeque,
+		sync::{Arc, Mutex},
+		time::{Duration, Instant},
+	},
+	tracing::{debug, trace, warn},
+};
 
 const PENDING_LIMIT: usize = 512;
 
@@ -106,8 +108,7 @@ fn push_bounded<T>(items: &mut VecDeque<T>, value: T, limit: usize) {
 
 #[cfg(test)]
 mod tests {
-	use super::CanvasPerfSink;
-	use std::time::Duration;
+	use {super::CanvasPerfSink, std::time::Duration};
 
 	#[test]
 	fn sink_drain_clears_pending_samples() {

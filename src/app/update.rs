@@ -1,17 +1,20 @@
-use iced::{Size, Subscription, Task, futures, stream};
-
-use std::time::{Duration, Instant};
-
-use crate::editor::{EditorIntent, EditorOutcome, EditorPointerIntent};
-use crate::telemetry::duration_ms;
-use crate::types::{
-	CanvasEvent, ControlsMessage, Message, PerfMessage, SamplePreset, ShellMessage, SidebarMessage, SidebarTab,
-	ViewportMessage,
+use {
+	super::{
+		Playground,
+		state::{EditorDispatchSource, RESIZE_REFLOW_INTERVAL},
+	},
+	crate::{
+		editor::{EditorIntent, EditorOutcome, EditorPointerIntent},
+		telemetry::duration_ms,
+		types::{
+			CanvasEvent, ControlsMessage, Message, PerfMessage, SamplePreset, ShellMessage, SidebarMessage, SidebarTab,
+			ViewportMessage,
+		},
+	},
+	iced::{Size, Subscription, Task, futures, stream},
+	std::time::{Duration, Instant},
+	tracing::{debug, trace, trace_span, warn},
 };
-use tracing::{debug, trace, trace_span, warn};
-
-use super::Playground;
-use super::state::{EditorDispatchSource, RESIZE_REFLOW_INTERVAL};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SceneRefreshReason {

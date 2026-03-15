@@ -1,13 +1,15 @@
-use cosmic_text::{Buffer, Command, FontSystem, LayoutGlyph, SwashCache, fontdb};
-
-use std::ops::Range;
-use std::sync::{Arc, OnceLock};
-
-use crate::overlay::{LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind};
-use crate::types::CanvasTarget;
-
-use super::text::debug_snippet;
-use super::{GlyphInfo, InspectRunInfo, LayoutScene, OutlinePath, PathCommand, PathPoint};
+use {
+	super::{GlyphInfo, InspectRunInfo, LayoutScene, OutlinePath, PathCommand, PathPoint, text::debug_snippet},
+	crate::{
+		overlay::{LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
+		types::CanvasTarget,
+	},
+	cosmic_text::{Buffer, Command, FontSystem, LayoutGlyph, SwashCache, fontdb},
+	std::{
+		ops::Range,
+		sync::{Arc, OnceLock},
+	},
+};
 
 #[derive(Debug)]
 pub(super) struct SceneInspectCache {

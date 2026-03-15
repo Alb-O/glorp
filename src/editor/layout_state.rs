@@ -1,18 +1,20 @@
-use cosmic_text::{Buffer, Cursor, Edit as _, Editor as CosmicEditor, FontSystem};
-use iced::Point;
-
-use std::sync::Arc;
-use std::time::Instant;
-
-use crate::overlay::LayoutRect;
-use crate::scene::{SceneConfig, build_buffer};
-use crate::telemetry::duration_ms;
-use tracing::{debug, trace};
-
-use super::geometry::{insert_cursor_block, insert_cursor_rectangle};
-use super::layout::BufferLayoutSnapshot;
-use super::text::byte_to_cursor;
-use super::{EditorMode, EditorTextLayerState, EditorViewState, EditorViewportMetrics, TextEdit};
+use {
+	super::{
+		EditorMode, EditorTextLayerState, EditorViewState, EditorViewportMetrics, TextEdit,
+		geometry::{insert_cursor_block, insert_cursor_rectangle},
+		layout::BufferLayoutSnapshot,
+		text::byte_to_cursor,
+	},
+	crate::{
+		overlay::LayoutRect,
+		scene::{SceneConfig, build_buffer},
+		telemetry::duration_ms,
+	},
+	cosmic_text::{Buffer, Cursor, Edit as _, Editor as CosmicEditor, FontSystem},
+	iced::Point,
+	std::{sync::Arc, time::Instant},
+	tracing::{debug, trace},
+};
 
 #[derive(Debug, Clone)]
 pub(super) struct EditorLayout {

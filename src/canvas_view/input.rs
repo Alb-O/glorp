@@ -1,14 +1,21 @@
-use std::time::Instant;
-
-use iced::keyboard::{self, key};
-use iced::widget::canvas;
-use iced::{Rectangle, mouse, window};
-
-use crate::editor::{EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorMode, EditorModeIntent, EditorMotion};
-use crate::scene::LayoutScene;
-
-use super::geometry::{scroll_delta, to_scene_local};
-use super::state::{CanvasIntent, DecodedEvent};
+use {
+	super::{
+		geometry::{scroll_delta, to_scene_local},
+		state::{CanvasIntent, DecodedEvent},
+	},
+	crate::{
+		editor::{EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorMode, EditorModeIntent, EditorMotion},
+		scene::LayoutScene,
+	},
+	iced::{
+		Rectangle,
+		keyboard::{self, key},
+		mouse,
+		widget::canvas,
+		window,
+	},
+	std::time::Instant,
+};
 
 pub(super) fn decode_event(
 	mode: EditorMode, focused: bool, event: &canvas::Event, scene: &LayoutScene, bounds: Rectangle,

@@ -13,28 +13,33 @@ mod text;
 #[cfg(test)]
 mod tests;
 
-use cosmic_text::{Buffer, FontSystem};
-use iced::Point;
-
-use std::fmt::{self, Display};
-use std::ops::Range;
-use std::sync::Arc;
-use std::time::Instant;
-
-use crate::overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind};
-use crate::scene::SceneConfig;
-use crate::telemetry::duration_ms;
-use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
-use tracing::{debug, trace, trace_span, warn};
-
-use self::document::DocumentState;
-use self::geometry::{cluster_rectangle, selection_rectangles};
-use self::history::{EditorSnapshot, HistoryEntry};
-use self::layout::{BufferClusterInfo, BufferLayoutSnapshot};
-use self::layout_state::EditorLayout;
-use self::reducer::apply_intent;
-use self::session::EditorSession;
-use self::text::debug_snippet;
+use {
+	self::{
+		document::DocumentState,
+		geometry::{cluster_rectangle, selection_rectangles},
+		history::{EditorSnapshot, HistoryEntry},
+		layout::{BufferClusterInfo, BufferLayoutSnapshot},
+		layout_state::EditorLayout,
+		reducer::apply_intent,
+		session::EditorSession,
+		text::debug_snippet,
+	},
+	crate::{
+		overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
+		scene::SceneConfig,
+		telemetry::duration_ms,
+		types::{FontChoice, RenderMode, ShapingChoice, WrapChoice},
+	},
+	cosmic_text::{Buffer, FontSystem},
+	iced::Point,
+	std::{
+		fmt::{self, Display},
+		ops::Range,
+		sync::Arc,
+		time::Instant,
+	},
+	tracing::{debug, trace, trace_span, warn},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum EditorMode {
@@ -224,7 +229,7 @@ impl EditorViewState {
 			.filter(|primitive| {
 				primitive
 					.as_rect()
-					.is_some_and(|(_, primitive_kind, _, _)| primitive_kind == kind)
+					.is_some_and(|(_, primitive_kind, ..)| primitive_kind == kind)
 			})
 			.count()
 	}

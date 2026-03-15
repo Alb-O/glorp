@@ -1,8 +1,13 @@
-use iced::widget::{column, container, row, text};
-use iced::{Element, Font, Length};
-
-use crate::types::{Message, SidebarTab};
-use crate::ui::{surface_style, view_sidebar_tab};
+use {
+	crate::{
+		types::{Message, SidebarTab},
+		ui::{surface_style, view_sidebar_tab},
+	},
+	iced::{
+		Element, Font, Length,
+		widget::{column, container, row, text},
+	},
+};
 
 /// Props for the sidebar shell.
 ///

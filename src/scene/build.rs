@@ -1,15 +1,18 @@
 #[cfg(test)]
 use cosmic_text::Metrics;
-use cosmic_text::{Buffer, FontSystem, SwashCache};
-
-use std::sync::{Arc, OnceLock};
+use {
+	super::{
+		InspectRunInfo, LayoutScene, LayoutSceneModel, RunInfo, SceneConfig,
+		geometry::build_clusters,
+		inspect::{SceneInspectCache, font_name, glyph_outline},
+		text::line_byte_offsets,
+	},
+	cosmic_text::{Buffer, FontSystem, SwashCache},
+	std::sync::{Arc, OnceLock},
+};
 
 #[cfg(test)]
 use super::build_buffer;
-use super::geometry::build_clusters;
-use super::inspect::{SceneInspectCache, font_name, glyph_outline};
-use super::text::line_byte_offsets;
-use super::{InspectRunInfo, LayoutScene, LayoutSceneModel, RunInfo, SceneConfig};
 
 impl LayoutSceneModel {
 	pub(crate) fn new(font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig) -> Self {

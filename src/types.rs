@@ -1,14 +1,13 @@
-use iced::Font;
-use iced::Size;
-use iced::Vector;
-use iced::advanced::text::Shaping;
-use iced::advanced::text::Wrapping;
-use iced::time::Instant;
-use iced::widget::pane_grid;
-
-use std::fmt::{self, Display};
-
-use crate::editor::{EditorIntent, EditorPointerIntent};
+use {
+	crate::editor::{EditorIntent, EditorPointerIntent},
+	iced::{
+		Font, Size, Vector,
+		advanced::text::{Shaping, Wrapping},
+		time::Instant,
+		widget::pane_grid,
+	},
+	std::fmt::{self, Display},
+};
 
 #[derive(Debug, Clone)]
 pub(crate) enum Message {

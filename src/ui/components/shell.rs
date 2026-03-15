@@ -1,14 +1,19 @@
-use iced::widget::{Stack, canvas, column, container, sensor};
-use iced::{Element, Length, Size, Vector};
-
-use crate::canvas_view::GlyphCanvas;
-use crate::editor::{EditorTextLayerState, EditorViewState};
-use crate::overlay::OverlayPrimitive;
-use crate::perf::CanvasPerfSink;
-use crate::scene::LayoutScene;
-use crate::text_view::SceneTextLayer;
-use crate::types::{Message, ViewportMessage};
-use crate::ui::tokens::{SIDEBAR_WIDTH, surface_style};
+use {
+	crate::{
+		canvas_view::GlyphCanvas,
+		editor::{EditorTextLayerState, EditorViewState},
+		overlay::OverlayPrimitive,
+		perf::CanvasPerfSink,
+		scene::LayoutScene,
+		text_view::SceneTextLayer,
+		types::{Message, ViewportMessage},
+		ui::tokens::{SIDEBAR_WIDTH, surface_style},
+	},
+	iced::{
+		Element, Length, Size, Vector,
+		widget::{Stack, canvas, column, container, sensor},
+	},
+};
 
 const STACK_LAYOUT_BREAKPOINT: f32 = 1120.0;
 const MIN_CANVAS_WIDTH: f32 = 620.0;

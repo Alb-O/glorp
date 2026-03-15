@@ -1,7 +1,10 @@
-use super::{LayoutScene, make_font_system, scene_config};
-use crate::overlay::{OverlayLayer, OverlayPrimitive, OverlayRectKind};
-use crate::types::CanvasTarget;
-use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
+use {
+	super::{LayoutScene, make_font_system, scene_config},
+	crate::{
+		overlay::{OverlayLayer, OverlayPrimitive, OverlayRectKind},
+		types::{CanvasTarget, FontChoice, RenderMode, ShapingChoice, WrapChoice},
+	},
+};
 
 #[test]
 fn scene_build_is_stable_for_unicode_replace() {

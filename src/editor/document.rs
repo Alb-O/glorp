@@ -1,5 +1,7 @@
-use super::TextEdit;
-use super::history::{EditorHistory, HistoryEntry};
+use super::{
+	TextEdit,
+	history::{EditorHistory, HistoryEntry},
+};
 
 #[derive(Debug, Clone)]
 pub(super) struct Document {

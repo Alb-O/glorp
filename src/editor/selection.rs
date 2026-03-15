@@ -1,8 +1,11 @@
-use iced::Point;
-
-use super::{EditorEngine, EditorMode, EditorSelection};
-use crate::editor::layout::BufferLayoutSnapshot;
-use crate::editor::text::{is_word_char, next_char, previous_char};
+use {
+	super::{EditorEngine, EditorMode, EditorSelection},
+	crate::editor::{
+		layout::BufferLayoutSnapshot,
+		text::{is_word_char, next_char, previous_char},
+	},
+	iced::Point,
+};
 
 impl EditorEngine {
 	pub(super) fn pointer_cluster_index(&self, layout: &BufferLayoutSnapshot, point: Point) -> Option<usize> {

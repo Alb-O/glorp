@@ -80,9 +80,8 @@ mod text_view;
 mod types;
 mod ui;
 
-use iced::{Font, Theme};
-
 pub use app::Playground;
+use iced::{Font, Theme};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeadlessScenario {

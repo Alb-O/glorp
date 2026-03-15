@@ -1,8 +1,7 @@
-use std::sync::Once;
-use std::time::Duration;
-
-use std::io::IsTerminal;
-use tracing_subscriber::EnvFilter;
+use {
+	std::{io::IsTerminal, sync::Once, time::Duration},
+	tracing_subscriber::EnvFilter,
+};
 
 const DEFAULT_TRACE_FILTER: &str = "liney=trace";
 static INIT_TRACING: Once = Once::new();

@@ -1,7 +1,7 @@
-use cosmic_text::LayoutGlyph;
-
-use std::ops::Range;
-use std::sync::Arc;
+use {
+	cosmic_text::LayoutGlyph,
+	std::{ops::Range, sync::Arc},
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct RunInfo {

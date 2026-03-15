@@ -1,10 +1,15 @@
-use iced::widget::{checkbox, column, pick_list, slider, text};
-use iced::{Element, Length};
-
-use crate::types::{ControlsMessage, FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, WrapChoice};
-use crate::ui::{
-	control_row, panel_scrollable, panel_style, rounded_checkbox_style, rounded_pick_list_menu_style,
-	rounded_pick_list_style, rounded_slider_style,
+use {
+	crate::{
+		types::{ControlsMessage, FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, WrapChoice},
+		ui::{
+			control_row, panel_scrollable, panel_style, rounded_checkbox_style, rounded_pick_list_menu_style,
+			rounded_pick_list_style, rounded_slider_style,
+		},
+	},
+	iced::{
+		Element, Length,
+		widget::{checkbox, column, pick_list, slider, text},
+	},
 };
 
 /// Props for the controls tab.

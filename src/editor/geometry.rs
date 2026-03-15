@@ -1,12 +1,12 @@
-use cosmic_text::Buffer;
-
-use std::ops::Range;
-use std::sync::Arc;
-
-use crate::overlay::LayoutRect;
-
-use super::layout::{BufferClusterInfo, BufferLayoutSnapshot};
-use super::text::byte_to_cursor;
+use {
+	super::{
+		layout::{BufferClusterInfo, BufferLayoutSnapshot},
+		text::byte_to_cursor,
+	},
+	crate::overlay::LayoutRect,
+	cosmic_text::Buffer,
+	std::{ops::Range, sync::Arc},
+};
 
 #[derive(Debug, Clone, Copy)]
 struct InsertCursorGeometry {

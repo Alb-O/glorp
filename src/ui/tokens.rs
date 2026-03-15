@@ -1,7 +1,10 @@
-use iced::widget::{button, container, row, scrollable, text};
-use iced::{Element, Length, Theme};
-
-use crate::types::{Message, SidebarTab};
+use {
+	crate::types::{Message, SidebarTab},
+	iced::{
+		Element, Length, Theme,
+		widget::{button, container, row, scrollable, text},
+	},
+};
 
 pub(crate) const SIDEBAR_WIDTH: f32 = 380.0;
 const CONTROL_LABEL_WIDTH: f32 = 90.0;

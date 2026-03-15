@@ -1,8 +1,13 @@
-use iced::widget::{column, container, text};
-use iced::{Element, Font, Length, Theme};
-
-use crate::types::Message;
-use crate::ui::{CONTROL_RADIUS, panel_scrollable, panel_style};
+use {
+	crate::{
+		types::Message,
+		ui::{CONTROL_RADIUS, panel_scrollable, panel_style},
+	},
+	iced::{
+		Element, Font, Length, Theme,
+		widget::{column, container, text},
+	},
+};
 
 /// Props for the inspect tab.
 pub(crate) struct InspectTabProps<'a> {

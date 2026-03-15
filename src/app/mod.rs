@@ -8,14 +8,14 @@ mod tests;
 mod update;
 mod view;
 
-use iced::Task;
-
-use crate::perf::PerfMonitor;
-use crate::scene::SceneConfig;
-use crate::types::Message;
-
-use self::session::SceneSession;
-use self::state::{ControlsState, ShellState, SidebarState, ViewportState};
+use {
+	self::{
+		session::SceneSession,
+		state::{ControlsState, ShellState, SidebarState, ViewportState},
+	},
+	crate::{perf::PerfMonitor, scene::SceneConfig, types::Message},
+	iced::Task,
+};
 
 pub struct Playground {
 	session: SceneSession,

@@ -1,16 +1,17 @@
 #![allow(missing_docs)]
 
-use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
-use iced::advanced::renderer::{Headless, Style};
-use iced::mouse;
-use iced::{Color, Font, Pixels, Size, Theme};
-use iced_runtime::{UserInterface, user_interface};
-use liney::{HeadlessScenario, HeadlessScriptScenario, Playground};
-use pollster::block_on;
-
-use std::env;
-use std::hint::black_box;
-use std::time::Duration;
+use {
+	criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main},
+	iced::{
+		Color, Font, Pixels, Size, Theme,
+		advanced::renderer::{Headless, Style},
+		mouse,
+	},
+	iced_runtime::{UserInterface, user_interface},
+	liney::{HeadlessScenario, HeadlessScriptScenario, Playground},
+	pollster::block_on,
+	std::{env, hint::black_box, time::Duration},
+};
 
 criterion_group! {
 	name = benches;

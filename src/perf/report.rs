@@ -1,8 +1,9 @@
-use crate::editor::EditorMode;
-use crate::scene::LayoutScene;
-
-use super::store::{
-	FRAME_BUDGET_MS, METRIC_WARNING_MS, MetricKind, PerfStore, RECENT_LIMIT, SEVERE_FRAME_MS, average_ms, percentile_ms,
+use {
+	super::store::{
+		FRAME_BUDGET_MS, METRIC_WARNING_MS, MetricKind, PerfStore, RECENT_LIMIT, SEVERE_FRAME_MS, average_ms,
+		percentile_ms,
+	},
+	crate::{editor::EditorMode, scene::LayoutScene},
 };
 
 #[derive(Debug, Clone)]
@@ -315,13 +316,15 @@ fn kind_index(kind: MetricKind) -> usize {
 
 #[cfg(test)]
 mod tests {
-	use std::time::Duration;
-
-	use super::{build_dashboard, graph_ceiling};
-	use crate::editor::EditorMode;
-	use crate::perf::{CanvasPerfSink, store::PerfStore};
-	use crate::scene::LayoutScene;
-	use std::sync::Arc;
+	use {
+		super::{build_dashboard, graph_ceiling},
+		crate::{
+			editor::EditorMode,
+			perf::{CanvasPerfSink, store::PerfStore},
+			scene::LayoutScene,
+		},
+		std::{sync::Arc, time::Duration},
+	};
 
 	fn scene() -> LayoutScene {
 		LayoutScene::new_for_test(

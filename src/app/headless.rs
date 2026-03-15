@@ -1,18 +1,23 @@
-use iced::{Point, Size};
-
-use std::fmt::Write as _;
-use std::sync::OnceLock;
-use std::time::{Duration, Instant};
-
-use super::Playground;
-use crate::editor::{
-	EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent,
+use {
+	super::Playground,
+	crate::{
+		HeadlessScenario, HeadlessScriptScenario,
+		editor::{
+			EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent,
+		},
+		perf::PerfMonitor,
+		types::{
+			CanvasEvent, CanvasTarget, ControlsMessage, Message, SamplePreset, SidebarMessage, SidebarTab,
+			ViewportMessage,
+		},
+	},
+	iced::{Point, Size},
+	std::{
+		fmt::Write as _,
+		sync::OnceLock,
+		time::{Duration, Instant},
+	},
 };
-use crate::perf::PerfMonitor;
-use crate::types::{
-	CanvasEvent, CanvasTarget, ControlsMessage, Message, SamplePreset, SidebarMessage, SidebarTab, ViewportMessage,
-};
-use crate::{HeadlessScenario, HeadlessScriptScenario};
 
 const HEADLESS_VIEWPORT_SIZE: Size = Size::new(1600.0, 1000.0);
 const HEADLESS_BENCH_DOCUMENT_LINES: usize = 768;

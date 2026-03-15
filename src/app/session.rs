@@ -1,11 +1,15 @@
-use cosmic_text::FontSystem;
-
-use crate::editor::{
-	EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorTextLayerState, EditorViewState, EditorViewportMetrics,
+use {
+	crate::{
+		editor::{
+			EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorTextLayerState, EditorViewState,
+			EditorViewportMetrics,
+		},
+		overlay::OverlayPrimitive,
+		scene::{LayoutScene, LayoutSceneModel, SceneConfig, make_font_system},
+		types::CanvasTarget,
+	},
+	cosmic_text::FontSystem,
 };
-use crate::overlay::OverlayPrimitive;
-use crate::scene::{LayoutScene, LayoutSceneModel, SceneConfig, make_font_system};
-use crate::types::CanvasTarget;
 
 pub(super) struct SceneSession {
 	editor: EditorEngine,

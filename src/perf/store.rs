@@ -1,7 +1,10 @@
-use std::collections::VecDeque;
-use std::time::{Duration, Instant};
-
-use super::bridge::CanvasPerfSink;
+use {
+	super::bridge::CanvasPerfSink,
+	std::{
+		collections::VecDeque,
+		time::{Duration, Instant},
+	},
+};
 
 pub(super) const HISTORY_LIMIT: usize = 180;
 pub(super) const RECENT_LIMIT: usize = 8;
@@ -192,10 +195,11 @@ fn push_bounded<T>(items: &mut VecDeque<T>, value: T, limit: usize) {
 
 #[cfg(test)]
 mod tests {
-	use std::time::{Duration, Instant};
-
-	use super::{FRAME_BUDGET_MS, FrameSeries, MetricSeries, PerfStore, percentile_ms};
-	use crate::perf::CanvasPerfSink;
+	use {
+		super::{FRAME_BUDGET_MS, FrameSeries, MetricSeries, PerfStore, percentile_ms},
+		crate::perf::CanvasPerfSink,
+		std::time::{Duration, Instant},
+	};
 
 	#[test]
 	fn metric_series_discards_evicted_spikes_from_the_window() {

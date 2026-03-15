@@ -1,6 +1,4 @@
-use iced::Point;
-
-use std::sync::Arc;
+use {iced::Point, std::sync::Arc};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct LayoutRect {

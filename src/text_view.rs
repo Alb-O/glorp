@@ -1,15 +1,18 @@
-use iced::advanced::Widget;
-use iced::advanced::layout;
-use iced::advanced::renderer;
-use iced::advanced::text::Paragraph as _;
-use iced::advanced::text::Renderer as _;
-use iced::advanced::widget::Tree;
-use iced::advanced::{Layout, Renderer as _, mouse};
-use iced::{Color, Element, Length, Point, Rectangle, Size, Theme, Vector};
-
-use crate::canvas_view::scene_origin;
-use crate::editor::{EditorMode, EditorTextLayerState, EditorViewState};
-use crate::types::Message;
+use {
+	crate::{
+		canvas_view::scene_origin,
+		editor::{EditorMode, EditorTextLayerState, EditorViewState},
+		types::Message,
+	},
+	iced::{
+		Color, Element, Length, Point, Rectangle, Size, Theme, Vector,
+		advanced::{
+			Layout, Renderer as _, Widget, layout, mouse, renderer,
+			text::{Paragraph as _, Renderer as _},
+			widget::Tree,
+		},
+	},
+};
 
 const OUTER_BACKGROUND: Color = Color::from_rgb8(20, 24, 32);
 const TEXT_BACKGROUND: Color = Color::from_rgb8(28, 34, 46);
@@ -248,10 +251,11 @@ fn insert_repaint_clip(
 
 #[cfg(test)]
 mod tests {
-	use super::insert_repaint_clip;
-	use crate::editor::EditorMode;
-	use crate::overlay::LayoutRect;
-	use iced::{Point, Rectangle, Size};
+	use {
+		super::insert_repaint_clip,
+		crate::{editor::EditorMode, overlay::LayoutRect},
+		iced::{Point, Rectangle, Size},
+	};
 
 	#[test]
 	fn insert_repaint_clip_requires_insert_mode() {

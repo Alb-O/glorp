@@ -1,8 +1,8 @@
-use std::time::Duration;
-
-use iced::{Point, Rectangle, Size, Vector, mouse};
-
-use crate::scene::{GlyphInfo, LayoutScene, RunInfo};
+use {
+	crate::scene::{GlyphInfo, LayoutScene, RunInfo},
+	iced::{Point, Rectangle, Size, Vector, mouse},
+	std::time::Duration,
+};
 
 pub(super) const DOUBLE_CLICK_INTERVAL: Duration = Duration::from_millis(300);
 pub(super) const DOUBLE_CLICK_DISTANCE: f32 = 8.0;
@@ -95,10 +95,12 @@ fn scene_content_width(scene: &LayoutScene, layout_width: f32) -> f32 {
 
 #[cfg(test)]
 mod tests {
-	use super::{clamp_scroll, max_scroll};
-	use crate::scene::LayoutScene;
-	use iced::{Rectangle, Vector};
-	use std::sync::Arc;
+	use {
+		super::{clamp_scroll, max_scroll},
+		crate::scene::LayoutScene,
+		iced::{Rectangle, Vector},
+		std::sync::Arc,
+	};
 
 	fn scene(width: f32, height: f32) -> LayoutScene {
 		LayoutScene::new_for_test(

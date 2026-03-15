@@ -1,11 +1,15 @@
-use super::{
-	EditorEditIntent, EditorEngine, EditorHistoryIntent, EditorIntent, EditorMode, EditorModeIntent, EditorMotion,
-	EditorPointerIntent, TextEdit, geometry::selection_rectangles,
+use {
+	super::{
+		EditorEditIntent, EditorEngine, EditorHistoryIntent, EditorIntent, EditorMode, EditorModeIntent, EditorMotion,
+		EditorPointerIntent, TextEdit, geometry::selection_rectangles,
+	},
+	crate::{
+		overlay::{EditorOverlayTone, LayoutRect, OverlayPrimitive, OverlayRectKind},
+		scene::{LayoutScene, make_font_system, scene_config},
+		types::{FontChoice, RenderMode, ShapingChoice, WrapChoice},
+	},
+	iced::Point,
 };
-use crate::overlay::{EditorOverlayTone, LayoutRect, OverlayPrimitive, OverlayRectKind};
-use crate::scene::{LayoutScene, make_font_system, scene_config};
-use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
-use iced::Point;
 
 fn editor(text: &str) -> (cosmic_text::FontSystem, EditorEngine) {
 	let mut font_system = make_font_system();

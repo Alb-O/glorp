@@ -1,14 +1,13 @@
-use std::cell::Cell;
-use std::time::Instant;
-
-use iced::widget::canvas;
-use iced::{Point, Vector};
-
-use crate::editor::{EditorIntent, EditorPointerIntent};
-use crate::types::{CanvasEvent, CanvasTarget, Message};
-
-use super::geometry::{
-	DOUBLE_CLICK_DISTANCE, DOUBLE_CLICK_INTERVAL, animate_scroll, clamp_scroll, point_distance, vector_length,
+use {
+	super::geometry::{
+		DOUBLE_CLICK_DISTANCE, DOUBLE_CLICK_INTERVAL, animate_scroll, clamp_scroll, point_distance, vector_length,
+	},
+	crate::{
+		editor::{EditorIntent, EditorPointerIntent},
+		types::{CanvasEvent, CanvasTarget, Message},
+	},
+	iced::{Point, Vector, widget::canvas},
+	std::{cell::Cell, time::Instant},
 };
 
 #[derive(Debug, Default)]
@@ -216,11 +215,15 @@ impl CanvasState {
 
 #[cfg(test)]
 mod tests {
-	use super::{CanvasAction, CanvasIntent, CanvasState, DecodedEvent};
-	use crate::editor::{EditorIntent, EditorPointerIntent};
-	use crate::types::{CanvasEvent, CanvasTarget, Message};
-	use iced::{Point, Vector};
-	use std::time::{Duration, Instant};
+	use {
+		super::{CanvasAction, CanvasIntent, CanvasState, DecodedEvent},
+		crate::{
+			editor::{EditorIntent, EditorPointerIntent},
+			types::{CanvasEvent, CanvasTarget, Message},
+		},
+		iced::{Point, Vector},
+		std::time::{Duration, Instant},
+	};
 
 	fn max_scroll() -> Vector {
 		Vector::new(600.0, 900.0)

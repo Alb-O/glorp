@@ -1,17 +1,18 @@
-use iced::widget::{pane_grid, responsive};
-use iced::{Element, Length};
-
-use std::fmt::Write as _;
-use std::sync::Arc;
-
-use crate::types::{Message, ShellMessage, SidebarTab};
-use crate::ui::{
-	CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps, is_stacked_shell, view_canvas_pane,
-	view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar, view_stacked_shell,
+use {
+	super::{Playground, state::ShellPane},
+	crate::{
+		types::{Message, ShellMessage, SidebarTab},
+		ui::{
+			CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps, is_stacked_shell,
+			view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar, view_stacked_shell,
+		},
+	},
+	iced::{
+		Element, Length,
+		widget::{pane_grid, responsive},
+	},
+	std::{fmt::Write as _, sync::Arc},
 };
-
-use super::Playground;
-use super::state::ShellPane;
 
 impl Playground {
 	pub(crate) fn view(&self) -> Element<'_, Message> {

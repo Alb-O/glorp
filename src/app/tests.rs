@@ -1,11 +1,15 @@
-use std::time::{Duration, Instant};
-
-use iced::{Size, Vector};
-
-use super::Playground;
-use super::state::{RESIZE_REFLOW_INTERVAL, ResizeCoalescer};
-use crate::editor::{EditorEditIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent};
-use crate::types::{CanvasEvent, Message, SidebarMessage, SidebarTab, ViewportMessage};
+use {
+	super::{
+		Playground,
+		state::{RESIZE_REFLOW_INTERVAL, ResizeCoalescer},
+	},
+	crate::{
+		editor::{EditorEditIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent},
+		types::{CanvasEvent, Message, SidebarMessage, SidebarTab, ViewportMessage},
+	},
+	iced::{Size, Vector},
+	std::time::{Duration, Instant},
+};
 
 fn editor(intent: EditorIntent) -> Message {
 	Message::Editor(intent)

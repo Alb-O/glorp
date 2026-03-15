@@ -1,5 +1,4 @@
-use super::history::EditorSnapshot;
-use super::{EditorMode, EditorSelection};
+use super::{EditorMode, EditorSelection, history::EditorSnapshot};
 
 #[derive(Debug, Clone)]
 pub(super) struct EditorSession {

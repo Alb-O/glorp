@@ -1,8 +1,8 @@
-use cosmic_text::{Buffer, Cursor, LayoutGlyph};
-
-use std::ops::Range;
-
-use crate::editor::text::line_byte_offsets;
+use {
+	crate::editor::text::line_byte_offsets,
+	cosmic_text::{Buffer, Cursor, LayoutGlyph},
+	std::ops::Range,
+};
 
 #[derive(Debug, Clone)]
 pub(super) struct BufferRunInfo {

@@ -1,6 +1,10 @@
-use super::{ApplyResult, EditorEngine, EditorMode};
-use crate::editor::layout::BufferLayoutSnapshot;
-use crate::editor::text::{next_char_boundary, previous_char_boundary};
+use {
+	super::{ApplyResult, EditorEngine, EditorMode},
+	crate::editor::{
+		layout::BufferLayoutSnapshot,
+		text::{next_char_boundary, previous_char_boundary},
+	},
+};
 
 impl EditorEngine {
 	pub(super) fn move_left(&mut self, layout: &BufferLayoutSnapshot) {

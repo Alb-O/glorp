@@ -2,17 +2,15 @@ mod bridge;
 mod report;
 mod store;
 
-pub(crate) use bridge::CanvasPerfSink;
-pub(crate) use report::{PerfDashboard, PerfGraphSeries};
-
-use std::time::Duration;
-
-use crate::editor::EditorMode;
-use crate::scene::LayoutScene;
-
-use self::bridge::CanvasPerfSink as Sink;
-use self::report::build_dashboard;
-use self::store::PerfStore;
+use {
+	self::{bridge::CanvasPerfSink as Sink, report::build_dashboard, store::PerfStore},
+	crate::{editor::EditorMode, scene::LayoutScene},
+	std::time::Duration,
+};
+pub(crate) use {
+	bridge::CanvasPerfSink,
+	report::{PerfDashboard, PerfGraphSeries},
+};
 
 #[derive(Debug, Default)]
 pub(crate) struct PerfMonitor {

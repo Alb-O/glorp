@@ -1,7 +1,8 @@
-use cosmic_text::FontSystem;
-
-use super::{ApplyResult, EditorEngine, EditorMode, EditorSelection, TextEdit};
-use crate::editor::text::{clamp_char_boundary, next_char_boundary, previous_char_boundary};
+use {
+	super::{ApplyResult, EditorEngine, EditorMode, EditorSelection, TextEdit},
+	crate::editor::text::{clamp_char_boundary, next_char_boundary, previous_char_boundary},
+	cosmic_text::FontSystem,
+};
 
 impl EditorEngine {
 	pub(super) fn undo(&mut self, font_system: &mut FontSystem) -> ApplyResult {

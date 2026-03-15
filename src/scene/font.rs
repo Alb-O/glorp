@@ -1,8 +1,9 @@
-use cosmic_text::{Attrs, Buffer, FontSystem, Metrics};
-use iced::Font;
-
-use super::SceneConfig;
-use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
+use {
+	super::SceneConfig,
+	crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice},
+	cosmic_text::{Attrs, Buffer, FontSystem, Metrics},
+	iced::Font,
+};
 
 pub(crate) fn make_font_system() -> FontSystem {
 	let mut font_system = FontSystem::new();

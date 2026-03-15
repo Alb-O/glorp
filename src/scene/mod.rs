@@ -7,16 +7,17 @@ mod inspect;
 mod tests;
 mod text;
 
-use iced::Font;
+use {
+	self::inspect::SceneInspectCache,
+	crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice},
+	iced::Font,
+	std::sync::Arc,
+};
 
-use std::sync::Arc;
-
-use crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice};
-
-use self::inspect::SceneInspectCache;
-
-pub(crate) use self::data::{ClusterInfo, GlyphInfo, InspectRunInfo, OutlinePath, PathCommand, PathPoint, RunInfo};
-pub(crate) use self::font::{build_buffer, make_font_system, scene_config};
+pub(crate) use self::{
+	data::{ClusterInfo, GlyphInfo, InspectRunInfo, OutlinePath, PathCommand, PathPoint, RunInfo},
+	font::{build_buffer, make_font_system, scene_config},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct SceneConfig {

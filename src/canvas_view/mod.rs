@@ -3,25 +3,23 @@ mod input;
 mod render;
 mod state;
 
-pub(crate) use geometry::{scene_origin, scene_viewport_size};
-pub(crate) use state::CanvasState;
-
-use std::sync::Arc;
-use std::time::Instant;
-
-use iced::widget::canvas;
-use iced::{Rectangle, Theme, Vector, mouse};
-use tracing::trace_span;
-
-use crate::editor::EditorViewState;
-use crate::overlay::OverlayPrimitive;
-use crate::perf::CanvasPerfSink;
-use crate::scene::LayoutScene;
-use crate::types::Message;
-
-use self::geometry::max_scroll;
-use self::input::decode_event;
-use self::render::{draw_overlay, draw_static_scene, draw_underlay_overlay};
+use {
+	self::{
+		geometry::max_scroll,
+		input::decode_event,
+		render::{draw_overlay, draw_static_scene, draw_underlay_overlay},
+	},
+	crate::{
+		editor::EditorViewState, overlay::OverlayPrimitive, perf::CanvasPerfSink, scene::LayoutScene, types::Message,
+	},
+	iced::{Rectangle, Theme, Vector, mouse, widget::canvas},
+	std::{sync::Arc, time::Instant},
+	tracing::trace_span,
+};
+pub(crate) use {
+	geometry::{scene_origin, scene_viewport_size},
+	state::CanvasState,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct GlyphCanvas {
