@@ -10,23 +10,15 @@ cargo run
 
 ## Repro Perf Checks
 
-The headless Criterion bench defaults are already tuned for quick scripted runs.
-
-Build the bench binary once:
-
-```bash
-cargo bench --bench headless --no-run
-```
-
 Run the representative scripted scenarios:
 
 ```bash
-cargo bench --bench headless -- --noplot 'playground/headless-script/large-paste'
-cargo bench --bench headless -- --noplot 'playground/headless-script/incremental-typing'
-cargo bench --bench headless -- --noplot 'playground/headless-script/undo-redo-burst'
-cargo bench --bench headless -- --noplot 'playground/headless-script/delete-forward-burst'
-cargo bench --bench headless -- --noplot 'playground/headless-script/motion-sweep'
-cargo bench --bench headless -- --noplot 'playground/headless-script/resize-reflow-sweep'
+cargo run -- --perf-scenario large-paste
+cargo run -- --perf-scenario incremental-typing
+cargo run -- --perf-scenario undo-redo-burst
+cargo run -- --perf-scenario delete-forward-burst
+cargo run -- --perf-scenario motion-sweep
+cargo run -- --perf-scenario resize-reflow
 ```
 
 ## Repro Trace Analysis
@@ -34,9 +26,9 @@ cargo bench --bench headless -- --noplot 'playground/headless-script/resize-refl
 Use tracing to inspect where edit time goes:
 
 ```bash
-GLORP_TRACE=glorp=trace cargo bench --bench headless -- --noplot 'playground/headless-script/large-paste'
-GLORP_TRACE='glorp::editor=trace,glorp::app::update=warn' cargo bench --bench headless -- --noplot 'playground/headless-script/incremental-typing' 2>&1 | rg 'apply buffer edit|layout edit updated retained buffer|layout edit rebuilt full buffer|refresh view state|editor apply|editor command over'
-GLORP_TRACE=glorp=trace cargo bench --bench headless -- --noplot 'playground/headless-script/resize-reflow-sweep'
+GLORP_TRACE=glorp=trace cargo run -- --perf-scenario large-paste
+GLORP_TRACE='glorp::editor=trace,glorp::app::update=warn' cargo run -- --perf-scenario incremental-typing 2>&1 | rg 'layout edit rebuilt full buffer|layout edit updated buffer|refresh view state|editor apply|editor command over'
+GLORP_TRACE=glorp=trace cargo run -- --perf-scenario resize-reflow
 ```
 
 ## Current Read

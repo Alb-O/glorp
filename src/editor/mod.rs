@@ -176,7 +176,7 @@ pub(crate) struct EditorViewportMetrics {
 
 #[derive(Debug, Clone)]
 pub(crate) struct EditorTextLayerState {
-	pub(crate) buffer: std::sync::Weak<iced::advanced::graphics::text::cosmic_text::Buffer>,
+	pub(crate) buffer: std::sync::Weak<cosmic_text::Buffer>,
 	pub(crate) render_mode: RenderMode,
 	pub(crate) measured_height: f32,
 }

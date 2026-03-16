@@ -307,6 +307,8 @@ fn draw_label_primitive(
 			align_y: alignment::Vertical::Top,
 			shaping: Shaping::Basic,
 			wrapping: Wrapping::None,
+			ellipsis: iced::advanced::text::Ellipsis::None,
+			hint_factor: None,
 		},
 		point_in_space(bounds, origin, position, space),
 		style.color,

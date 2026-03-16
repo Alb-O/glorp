@@ -1,11 +1,6 @@
 use {
 	crate::editor::{EditorIntent, EditorPointerIntent},
-	iced::{
-		Font, Size, Vector,
-		advanced::text::{Shaping, Wrapping},
-		time::Instant,
-		widget::pane_grid,
-	},
+	iced::{Font, Size, Vector, time::Instant, widget::pane_grid},
 	std::{
 		fmt::{self, Display},
 		hash::Hash,
@@ -189,9 +184,9 @@ impl FontChoice {
 
 	pub(crate) fn to_iced_font(self) -> Font {
 		match self {
-			FontChoice::JetBrainsMono => Font::with_name("JetBrains Mono"),
+			FontChoice::JetBrainsMono => Font::new("JetBrains Mono"),
 			FontChoice::Monospace => Font::MONOSPACE,
-			FontChoice::NotoSansCjk => Font::with_name("Noto Sans CJK SC"),
+			FontChoice::NotoSansCjk => Font::new("Noto Sans CJK SC"),
 			FontChoice::SansSerif => Font::DEFAULT,
 		}
 	}
@@ -217,14 +212,6 @@ pub(crate) enum ShapingChoice {
 
 impl ShapingChoice {
 	pub(crate) const ALL: [ShapingChoice; 3] = [Self::Auto, Self::Basic, Self::Advanced];
-
-	pub(crate) fn to_iced(self) -> Shaping {
-		match self {
-			ShapingChoice::Auto => Shaping::Auto,
-			ShapingChoice::Basic => Shaping::Basic,
-			ShapingChoice::Advanced => Shaping::Advanced,
-		}
-	}
 
 	pub(crate) fn to_cosmic(self, text: &str) -> cosmic_text::Shaping {
 		match self {
@@ -261,15 +248,6 @@ pub(crate) enum WrapChoice {
 
 impl WrapChoice {
 	pub(crate) const ALL: [WrapChoice; 4] = [Self::None, Self::Word, Self::Glyph, Self::WordOrGlyph];
-
-	pub(crate) fn to_iced(self) -> Wrapping {
-		match self {
-			WrapChoice::None => Wrapping::None,
-			WrapChoice::Word => Wrapping::Word,
-			WrapChoice::Glyph => Wrapping::Glyph,
-			WrapChoice::WordOrGlyph => Wrapping::WordOrGlyph,
-		}
-	}
 
 	pub(crate) fn to_cosmic(self) -> cosmic_text::Wrap {
 		match self {

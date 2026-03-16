@@ -42,11 +42,6 @@ pub(super) fn is_word_char(ch: char) -> bool {
 }
 
 pub(super) fn byte_to_cursor(text: &str, byte: usize) -> Cursor {
-	let (line, index) = byte_to_line_column(text, byte);
-	Cursor::new(line, index)
-}
-
-pub(super) fn byte_to_line_column(text: &str, byte: usize) -> (usize, usize) {
 	let mut clamped = byte.min(text.len());
 	while clamped > 0 && !text.is_char_boundary(clamped) {
 		clamped -= 1;
@@ -56,7 +51,8 @@ pub(super) fn byte_to_line_column(text: &str, byte: usize) -> (usize, usize) {
 	let line = line_offsets
 		.partition_point(|offset| *offset <= clamped)
 		.saturating_sub(1);
-	(line, clamped - line_offsets[line])
+	let index = clamped - line_offsets[line];
+	Cursor::new(line, index)
 }
 
 pub(super) fn line_byte_offsets(text: &str) -> Vec<usize> {

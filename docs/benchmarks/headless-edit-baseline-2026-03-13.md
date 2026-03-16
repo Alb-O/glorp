@@ -2,7 +2,7 @@
 
 - Date: 2026-03-13
 - Commit: `b0a1a8e90a0c640ecd4053df8deb90094adb11f8` plus local edits
-- Command: `cargo bench --bench headless -- --noplot 'playground/headless-script/<scenario>'`
+- Command: historical pre-migration bench command, `cargo bench --bench headless -- --noplot 'playground/headless-script/<scenario>'`
 
 ## Current Medians
 

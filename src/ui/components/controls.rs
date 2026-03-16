@@ -33,58 +33,53 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 		column![
 			control_row(
 				"Preset",
-				pick_list(SamplePreset::ALL, Some(props.preset), |preset| {
-					Message::Controls(ControlsMessage::LoadPreset(preset))
-				})
-				.padding(PICK_LIST_PADDING)
-				.style(rounded_pick_list_style)
-				.menu_style(rounded_pick_list_menu_style)
-				.width(Length::Fill)
-				.into(),
+				pick_list(Some(props.preset), SamplePreset::ALL, ToString::to_string)
+					.on_select(|preset| Message::Controls(ControlsMessage::LoadPreset(preset)))
+					.padding(PICK_LIST_PADDING)
+					.style(rounded_pick_list_style)
+					.menu_style(rounded_pick_list_menu_style)
+					.width(Length::Fill)
+					.into(),
 			),
 			control_row(
 				"Font",
-				pick_list(FontChoice::ALL, Some(props.font), |font| {
-					Message::Controls(ControlsMessage::FontSelected(font))
-				})
-				.padding(PICK_LIST_PADDING)
-				.style(rounded_pick_list_style)
-				.menu_style(rounded_pick_list_menu_style)
-				.width(Length::Fill)
-				.into(),
+				pick_list(Some(props.font), FontChoice::ALL, ToString::to_string)
+					.on_select(|font| Message::Controls(ControlsMessage::FontSelected(font)))
+					.padding(PICK_LIST_PADDING)
+					.style(rounded_pick_list_style)
+					.menu_style(rounded_pick_list_menu_style)
+					.width(Length::Fill)
+					.into(),
 			),
 			control_row(
 				"Shaping",
-				pick_list(ShapingChoice::ALL, Some(props.shaping), |shaping| {
-					Message::Controls(ControlsMessage::ShapingSelected(shaping))
-				})
-				.padding(PICK_LIST_PADDING)
-				.style(rounded_pick_list_style)
-				.menu_style(rounded_pick_list_menu_style)
-				.width(Length::Fill)
-				.into(),
+				pick_list(Some(props.shaping), ShapingChoice::ALL, ToString::to_string)
+					.on_select(|shaping| Message::Controls(ControlsMessage::ShapingSelected(shaping)))
+					.padding(PICK_LIST_PADDING)
+					.style(rounded_pick_list_style)
+					.menu_style(rounded_pick_list_menu_style)
+					.width(Length::Fill)
+					.into(),
 			),
 			control_row(
 				"Wrap",
-				pick_list(WrapChoice::ALL, Some(props.wrapping), |wrapping| {
-					Message::Controls(ControlsMessage::WrappingSelected(wrapping))
-				})
-				.padding(PICK_LIST_PADDING)
-				.style(rounded_pick_list_style)
-				.menu_style(rounded_pick_list_menu_style)
-				.width(Length::Fill)
-				.into(),
+				pick_list(Some(props.wrapping), WrapChoice::ALL, ToString::to_string)
+					.on_select(|wrapping| Message::Controls(ControlsMessage::WrappingSelected(wrapping)))
+					.padding(PICK_LIST_PADDING)
+					.style(rounded_pick_list_style)
+					.menu_style(rounded_pick_list_menu_style)
+					.width(Length::Fill)
+					.into(),
 			),
 			control_row(
 				"Render",
-				pick_list(RenderMode::ALL, Some(props.render_mode), |render_mode| {
-					Message::Controls(ControlsMessage::RenderModeSelected(render_mode))
-				})
-				.padding(PICK_LIST_PADDING)
-				.style(rounded_pick_list_style)
-				.menu_style(rounded_pick_list_menu_style)
-				.width(Length::Fill)
-				.into(),
+				pick_list(Some(props.render_mode), RenderMode::ALL, ToString::to_string)
+					.on_select(|render_mode| Message::Controls(ControlsMessage::RenderModeSelected(render_mode)))
+					.padding(PICK_LIST_PADDING)
+					.style(rounded_pick_list_style)
+					.menu_style(rounded_pick_list_menu_style)
+					.width(Length::Fill)
+					.into(),
 			),
 			control_row(
 				format!("Size {:.0}", props.font_size),

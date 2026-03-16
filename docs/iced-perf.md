@@ -10,9 +10,9 @@ This repo is no longer bottlenecked by rebuilding all text state on every edit. 
 
 The app has three runtime layers:
 
-- `EditorBuffer` in `src/editor.rs` owns the retained `cosmic-text::Buffer`. It is the source of truth for text, motion, hit testing, and editor selection state.
-- `SceneTextLayer` in `src/text_view.rs` draws the visible document through a retained `iced` paragraph.
-- `LayoutScene` in `src/scene.rs` is a derived inspection snapshot used for dump/inspect/outlines, not for core editor interaction.
+- `EditorEngine` in `src/editor/mod.rs` owns the retained `cosmic-text::Buffer`. It is the source of truth for text, motion, hit testing, and editor selection state.
+- `SceneTextLayer` in `src/text_view.rs` draws the visible document through `fill_raw(...)` with a weak handle to that same editor-owned buffer.
+- `LayoutScene` in `src/scene/mod.rs` is a derived inspection snapshot used for dump/inspect/outlines, not for core editor interaction.
 
 The canvas split is now narrower than before:
 
@@ -24,7 +24,7 @@ That means the visible editor path is now much closer to upstream `iced` text wi
 
 - edits mutate a retained buffer instead of rebuilding from the full string
 - bounds-only width changes use retained-buffer resize
-- visible text rendering is on the paragraph path, not `canvas::Text`
+- visible text rendering is on the raw text path, not `canvas::Text`
 - selection/caret overlays come from editor-owned retained-buffer geometry
 
 ## What Is Already Fixed

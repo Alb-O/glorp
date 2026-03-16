@@ -40,7 +40,7 @@ fn view_warnings_panel(warnings: &[String]) -> Element<'static, Message> {
 	container(text(warnings_text).size(14).width(Length::Fill))
 		.padding(12)
 		.style(move |theme: &Theme| {
-			let palette = theme.extended_palette();
+			let palette = theme.palette();
 			container::Style {
 				background: Some(
 					if has_warnings {

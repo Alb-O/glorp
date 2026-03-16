@@ -108,7 +108,7 @@ impl canvas::Program<Message> for TimeSeriesGraph {
 		&self, _state: &Self::State, renderer: &iced::Renderer, theme: &Theme, bounds: Rectangle,
 		_cursor: iced::mouse::Cursor,
 	) -> Vec<canvas::Geometry> {
-		let palette = theme.extended_palette();
+		let palette = theme.palette();
 		let mut frame = canvas::Frame::new(renderer, bounds.size());
 		let size = bounds.size();
 		let chart_bounds = chart_bounds(size);
@@ -132,7 +132,7 @@ fn chart_bounds(size: Size) -> Rectangle {
 	}
 }
 
-fn draw_grid(frame: &mut canvas::Frame, bounds: Rectangle, palette: &iced::theme::palette::Extended) {
+fn draw_grid(frame: &mut canvas::Frame, bounds: Rectangle, palette: &iced::theme::Palette) {
 	for (fraction, alpha) in [(0.0, 0.18), (0.5, 0.18), (1.0, 0.5)] {
 		let y = bounds.y + bounds.height * fraction;
 		let path = canvas::Path::line(Point::new(bounds.x, y), Point::new(bounds.x + bounds.width, y));
@@ -149,7 +149,7 @@ fn draw_grid(frame: &mut canvas::Frame, bounds: Rectangle, palette: &iced::theme
 }
 
 fn draw_thresholds(
-	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::palette::Extended,
+	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::Palette,
 ) {
 	for (threshold, color) in [
 		(graph.warning_ms, Color::from_rgba(1.0, 0.8, 0.2, 0.45)),
@@ -178,9 +178,7 @@ fn draw_thresholds(
 	let _ = palette;
 }
 
-fn draw_series(
-	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::palette::Extended,
-) {
+fn draw_series(frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::Palette) {
 	if graph.samples_ms.is_empty() {
 		frame.fill_text(canvas::Text {
 			content: "waiting for samples".to_string(),
@@ -241,7 +239,7 @@ fn draw_series(
 }
 
 fn draw_axis_labels(
-	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::palette::Extended,
+	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::Palette,
 ) {
 	frame.fill_text(canvas::Text {
 		content: format_duration_label(graph.ceiling_ms),

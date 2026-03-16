@@ -5,18 +5,11 @@ edition = "2024"
 
 [dependencies]
 cosmic-text = true
-iced = { features = ["advanced", "canvas", "lazy"] }
-iced_runtime = true
+iced = { git = "https://github.com/iced-rs/iced.git", rev = "54020d75564eb411de0327d361c739eaed1ac41f", features = ["advanced", "canvas", "lazy"] }
+iced_runtime = { git = "https://github.com/iced-rs/iced.git", rev = "54020d75564eb411de0327d361c739eaed1ac41f" }
 pollster = true
 tracing = true
 tracing-subscriber = { features = ["env-filter"] }
-
-[dev-dependencies]
-criterion = true
-
-[[bench]]
-name = "headless"
-harness = false
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]

@@ -23,7 +23,7 @@ pub(crate) fn control_row(label: impl Into<String>, control: Element<'_, Message
 }
 
 pub(crate) fn panel_style(theme: &Theme) -> container::Style {
-	let palette = theme.extended_palette();
+	let palette = theme.palette();
 	container::Style {
 		background: Some(palette.background.weak.color.into()),
 		border: iced::Border {
@@ -48,7 +48,7 @@ pub(crate) fn panel_scrollable<'a>(content: impl Into<Element<'a, Message>>) -> 
 }
 
 pub(crate) fn surface_style(theme: &Theme) -> container::Style {
-	let palette = theme.extended_palette();
+	let palette = theme.palette();
 	container::Style {
 		background: Some(palette.background.base.color.into()),
 		border: iced::Border {
@@ -63,7 +63,7 @@ pub(crate) fn surface_style(theme: &Theme) -> container::Style {
 pub(crate) fn panel_scrollable_style(
 	theme: &Theme, status: iced::widget::scrollable::Status,
 ) -> iced::widget::scrollable::Style {
-	let palette = theme.extended_palette();
+	let palette = theme.palette();
 	let mut style = iced::widget::scrollable::default(theme, status);
 
 	let idle = (0.10, 0.38, palette.background.strongest.color, 0.0);
@@ -142,7 +142,7 @@ pub(crate) fn rounded_slider_style(theme: &Theme, status: iced::widget::slider::
 
 pub(crate) fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'static, Message> {
 	let label_text = text(tab.to_string()).size(14).style(move |theme: &Theme| {
-		let palette = theme.extended_palette();
+		let palette = theme.palette();
 		iced::widget::text::Style {
 			color: Some(if is_active {
 				palette.background.base.text
@@ -157,7 +157,7 @@ pub(crate) fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'sta
 	let indicator: Element<'static, Message> = if is_active {
 		container(iced::widget::Space::new().width(Length::Fill).height(2))
 			.style(move |theme: &Theme| {
-				let palette = theme.extended_palette();
+				let palette = theme.palette();
 				container::Style {
 					background: Some(palette.primary.base.color.into()),
 					..Default::default()
@@ -182,7 +182,7 @@ pub(crate) fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'sta
 			.width(Length::Fill)
 			.height(Length::Fill)
 			.style(move |theme: &Theme, status| {
-				let palette = theme.extended_palette();
+				let palette = theme.palette();
 				let mut overlay = palette.background.strong.color;
 				overlay.a = if is_active {
 					0.0
@@ -210,7 +210,7 @@ pub(crate) fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'sta
 		.height(38)
 		.width(Length::Fill)
 		.style(move |theme: &Theme| {
-			let palette = theme.extended_palette();
+			let palette = theme.palette();
 			container::Style {
 				background: Some(
 					if is_active {

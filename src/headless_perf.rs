@@ -175,8 +175,10 @@ impl Harness {
 	fn new(scenario: PerfScenario) -> Result<Self, String> {
 		let backend = env::var("GLORP_HEADLESS_BACKEND").ok();
 		let renderer = block_on(<iced::Renderer as Headless>::new(
-			Font::DEFAULT,
-			Pixels::from(16),
+			iced::advanced::renderer::Settings {
+				default_font: Font::DEFAULT,
+				default_text_size: Pixels::from(16),
+			},
 			backend.as_deref(),
 		))
 		.ok_or_else(|| "failed to create headless renderer".to_string())?;
