@@ -21,7 +21,7 @@ impl SceneSession {
 	pub(super) fn new(text: &str, config: SceneConfig) -> Self {
 		let mut font_system = make_font_system();
 		let editor = EditorEngine::new(&mut font_system, text, config);
-		let scene = LayoutSceneModel::new(&mut font_system, editor.text(), editor.buffer(), config);
+		let scene = LayoutSceneModel::new(&font_system, editor.text(), editor.buffer(), config, None);
 
 		Self {
 			editor,
@@ -77,8 +77,13 @@ impl SceneSession {
 
 	pub(super) fn reset_with_preset(&mut self, text: &str, config: SceneConfig) {
 		self.editor.reset(&mut self.font_system, text, config);
-		self.scene
-			.rebuild(&mut self.font_system, self.editor.text(), self.editor.buffer(), config);
+		self.scene.rebuild(
+			&self.font_system,
+			self.editor.text(),
+			self.editor.buffer(),
+			config,
+			None,
+		);
 	}
 
 	pub(super) fn apply_editor_intent(&mut self, intent: EditorIntent) -> EditorOutcome {
@@ -87,7 +92,15 @@ impl SceneSession {
 
 	pub(super) fn rebuild(&mut self, config: SceneConfig) {
 		let _ = self.editor.sync_buffer_config(&mut self.font_system, config);
-		self.scene
-			.rebuild(&mut self.font_system, self.editor.text(), self.editor.buffer(), config);
+		let Self {
+			editor,
+			scene,
+			font_system,
+		} = self;
+		let buffer = editor.buffer();
+		let text = editor.text();
+		editor.with_cached_layout_snapshot(|snapshot| {
+			scene.rebuild(font_system, text, buffer, config, snapshot);
+		});
 	}
 }

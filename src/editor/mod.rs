@@ -18,7 +18,7 @@ use {
 		document::DocumentState,
 		geometry::{cluster_rectangle, insert_selection_range, selection_rectangles},
 		history::{EditorSnapshot, HistoryEntry},
-		layout::{BufferClusterInfo, BufferLayoutSnapshot},
+		layout::BufferClusterInfo,
 		layout_state::EditorLayout,
 		reducer::apply_intent,
 		session::EditorSession,
@@ -39,6 +39,8 @@ use {
 	},
 	tracing::{debug, trace, trace_span, warn},
 };
+
+pub(crate) use self::layout::BufferLayoutSnapshot;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum EditorMode {
@@ -306,6 +308,10 @@ impl EditorEngine {
 		self.layout_model.layout.view_state_ref()
 	}
 
+	pub(crate) fn with_cached_layout_snapshot<T>(&self, f: impl FnOnce(Option<&BufferLayoutSnapshot>) -> T) -> T {
+		self.layout_model.layout.cached_snapshot(f)
+	}
+
 	pub(crate) fn viewport_metrics(&self) -> EditorViewportMetrics {
 		self.layout_model.layout.viewport_metrics()
 	}
@@ -467,7 +473,8 @@ impl EditorEngine {
 
 	fn refresh_view_state(&mut self, layout: Option<BufferLayoutSnapshot>) {
 		let started = Instant::now();
-		let layout = layout.unwrap_or_else(|| self.layout_snapshot());
+		let layout = Arc::new(layout.unwrap_or_else(|| self.layout_snapshot()));
+		let layout_ref = layout.as_ref();
 		let layout_elapsed = started.elapsed();
 		let selection = self.selection().cloned();
 		let selection_head = selection.as_ref().map(EditorSelection::head);
@@ -477,9 +484,9 @@ impl EditorEngine {
 		} else {
 			None
 		};
-		let viewport_target = self.active_viewport_target(&layout);
+		let viewport_target = self.active_viewport_target(layout_ref);
 		let overlay_started = Instant::now();
-		let overlays = self.build_overlays(&layout, selection.as_ref(), insert_cursor, viewport_target, tone);
+		let overlays = self.build_overlays(layout_ref, selection.as_ref(), insert_cursor, viewport_target, tone);
 		let overlay_elapsed = overlay_started.elapsed();
 		self.layout_model.layout.set_view_state(EditorViewState {
 			mode: self.mode(),
@@ -489,6 +496,7 @@ impl EditorEngine {
 			overlays,
 			viewport_target,
 		});
+		self.layout_model.layout.set_snapshot(layout);
 		let total_ms = duration_ms(started.elapsed());
 		if total_ms >= 8.0 {
 			debug!(

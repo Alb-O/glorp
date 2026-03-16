@@ -12,7 +12,7 @@ use {
 	},
 	cosmic_text::{Buffer, Cursor, Edit as _, Editor as CosmicEditor, FontSystem},
 	iced::Point,
-	std::{sync::Arc, time::Instant},
+	std::{cell::RefCell, sync::Arc, time::Instant},
 	tracing::{debug, trace},
 };
 
@@ -20,6 +20,7 @@ use {
 pub(super) struct EditorLayout {
 	buffer: Arc<Buffer>,
 	config: SceneConfig,
+	snapshot: RefCell<Option<Arc<BufferLayoutSnapshot>>>,
 	view_state: EditorViewState,
 }
 
@@ -28,6 +29,7 @@ impl EditorLayout {
 		Self {
 			buffer: Arc::new(build_buffer(font_system, text, config)),
 			config,
+			snapshot: RefCell::new(None),
 			view_state: default_view_state(),
 		}
 	}
@@ -53,6 +55,7 @@ impl EditorLayout {
 			return false;
 		}
 
+		self.clear_snapshot();
 		if self.width_only_config_change(config) {
 			self.resize_buffer(font_system, config.max_width);
 			self.config = config;
@@ -69,6 +72,7 @@ impl EditorLayout {
 			return false;
 		}
 
+		self.clear_snapshot();
 		self.resize_buffer(font_system, width);
 		self.config.max_width = width;
 		true
@@ -77,11 +81,21 @@ impl EditorLayout {
 	pub(super) fn reset(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) {
 		self.config = config;
 		self.buffer = Arc::new(build_buffer(font_system, text, config));
+		self.clear_snapshot();
 		self.view_state = default_view_state();
 	}
 
 	pub(super) fn snapshot(&self, text: &str) -> BufferLayoutSnapshot {
 		BufferLayoutSnapshot::new(&self.buffer, text)
+	}
+
+	pub(super) fn cached_snapshot<T>(&self, f: impl FnOnce(Option<&BufferLayoutSnapshot>) -> T) -> T {
+		let snapshot = self.snapshot.borrow();
+		f(snapshot.as_deref())
+	}
+
+	pub(super) fn set_snapshot(&self, snapshot: Arc<BufferLayoutSnapshot>) {
+		self.snapshot.replace(Some(snapshot));
 	}
 
 	pub(super) fn viewport_metrics(&self) -> EditorViewportMetrics {
@@ -114,6 +128,7 @@ impl EditorLayout {
 
 	pub(super) fn apply_edit(&mut self, font_system: &mut FontSystem, text: &str, edit: &TextEdit) {
 		let started = Instant::now();
+		self.clear_snapshot();
 		if edit_changes_line_structure(text, edit) {
 			let mut next_text = text.to_string();
 			next_text.replace_range(edit.range.clone(), &edit.inserted);
@@ -175,6 +190,10 @@ impl EditorLayout {
 	fn resize_buffer(&mut self, font_system: &mut FontSystem, width: f32) {
 		let buffer = Arc::make_mut(&mut self.buffer);
 		buffer.set_size(font_system, Some(width), None);
+	}
+
+	fn clear_snapshot(&self) {
+		self.snapshot.replace(None);
 	}
 }
 

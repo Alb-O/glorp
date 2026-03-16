@@ -5,20 +5,25 @@ use {
 };
 
 #[derive(Debug, Clone)]
-pub(super) struct BufferRunInfo {
-	cluster_range: Range<usize>,
-	pub(super) line_height: f32,
-	pub(super) line_top: f32,
+pub(crate) struct BufferRunInfo {
+	pub(crate) cluster_range: Range<usize>,
+	pub(crate) glyph_count: usize,
+	pub(crate) line_height: f32,
+	pub(crate) line_index: usize,
+	pub(crate) line_top: f32,
+	pub(crate) line_width: f32,
+	pub(crate) rtl: bool,
+	pub(crate) baseline: f32,
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct BufferClusterInfo {
-	pub(super) byte_range: Range<usize>,
-	pub(super) height: f32,
-	pub(super) run_index: usize,
-	pub(super) width: f32,
-	pub(super) x: f32,
-	pub(super) y: f32,
+pub(crate) struct BufferClusterInfo {
+	pub(crate) byte_range: Range<usize>,
+	pub(crate) height: f32,
+	pub(crate) run_index: usize,
+	pub(crate) width: f32,
+	pub(crate) x: f32,
+	pub(crate) y: f32,
 }
 
 impl BufferClusterInfo {
@@ -34,10 +39,12 @@ pub(super) struct BufferCaretMetrics {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct BufferLayoutSnapshot {
+pub(crate) struct BufferLayoutSnapshot {
 	clusters: Vec<BufferClusterInfo>,
 	byte_order: Vec<usize>,
 	line_byte_offsets: Vec<usize>,
+	measured_height: f32,
+	measured_width: f32,
 	runs: Vec<BufferRunInfo>,
 }
 
@@ -46,8 +53,12 @@ impl BufferLayoutSnapshot {
 		let line_byte_offsets = line_byte_offsets(text);
 		let mut runs = Vec::new();
 		let mut clusters = Vec::new();
+		let mut measured_width: f32 = 0.0;
+		let mut measured_height: f32 = 0.0;
 
 		for run in buffer.layout_runs() {
+			measured_width = measured_width.max(run.line_w);
+			measured_height = measured_height.max(run.line_top + run.line_height);
 			let line_byte_offset = line_byte_offsets[run.line_i];
 			let cluster_start = clusters.len();
 			clusters.extend(build_buffer_clusters(
@@ -60,9 +71,14 @@ impl BufferLayoutSnapshot {
 			let cluster_end = clusters.len();
 
 			runs.push(BufferRunInfo {
+				baseline: run.line_y,
 				cluster_range: cluster_start..cluster_end,
+				glyph_count: run.glyphs.len(),
 				line_height: run.line_height,
+				line_index: run.line_i,
 				line_top: run.line_top,
+				line_width: run.line_w,
+				rtl: run.rtl,
 			});
 		}
 
@@ -80,16 +96,34 @@ impl BufferLayoutSnapshot {
 			clusters,
 			byte_order,
 			line_byte_offsets,
+			measured_height,
+			measured_width,
 			runs,
 		}
 	}
 
-	pub(super) fn clusters(&self) -> &[BufferClusterInfo] {
+	pub(crate) fn clusters(&self) -> &[BufferClusterInfo] {
 		&self.clusters
 	}
 
 	pub(super) fn cluster(&self, index: usize) -> Option<&BufferClusterInfo> {
 		self.clusters.get(index)
+	}
+
+	pub(crate) fn line_byte_offsets(&self) -> &[usize] {
+		&self.line_byte_offsets
+	}
+
+	pub(crate) fn measured_height(&self) -> f32 {
+		self.measured_height
+	}
+
+	pub(crate) fn measured_width(&self) -> f32 {
+		self.measured_width
+	}
+
+	pub(crate) fn runs(&self) -> &[BufferRunInfo] {
+		&self.runs
 	}
 
 	pub(super) fn cluster_index_for_cursor(&self, cursor: Cursor) -> Option<usize> {

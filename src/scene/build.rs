@@ -5,11 +5,9 @@ use {
 		LayoutScene, LayoutSceneModel, RunInfo, SceneConfig, geometry::count_clusters, inspect::SceneInspectCache,
 		text::line_byte_offsets,
 	},
+	crate::editor::BufferLayoutSnapshot,
 	cosmic_text::{Buffer, FontSystem},
-	std::{
-		collections::BTreeSet,
-		sync::{Arc, OnceLock},
-	},
+	std::sync::{Arc, OnceLock},
 };
 
 #[cfg(test)]
@@ -31,8 +29,11 @@ pub(crate) struct LayoutSceneTestSpec {
 }
 
 impl LayoutSceneModel {
-	pub(crate) fn new(font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig) -> Self {
-		let scene = LayoutScene::from_buffer(font_system, text, buffer, config);
+	pub(crate) fn new(
+		font_system: &FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig,
+		snapshot: Option<&BufferLayoutSnapshot>,
+	) -> Self {
+		let scene = LayoutScene::from_buffer(font_system, text, buffer, config, snapshot);
 
 		Self { scene }
 	}
@@ -42,9 +43,10 @@ impl LayoutSceneModel {
 	}
 
 	pub(crate) fn rebuild(
-		&mut self, font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig,
+		&mut self, font_system: &FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig,
+		snapshot: Option<&BufferLayoutSnapshot>,
 	) {
-		self.scene = LayoutScene::from_buffer(font_system, text, buffer, config);
+		self.scene = LayoutScene::from_buffer(font_system, text, buffer, config, snapshot);
 	}
 }
 
@@ -66,51 +68,45 @@ impl LayoutScene {
 		};
 
 		let buffer = Arc::new(build_buffer(font_system, text, config));
-		let model = LayoutSceneModel::new(font_system, text, buffer, config);
+		let model = LayoutSceneModel::new(font_system, text, buffer, config, None);
 		model.scene
 	}
 
-	fn from_buffer(font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig) -> Self {
-		let mut runs = Vec::new();
+	fn from_buffer(
+		font_system: &FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig,
+		snapshot: Option<&BufferLayoutSnapshot>,
+	) -> Self {
+		let (runs, measured_width, measured_height, cluster_count, line_byte_offsets, font_names) =
+			if let Some(snapshot) = snapshot {
+				(
+					snapshot
+						.runs()
+						.iter()
+						.map(|run| RunInfo {
+							line_index: run.line_index,
+							rtl: run.rtl,
+							baseline: run.baseline,
+							line_top: run.line_top,
+							line_height: run.line_height,
+							line_width: run.line_width,
+							cluster_range: run.cluster_range.clone(),
+							glyph_count: run.glyph_count,
+						})
+						.collect::<Vec<_>>(),
+					snapshot.measured_width(),
+					snapshot.measured_height(),
+					snapshot.clusters().len(),
+					Arc::<[usize]>::from(snapshot.line_byte_offsets()),
+					resolve_font_names_from_buffer(font_system, &buffer),
+				)
+			} else {
+				derive_scene_data(font_system, text, &buffer)
+			};
 		let mut warnings = Vec::new();
-		let mut font_ids = BTreeSet::new();
-		let mut measured_width: f32 = 0.0;
-		let mut measured_height: f32 = 0.0;
 		let mut glyph_count = 0usize;
-		let mut cluster_count = 0usize;
-		let line_byte_offsets = Arc::<[usize]>::from(line_byte_offsets(text));
-
-		for run in buffer.layout_runs() {
-			measured_width = measured_width.max(run.line_w);
-			measured_height = measured_height.max(run.line_top + run.line_height);
-			glyph_count += run.glyphs.len();
-			let cluster_start = cluster_count;
-			cluster_count += count_clusters(run.glyphs);
-
-			font_ids.extend(run.glyphs.iter().map(|glyph| glyph.font_id));
-
-			runs.push(RunInfo {
-				line_index: run.line_i,
-				rtl: run.rtl,
-				baseline: run.line_y,
-				line_top: run.line_top,
-				line_height: run.line_height,
-				line_width: run.line_w,
-				cluster_range: cluster_start..cluster_count,
-				glyph_count: run.glyphs.len(),
-			});
+		for run in &runs {
+			glyph_count += run.glyph_count;
 		}
-
-		let font_names = font_ids
-			.into_iter()
-			.map(|font_id| {
-				let name = font_system
-					.db()
-					.face(font_id)
-					.map_or_else(|| "unknown-font", |face| face.post_script_name.as_str());
-				(font_id, Arc::<str>::from(name))
-			})
-			.collect::<Arc<[_]>>();
 
 		if runs.is_empty() {
 			warnings.push("No layout runs were produced. Check the font choice and text content.".to_string());
@@ -140,6 +136,78 @@ impl LayoutScene {
 			inspect,
 		}
 	}
+}
+
+fn derive_scene_data(
+	font_system: &FontSystem, text: &str, buffer: &Buffer,
+) -> (
+	Vec<RunInfo>,
+	f32,
+	f32,
+	usize,
+	Arc<[usize]>,
+	Arc<[(cosmic_text::fontdb::ID, Arc<str>)]>,
+) {
+	let mut runs = Vec::new();
+	let mut measured_width: f32 = 0.0;
+	let mut measured_height: f32 = 0.0;
+	let mut cluster_count = 0usize;
+	let mut font_ids = std::collections::BTreeSet::new();
+	let line_byte_offsets = Arc::<[usize]>::from(line_byte_offsets(text));
+
+	for run in buffer.layout_runs() {
+		measured_width = measured_width.max(run.line_w);
+		measured_height = measured_height.max(run.line_top + run.line_height);
+		let cluster_start = cluster_count;
+		cluster_count += count_clusters(run.glyphs);
+		font_ids.extend(run.glyphs.iter().map(|glyph| glyph.font_id));
+
+		runs.push(RunInfo {
+			line_index: run.line_i,
+			rtl: run.rtl,
+			baseline: run.line_y,
+			line_top: run.line_top,
+			line_height: run.line_height,
+			line_width: run.line_w,
+			cluster_range: cluster_start..cluster_count,
+			glyph_count: run.glyphs.len(),
+		});
+	}
+
+	(
+		runs,
+		measured_width,
+		measured_height,
+		cluster_count,
+		line_byte_offsets,
+		resolve_font_names(font_system, font_ids.into_iter()),
+	)
+}
+
+fn resolve_font_names(
+	font_system: &FontSystem, font_ids: impl IntoIterator<Item = cosmic_text::fontdb::ID>,
+) -> Arc<[(cosmic_text::fontdb::ID, Arc<str>)]> {
+	font_ids
+		.into_iter()
+		.map(|font_id| {
+			let name = font_system
+				.db()
+				.face(font_id)
+				.map_or_else(|| "unknown-font", |face| face.post_script_name.as_str());
+			(font_id, Arc::<str>::from(name))
+		})
+		.collect::<Arc<[_]>>()
+}
+
+fn resolve_font_names_from_buffer(
+	font_system: &FontSystem, buffer: &Buffer,
+) -> Arc<[(cosmic_text::fontdb::ID, Arc<str>)]> {
+	let mut font_ids = std::collections::BTreeSet::new();
+	for run in buffer.layout_runs() {
+		font_ids.extend(run.glyphs.iter().map(|glyph| glyph.font_id));
+	}
+
+	resolve_font_names(font_system, font_ids.into_iter())
 }
 
 #[cfg(test)]
