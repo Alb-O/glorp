@@ -72,9 +72,7 @@ fn parse_args(args: &[String]) -> Result<Option<PerfCliConfig>, String> {
 		match args[index].as_str() {
 			"--perf-scenario" => {
 				saw_perf_flag = true;
-				let value = args
-					.get(index + 1)
-					.ok_or_else(|| "--perf-scenario requires a value".to_string())?;
+				let value = required_arg(args, index, "--perf-scenario")?;
 				scenario = Some(
 					PerfScenario::parse_label(value)
 						.ok_or_else(|| format!("unknown perf scenario `{value}`\n\n{}", usage()))?,
@@ -83,17 +81,13 @@ fn parse_args(args: &[String]) -> Result<Option<PerfCliConfig>, String> {
 			}
 			"--warmup" => {
 				saw_perf_flag = true;
-				let value = args
-					.get(index + 1)
-					.ok_or_else(|| "--warmup requires a value".to_string())?;
+				let value = required_arg(args, index, "--warmup")?;
 				warmup_frames = parse_count("--warmup", value)?;
 				index += 2;
 			}
 			"--samples" => {
 				saw_perf_flag = true;
-				let value = args
-					.get(index + 1)
-					.ok_or_else(|| "--samples requires a value".to_string())?;
+				let value = required_arg(args, index, "--samples")?;
 				sample_frames = parse_count("--samples", value)?;
 				index += 2;
 			}
@@ -113,6 +107,12 @@ fn parse_args(args: &[String]) -> Result<Option<PerfCliConfig>, String> {
 		)),
 		None => Ok(None),
 	}
+}
+
+fn required_arg<'a>(args: &'a [String], index: usize, flag: &str) -> Result<&'a str, String> {
+	args.get(index + 1)
+		.map(String::as_str)
+		.ok_or_else(|| format!("{flag} requires a value"))
 }
 
 fn parse_count(flag: &str, value: &str) -> Result<usize, String> {
@@ -183,7 +183,6 @@ impl Harness {
 		.ok_or_else(|| "failed to create headless renderer".to_string())?;
 		let renderer_name = renderer.name();
 		let viewport_physical = Size::new(VIEWPORT_PHYSICAL_WIDTH, VIEWPORT_PHYSICAL_HEIGHT);
-		let viewport_logical = VIEWPORT_LOGICAL_SIZE;
 		let app = EditorApp::headless();
 
 		let mut harness = Self {
@@ -192,7 +191,7 @@ impl Harness {
 			renderer_name,
 			cache: user_interface::Cache::default(),
 			viewport_physical,
-			viewport_logical,
+			viewport_logical: VIEWPORT_LOGICAL_SIZE,
 			theme: Theme::TokyoNightStorm,
 			scenario,
 		};

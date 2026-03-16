@@ -42,11 +42,7 @@ pub(super) fn is_word_char(ch: char) -> bool {
 }
 
 pub(super) fn byte_to_cursor(text: &str, byte: usize) -> Cursor {
-	let mut clamped = byte.min(text.len());
-	while clamped > 0 && !text.is_char_boundary(clamped) {
-		clamped -= 1;
-	}
-
+	let clamped = clamp_char_boundary(text, byte);
 	let line_offsets = line_byte_offsets(text);
 	let line = line_offsets
 		.partition_point(|offset| *offset <= clamped)

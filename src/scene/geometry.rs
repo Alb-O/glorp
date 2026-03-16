@@ -84,20 +84,13 @@ impl DocumentLayout {
 		&self, run_index: usize, preferred_x: f32, direction: isize,
 	) -> Option<usize> {
 		if direction < 0 {
-			for next_run in (0..run_index).rev() {
-				if let Some(target) = self.nearest_cluster_in_run(next_run, preferred_x) {
-					return Some(target);
-				}
-			}
+			(0..run_index)
+				.rev()
+				.find_map(|next_run| self.nearest_cluster_in_run(next_run, preferred_x))
 		} else {
-			for next_run in (run_index.saturating_add(1))..self.runs.len() {
-				if let Some(target) = self.nearest_cluster_in_run(next_run, preferred_x) {
-					return Some(target);
-				}
-			}
+			(run_index.saturating_add(1)..self.runs.len())
+				.find_map(|next_run| self.nearest_cluster_in_run(next_run, preferred_x))
 		}
-
-		None
 	}
 
 	pub(crate) fn nearest_cluster_at(&self, y: f32, preferred_x: f32) -> Option<usize> {
@@ -115,10 +108,9 @@ impl DocumentLayout {
 	}
 
 	pub(crate) fn has_run_at_y(&self, y: f32) -> bool {
-		self.runs.iter().any(|run| {
-			let run_bottom = run.line_top + run.line_height;
-			y >= run.line_top && y <= run_bottom
-		})
+		self.runs
+			.iter()
+			.any(|run| y >= run.line_top && y <= run.line_top + run.line_height)
 	}
 
 	pub(crate) fn ends_hard_line(&self, byte: usize) -> bool {
@@ -165,28 +157,31 @@ impl DocumentLayout {
 	pub(crate) fn hit_test(&self, local: Point) -> Option<CanvasTarget> {
 		// Cluster hit boxes win over run bands so inspect mode stays precise when
 		// both would match the same pointer position.
-		if let Some((index, _)) = self.clusters.iter().enumerate().find(|(_, cluster)| {
-			contains_point(
-				local,
-				cluster.x,
-				cluster.y,
-				cluster.width.max(1.0),
-				cluster.height.max(1.0),
-			)
-		}) {
-			return Some(CanvasTarget::Cluster(index));
-		}
-
-		self.runs.iter().enumerate().find_map(|(run_index, run)| {
-			contains_point(
-				local,
-				0.0,
-				run.line_top,
-				self.max_width.max(run.line_width).max(1.0),
-				run.line_height.max(1.0),
-			)
-			.then_some(CanvasTarget::Run(run_index))
-		})
+		self.clusters
+			.iter()
+			.enumerate()
+			.find(|(_, cluster)| {
+				contains_point(
+					local,
+					cluster.x,
+					cluster.y,
+					cluster.width.max(1.0),
+					cluster.height.max(1.0),
+				)
+			})
+			.map(|(index, _)| CanvasTarget::Cluster(index))
+			.or_else(|| {
+				self.runs.iter().enumerate().find_map(|(run_index, run)| {
+					contains_point(
+						local,
+						0.0,
+						run.line_top,
+						self.max_width.max(run.line_width).max(1.0),
+						run.line_height.max(1.0),
+					)
+					.then_some(CanvasTarget::Run(run_index))
+				})
+			})
 	}
 
 	pub(crate) fn target_rect(&self, target: CanvasTarget) -> Option<LayoutRect> {

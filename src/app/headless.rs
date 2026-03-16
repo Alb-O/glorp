@@ -65,16 +65,16 @@ impl EditorApp {
 		match scenario {
 			HeadlessScenario::Default => {}
 			HeadlessScenario::Tall => {
-				let _ = self.update(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
+				self.dispatch_headless(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
 			}
 			HeadlessScenario::TallInspect => {
-				let _ = self.update(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
+				self.dispatch_headless(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
 				self.enable_headless_inspect_mode();
-				let _ = self.update(Message::Canvas(CanvasEvent::Hovered(Some(CanvasTarget::Cluster(0)))));
+				self.dispatch_headless(Message::Canvas(CanvasEvent::Hovered(Some(CanvasTarget::Cluster(0)))));
 			}
 			HeadlessScenario::TallPerf => {
-				let _ = self.update(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
-				let _ = self.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Perf)));
+				self.dispatch_headless(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
+				self.dispatch_headless(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Perf)));
 			}
 		}
 	}
@@ -123,7 +123,7 @@ impl EditorApp {
 			}
 			PerfScenario::ResizeReflow => {
 				self.configure_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
-				let _ = self.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+				self.dispatch_headless(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
 			}
 			PerfScenario::InspectInteraction => {
 				self.configure_headless_script_scenario(HeadlessScriptScenario::InspectInteractionSweep);
@@ -212,15 +212,15 @@ impl EditorApp {
 
 	fn configure_headless_viewport(&mut self) {
 		self.perf = PerfMonitor::default();
-		let _ = self.update(Message::Viewport(ViewportMessage::CanvasResized(
+		self.dispatch_headless(Message::Viewport(ViewportMessage::CanvasResized(
 			HEADLESS_VIEWPORT_SIZE,
 		)));
 	}
 
 	fn enable_headless_inspect_mode(&mut self) {
-		let _ = self.update(Message::Controls(ControlsMessage::ShowHitboxesChanged(true)));
-		let _ = self.update(Message::Controls(ControlsMessage::ShowBaselinesChanged(true)));
-		let _ = self.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+		self.dispatch_headless(Message::Controls(ControlsMessage::ShowHitboxesChanged(true)));
+		self.dispatch_headless(Message::Controls(ControlsMessage::ShowBaselinesChanged(true)));
+		self.dispatch_headless(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
 	}
 
 	fn load_headless_document(&mut self, text: &str) {
@@ -238,7 +238,7 @@ impl EditorApp {
 		}
 
 		self.apply_headless_motion(EditorMotion::LineEnd);
-		let _ = self.update(Message::Editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+		self.dispatch_headless(Message::Editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
 	}
 
 	fn rewind_insert_caret(&mut self, steps: usize) {
@@ -252,15 +252,15 @@ impl EditorApp {
 	}
 
 	fn apply_headless_edit(&mut self, intent: EditorEditIntent) {
-		let _ = self.update(Message::Editor(EditorIntent::Edit(intent)));
+		self.dispatch_headless(Message::Editor(EditorIntent::Edit(intent)));
 	}
 
 	fn apply_headless_history(&mut self, intent: EditorHistoryIntent) {
-		let _ = self.update(Message::Editor(EditorIntent::History(intent)));
+		self.dispatch_headless(Message::Editor(EditorIntent::History(intent)));
 	}
 
 	fn apply_headless_motion(&mut self, intent: EditorMotion) {
-		let _ = self.update(Message::Editor(EditorIntent::Motion(intent)));
+		self.dispatch_headless(Message::Editor(EditorIntent::Motion(intent)));
 	}
 
 	fn perform_motion_sweep(&mut self) {
@@ -273,17 +273,9 @@ impl EditorApp {
 
 	fn perform_pointer_selection_sweep(&mut self) {
 		for (start, end) in HEADLESS_POINTER_SWEEP_POINTS {
-			let _ = self.update(Message::Canvas(CanvasEvent::PointerSelectionStarted {
-				target: Some(CanvasTarget::Run(0)),
-				intent: EditorPointerIntent::Begin {
-					position: Point::new(start.0, start.1),
-					select_word: false,
-				},
-			}));
-			let _ = self.update(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
-				Point::new(end.0, end.1),
-			))));
-			let _ = self.update(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::End)));
+			self.begin_pointer_selection(CanvasTarget::Run(0), start);
+			self.drag_pointer_selection(end);
+			self.end_pointer_selection();
 		}
 	}
 
@@ -316,20 +308,20 @@ impl EditorApp {
 
 		for progress in HEADLESS_RESIZE_PROGRESS {
 			let width = start + ((target - start) * progress);
-			let _ = self.update(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
+			self.dispatch_headless(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
 				width,
 				HEADLESS_VIEWPORT_SIZE.height,
 			))));
 		}
 
-		let _ = self.update(Message::Viewport(ViewportMessage::ResizeTick(
+		self.dispatch_headless(Message::Viewport(ViewportMessage::ResizeTick(
 			Instant::now() + HEADLESS_RESIZE_SETTLE_DELAY,
 		)));
 	}
 
 	fn perform_inspect_interaction_step(&mut self, step: usize) {
 		if step < HEADLESS_INSPECT_HOVERS.len() {
-			let _ = self.update(Message::Canvas(CanvasEvent::Hovered(Some(
+			self.dispatch_headless(Message::Canvas(CanvasEvent::Hovered(Some(
 				HEADLESS_INSPECT_HOVERS[step],
 			))));
 			return;
@@ -341,23 +333,9 @@ impl EditorApp {
 		let (start, end) = HEADLESS_POINTER_SWEEP_POINTS[point_index];
 
 		match phase {
-			0 => {
-				let _ = self.update(Message::Canvas(CanvasEvent::PointerSelectionStarted {
-					target: Some(CanvasTarget::Run(1)),
-					intent: EditorPointerIntent::Begin {
-						position: Point::new(start.0, start.1),
-						select_word: false,
-					},
-				}));
-			}
-			1 => {
-				let _ = self.update(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
-					Point::new(end.0, end.1),
-				))));
-			}
-			_ => {
-				let _ = self.update(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::End)));
-			}
+			0 => self.begin_pointer_selection(CanvasTarget::Run(1), start),
+			1 => self.drag_pointer_selection(end),
+			_ => self.end_pointer_selection(),
 		}
 	}
 
@@ -381,6 +359,30 @@ impl EditorApp {
 				.chain(self.viewport.layout_width.round().to_bits().to_ne_bytes())
 				.chain(self.viewport.scene_revision.to_ne_bytes()),
 		)
+	}
+
+	fn dispatch_headless(&mut self, message: Message) {
+		let _ = self.update(message);
+	}
+
+	fn begin_pointer_selection(&mut self, target: CanvasTarget, position: (f32, f32)) {
+		self.dispatch_headless(Message::Canvas(CanvasEvent::PointerSelectionStarted {
+			target: Some(target),
+			intent: EditorPointerIntent::Begin {
+				position: Point::new(position.0, position.1),
+				select_word: false,
+			},
+		}));
+	}
+
+	fn drag_pointer_selection(&mut self, position: (f32, f32)) {
+		self.dispatch_headless(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
+			Point::new(position.0, position.1),
+		))));
+	}
+
+	fn end_pointer_selection(&mut self) {
+		self.dispatch_headless(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::End)));
 	}
 }
 

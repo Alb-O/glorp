@@ -270,25 +270,24 @@ impl EditorEngine {
 	}
 
 	pub(crate) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, config: SceneConfig) -> bool {
-		let Self { state, layout_model } = self;
-		if layout_model
-			.layout
-			.sync_buffer_config(font_system, state.document.text(), config)
-		{
+		let changed = {
+			let Self { state, layout_model } = self;
+			layout_model
+				.layout
+				.sync_buffer_config(font_system, state.document.text(), config)
+		};
+		if changed {
 			self.refresh_view_state(None);
-			return true;
 		}
-
-		false
+		changed
 	}
 
 	pub(crate) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) -> bool {
-		if !self.layout_model.layout.sync_buffer_width(font_system, width) {
-			return false;
+		let changed = self.layout_model.layout.sync_buffer_width(font_system, width);
+		if changed {
+			self.refresh_view_state_after_width_sync();
 		}
-
-		self.refresh_view_state_after_width_sync();
-		true
+		changed
 	}
 
 	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
@@ -477,10 +476,10 @@ impl EditorEngine {
 
 	fn active_viewport_target(&self, layout: &DocumentLayout) -> Option<LayoutRect> {
 		if matches!(self.mode(), EditorMode::Insert) {
-			return self.layout_model.layout.insert_cursor_block(self.text(), self.caret());
+			self.layout_model.layout.insert_cursor_block(self.text(), self.caret())
+		} else {
+			self.active_selection(layout).map(cluster_rectangle)
 		}
-
-		self.active_selection(layout).map(cluster_rectangle)
 	}
 
 	fn refresh_view_state(&mut self, layout: Option<DocumentLayout>) {

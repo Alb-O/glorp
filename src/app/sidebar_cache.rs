@@ -153,13 +153,14 @@ pub(super) struct InspectSidebarArgs<'a> {
 
 impl InspectSidebarArgs<'_> {
 	fn key(self) -> InspectSidebarKey {
+		let selection = self.presentation.editor.selection.as_ref();
 		InspectSidebarKey {
 			presentation_revision: self.presentation.revision,
 			hovered_target: self.hovered_target,
 			selected_target: self.selected_target,
 			editor_mode: self.presentation.editor.mode,
-			selection_start: self.presentation.editor.selection.as_ref().map(|range| range.start),
-			selection_end: self.presentation.editor.selection.as_ref().map(|range| range.end),
+			selection_start: selection.map(|range| range.start),
+			selection_end: selection.map(|range| range.end),
 			selection_head: self.presentation.editor.selection_head,
 			pointer_anchor: self.presentation.editor.pointer_anchor,
 			undo_depth: self.undo_depth,

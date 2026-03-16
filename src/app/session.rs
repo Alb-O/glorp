@@ -108,22 +108,14 @@ impl DocumentSession {
 
 	/// Applies a width change and refreshes the full presentation if needed.
 	pub(super) fn sync_width(&mut self, width: f32) -> bool {
-		if !self.editor.sync_buffer_width(&mut self.font_system, width) {
-			return false;
-		}
-
-		self.refresh_presentation();
-		true
+		let changed = self.editor.sync_buffer_width(&mut self.font_system, width);
+		self.refresh_if(changed)
 	}
 
 	/// Applies a config change and refreshes the full presentation if needed.
 	pub(super) fn sync_config(&mut self, config: SceneConfig) -> bool {
-		if !self.editor.sync_buffer_config(&mut self.font_system, config) {
-			return false;
-		}
-
-		self.refresh_presentation();
-		true
+		let changed = self.editor.sync_buffer_config(&mut self.font_system, config);
+		self.refresh_if(changed)
 	}
 
 	/// Replaces the document contents and rebuilds the full presentation.
@@ -156,6 +148,14 @@ impl DocumentSession {
 		// text buffer; only the editor-facing slice needs to move forward.
 		self.presentation.revision += 1;
 		self.presentation.editor = self.editor.view_state();
+	}
+
+	fn refresh_if(&mut self, changed: bool) -> bool {
+		if changed {
+			self.refresh_presentation();
+		}
+
+		changed
 	}
 }
 

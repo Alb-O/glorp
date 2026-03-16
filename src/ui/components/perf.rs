@@ -104,7 +104,7 @@ impl canvas::Program<Message> for TimeSeriesGraph {
 
 		frame.fill_rectangle(Point::ORIGIN, size, palette.background.base.color);
 		draw_grid(&mut frame, chart_bounds, palette);
-		draw_thresholds(&mut frame, chart_bounds, &self.graph, palette);
+		draw_thresholds(&mut frame, chart_bounds, &self.graph);
 		draw_series(&mut frame, chart_bounds, &self.graph, palette);
 		draw_axis_labels(&mut frame, chart_bounds, &self.graph, palette);
 
@@ -137,9 +137,7 @@ fn draw_grid(frame: &mut canvas::Frame, bounds: Rectangle, palette: &iced::theme
 	}
 }
 
-fn draw_thresholds(
-	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::Palette,
-) {
+fn draw_thresholds(frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries) {
 	for (threshold, color) in [
 		(graph.warning_ms, Color::from_rgba(1.0, 0.8, 0.2, 0.45)),
 		(graph.severe_ms, Color::from_rgba(1.0, 0.35, 0.35, 0.55)),
@@ -161,8 +159,6 @@ fn draw_thresholds(
 		);
 		frame.fill(&danger_zone, Color::from_rgba(1.0, 0.2, 0.2, 0.06));
 	}
-
-	let _ = palette;
 }
 
 fn draw_series(frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::Palette) {
@@ -238,7 +234,7 @@ fn draw_axis_labels(
 	});
 
 	frame.fill_text(canvas::Text {
-		content: "0".to_string(),
+		content: "0".into(),
 		position: Point::new(bounds.x + 6.0, bounds.y + bounds.height - 2.0),
 		color: faded_text(palette.background.base.text, 0.78),
 		size: Pixels(11.0),
@@ -277,14 +273,12 @@ fn sample_y(bounds: Rectangle, sample_ms: f32, ceiling_ms: f32) -> f32 {
 
 fn spike_color(sample_ms: f32, warning_ms: Option<f32>, severe_ms: Option<f32>) -> Color {
 	if severe_ms.is_some_and(|threshold| sample_ms >= threshold) {
-		return Color::from_rgb(1.0, 0.42, 0.42);
+		Color::from_rgb(1.0, 0.42, 0.42)
+	} else if warning_ms.is_some_and(|threshold| sample_ms >= threshold) {
+		Color::from_rgb(1.0, 0.86, 0.35)
+	} else {
+		Color::from_rgb(0.35, 0.82, 1.0)
 	}
-
-	if warning_ms.is_some_and(|threshold| sample_ms >= threshold) {
-		return Color::from_rgb(1.0, 0.86, 0.35);
-	}
-
-	Color::from_rgb(0.35, 0.82, 1.0)
 }
 
 fn faded_text(color: Color, alpha: f32) -> Color {

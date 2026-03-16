@@ -107,7 +107,7 @@ pub(crate) struct PerfRecentActivity {
 impl PerfRecentActivity {
 	pub(crate) fn text(&self) -> String {
 		if self.recent_ms.is_empty() {
-			return format!("{:<14} {}", self.label, "no samples");
+			return format!("{:<14} no samples", self.label);
 		}
 
 		let mut text = format!("{:<14} ", self.label);

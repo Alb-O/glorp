@@ -106,13 +106,7 @@ impl HeadlessScenario {
 
 	#[must_use]
 	pub fn parse_label(label: &str) -> Option<Self> {
-		match label {
-			"default" => Some(Self::Default),
-			"tall" => Some(Self::Tall),
-			"tall-inspect" => Some(Self::TallInspect),
-			"tall-perf" => Some(Self::TallPerf),
-			_ => None,
-		}
+		Self::ALL.into_iter().find(|scenario| scenario.label() == label)
 	}
 }
 
@@ -156,17 +150,7 @@ impl PerfScenario {
 
 	#[must_use]
 	pub fn parse_label(label: &str) -> Option<Self> {
-		match label {
-			"default" => Some(Self::Default),
-			"tall" => Some(Self::Tall),
-			"tall-inspect" => Some(Self::TallInspect),
-			"tall-perf" => Some(Self::TallPerf),
-			"incremental-typing" => Some(Self::IncrementalTyping),
-			"motion-sweep" => Some(Self::MotionSweep),
-			"resize-reflow" => Some(Self::ResizeReflow),
-			"inspect-interaction" => Some(Self::InspectInteraction),
-			_ => None,
-		}
+		Self::ALL.into_iter().find(|scenario| scenario.label() == label)
 	}
 
 	#[must_use]
@@ -248,14 +232,14 @@ pub fn run() -> iced::Result {
 #[must_use]
 pub fn main_entry() -> ExitCode {
 	if let Some(code) = headless_perf::run_from_env() {
-		return code;
-	}
-
-	match run() {
-		Ok(()) => ExitCode::SUCCESS,
-		Err(error) => {
-			eprintln!("{error}");
-			ExitCode::FAILURE
+		code
+	} else {
+		match run() {
+			Ok(()) => ExitCode::SUCCESS,
+			Err(error) => {
+				eprintln!("{error}");
+				ExitCode::FAILURE
+			}
 		}
 	}
 }

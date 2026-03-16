@@ -1,7 +1,7 @@
 use {
 	super::{
 		EditorApp,
-		sidebar_cache::{InspectSidebarArgs, InspectSidebarModel, PerfSidebarModel},
+		sidebar_cache::InspectSidebarArgs,
 		sidebar_data::{ControlsSidebarData, SidebarBodyData},
 		state::ShellPane,
 	},
@@ -24,28 +24,26 @@ impl EditorApp {
 	pub(crate) fn view(&self) -> Element<'_, Message> {
 		responsive(|size| {
 			if is_stacked_shell(size) {
-				let sidebar = self.view_sidebar(true);
-				let canvas = self.view_canvas(true);
-				return view_stacked_shell(sidebar, canvas);
-			}
-
-			let grid = pane_grid(&self.shell.chrome, |_, pane, _| {
-				pane_grid::Content::new(match pane {
-					ShellPane::Sidebar => self.view_sidebar(false),
-					ShellPane::Canvas => self.view_canvas(false),
+				view_stacked_shell(self.view_sidebar(true), self.view_canvas(true))
+			} else {
+				let grid = pane_grid(&self.shell.chrome, |_, pane, _| {
+					pane_grid::Content::new(match pane {
+						ShellPane::Sidebar => self.view_sidebar(false),
+						ShellPane::Canvas => self.view_canvas(false),
+					})
 				})
-			})
-			.width(Length::Fill)
-			.height(Length::Fill)
-			.spacing(12)
-			.min_size(220)
-			.on_resize(12, |event| Message::Shell(ShellMessage::PaneResized(event)));
-
-			iced::widget::container(grid)
-				.padding(16)
 				.width(Length::Fill)
 				.height(Length::Fill)
-				.into()
+				.spacing(12)
+				.min_size(220)
+				.on_resize(12, |event| Message::Shell(ShellMessage::PaneResized(event)));
+
+				iced::widget::container(grid)
+					.padding(16)
+					.width(Length::Fill)
+					.height(Length::Fill)
+					.into()
+			}
 		})
 		.width(Length::Fill)
 		.height(Length::Fill)
@@ -123,23 +121,25 @@ impl EditorApp {
 	}
 
 	fn inspect_sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
-		let model = self.sidebar_cache.inspect_model(InspectSidebarArgs {
-			presentation: self.session.presentation(),
-			hovered_target: self.sidebar.hovered_target,
-			selected_target: self.sidebar.selected_target,
-			undo_depth,
-			redo_depth,
-		});
-
-		let InspectSidebarModel { data, .. } = model;
-		SidebarBodyData::Inspect(data)
+		SidebarBodyData::Inspect(
+			self.sidebar_cache
+				.inspect_model(InspectSidebarArgs {
+					presentation: self.session.presentation(),
+					hovered_target: self.sidebar.hovered_target,
+					selected_target: self.sidebar.selected_target,
+					undo_depth,
+					redo_depth,
+				})
+				.data,
+		)
 	}
 
 	fn perf_sidebar_body_data(&self) -> SidebarBodyData {
-		let model = self.sidebar_cache.perf_model(self.session.presentation(), &self.perf);
-
-		let PerfSidebarModel { data, .. } = model;
-		SidebarBodyData::Perf(data)
+		SidebarBodyData::Perf(
+			self.sidebar_cache
+				.perf_model(self.session.presentation(), &self.perf)
+				.data,
+		)
 	}
 }
 
