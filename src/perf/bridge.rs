@@ -13,6 +13,8 @@ const PENDING_LIMIT: usize = 512;
 #[derive(Debug, Default)]
 pub(super) struct PendingSamples {
 	pub(super) canvas_update: VecDeque<Duration>,
+	pub(super) canvas_underlay: VecDeque<Duration>,
+	pub(super) canvas_overlay: VecDeque<Duration>,
 	pub(super) canvas_draw: VecDeque<CanvasDrawSample>,
 }
 
@@ -20,7 +22,6 @@ pub(super) struct PendingSamples {
 pub(super) struct CanvasDrawSample {
 	pub(super) total: Duration,
 	pub(super) static_build: Option<Duration>,
-	pub(super) overlay: Duration,
 	pub(super) drawn_at: Instant,
 	pub(super) cache_miss: bool,
 }
@@ -48,9 +49,41 @@ impl CanvasPerfSink {
 		}
 	}
 
-	pub(crate) fn record_canvas_draw(
-		&self, total: Duration, static_build: Option<Duration>, overlay: Duration, cache_miss: bool,
-	) {
+	pub(crate) fn record_canvas_underlay(&self, duration: Duration) {
+		let Ok(mut pending) = self.pending.lock() else {
+			return;
+		};
+
+		push_bounded(&mut pending.canvas_underlay, duration, PENDING_LIMIT);
+
+		let elapsed_ms = duration_ms(duration);
+		if elapsed_ms >= 16.7 {
+			warn!(duration_ms = elapsed_ms, "underlay draw over frame budget");
+		} else if elapsed_ms >= 8.0 {
+			debug!(duration_ms = elapsed_ms, "underlay draw over warning threshold");
+		} else {
+			trace!(duration_ms = elapsed_ms, "underlay draw");
+		}
+	}
+
+	pub(crate) fn record_canvas_overlay(&self, duration: Duration) {
+		let Ok(mut pending) = self.pending.lock() else {
+			return;
+		};
+
+		push_bounded(&mut pending.canvas_overlay, duration, PENDING_LIMIT);
+
+		let elapsed_ms = duration_ms(duration);
+		if elapsed_ms >= 16.7 {
+			warn!(duration_ms = elapsed_ms, "overlay draw over frame budget");
+		} else if elapsed_ms >= 8.0 {
+			debug!(duration_ms = elapsed_ms, "overlay draw over warning threshold");
+		} else {
+			trace!(duration_ms = elapsed_ms, "overlay draw");
+		}
+	}
+
+	pub(crate) fn record_canvas_draw(&self, total: Duration, static_build: Option<Duration>, cache_miss: bool) {
 		let Ok(mut pending) = self.pending.lock() else {
 			return;
 		};
@@ -60,7 +93,6 @@ impl CanvasPerfSink {
 			CanvasDrawSample {
 				total,
 				static_build,
-				overlay,
 				drawn_at: Instant::now(),
 				cache_miss,
 			},
@@ -69,20 +101,16 @@ impl CanvasPerfSink {
 
 		let total_ms = duration_ms(total);
 		let static_build_ms = static_build.map(duration_ms);
-		let overlay_ms = duration_ms(overlay);
 
 		if total_ms >= 16.7 {
-			warn!(
-				total_ms,
-				static_build_ms, overlay_ms, cache_miss, "canvas draw over frame budget"
-			);
+			warn!(total_ms, static_build_ms, cache_miss, "canvas draw over frame budget");
 		} else if total_ms >= 8.0 {
 			debug!(
 				total_ms,
-				static_build_ms, overlay_ms, cache_miss, "canvas draw over warning threshold"
+				static_build_ms, cache_miss, "canvas draw over warning threshold"
 			);
 		} else {
-			trace!(total_ms, static_build_ms, overlay_ms, cache_miss, "canvas draw");
+			trace!(total_ms, static_build_ms, cache_miss, "canvas draw");
 		}
 	}
 
@@ -93,6 +121,8 @@ impl CanvasPerfSink {
 
 		PendingSamples {
 			canvas_update: pending.canvas_update.drain(..).collect(),
+			canvas_underlay: pending.canvas_underlay.drain(..).collect(),
+			canvas_overlay: pending.canvas_overlay.drain(..).collect(),
 			canvas_draw: pending.canvas_draw.drain(..).collect(),
 		}
 	}
@@ -114,19 +144,20 @@ mod tests {
 	fn sink_drain_clears_pending_samples() {
 		let sink = CanvasPerfSink::default();
 		sink.record_canvas_update(Duration::from_millis(2));
-		sink.record_canvas_draw(
-			Duration::from_millis(3),
-			Some(Duration::from_millis(1)),
-			Duration::from_millis(1),
-			true,
-		);
+		sink.record_canvas_underlay(Duration::from_millis(1));
+		sink.record_canvas_overlay(Duration::from_millis(1));
+		sink.record_canvas_draw(Duration::from_millis(3), Some(Duration::from_millis(1)), true);
 
 		let pending = sink.drain();
 		assert_eq!(pending.canvas_update.len(), 1);
+		assert_eq!(pending.canvas_underlay.len(), 1);
+		assert_eq!(pending.canvas_overlay.len(), 1);
 		assert_eq!(pending.canvas_draw.len(), 1);
 
 		let drained_again = sink.drain();
 		assert!(drained_again.canvas_update.is_empty());
+		assert!(drained_again.canvas_underlay.is_empty());
+		assert!(drained_again.canvas_overlay.is_empty());
 		assert!(drained_again.canvas_draw.is_empty());
 	}
 }

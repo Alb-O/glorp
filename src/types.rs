@@ -41,6 +41,7 @@ pub(crate) enum SidebarMessage {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum CanvasEvent {
 	Hovered(Option<CanvasTarget>),
+	FocusChanged(bool),
 	ScrollChanged(Vector),
 	PointerSelectionStarted {
 		target: Option<CanvasTarget>,

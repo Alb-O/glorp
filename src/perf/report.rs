@@ -173,6 +173,7 @@ pub(super) fn build_dashboard(
 		recent_metric_activity(store, MetricKind::ResizeReflow),
 		recent_metric_activity(store, MetricKind::CanvasUpdate),
 		recent_metric_activity(store, MetricKind::CanvasStaticBuild),
+		recent_metric_activity(store, MetricKind::CanvasUnderlayDraw),
 		recent_metric_activity(store, MetricKind::CanvasOverlayDraw),
 		recent_metric_activity(store, MetricKind::CanvasDraw),
 	];
@@ -263,6 +264,7 @@ fn graphs(store: &PerfStore) -> Vec<PerfGraphSeries> {
 	for kind in [
 		MetricKind::CanvasDraw,
 		MetricKind::CanvasStaticBuild,
+		MetricKind::CanvasUnderlayDraw,
 		MetricKind::CanvasOverlayDraw,
 		MetricKind::CanvasUpdate,
 		MetricKind::ResizeReflow,
@@ -350,18 +352,15 @@ mod tests {
 		let mut store = PerfStore::default();
 		let sink = CanvasPerfSink::default();
 		sink.record_canvas_update(Duration::from_millis(2));
-		sink.record_canvas_draw(
-			Duration::from_millis(5),
-			Some(Duration::from_millis(3)),
-			Duration::from_millis(1),
-			false,
-		);
+		sink.record_canvas_underlay(Duration::from_millis(1));
+		sink.record_canvas_overlay(Duration::from_millis(1));
+		sink.record_canvas_draw(Duration::from_millis(5), Some(Duration::from_millis(3)), false);
 		store.flush_canvas_metrics(&sink);
 
 		let dashboard = build_dashboard(&store, &scene(), EditorMode::Normal, 7);
 
 		assert!(!dashboard.graphs.is_empty());
-		assert_eq!(dashboard.recent_activity.len(), 6);
+		assert_eq!(dashboard.recent_activity.len(), 7);
 		assert_eq!(dashboard.overview.editor_bytes, 7);
 	}
 

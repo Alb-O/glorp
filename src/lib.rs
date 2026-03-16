@@ -73,6 +73,7 @@ mod app;
 mod canvas_view;
 mod editor;
 mod overlay;
+mod overlay_view;
 mod perf;
 mod scene;
 mod telemetry;

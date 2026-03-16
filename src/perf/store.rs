@@ -20,18 +20,20 @@ pub(super) enum MetricKind {
 	ResizeReflow,
 	CanvasUpdate,
 	CanvasStaticBuild,
+	CanvasUnderlayDraw,
 	CanvasOverlayDraw,
 	CanvasDraw,
 }
 
 impl MetricKind {
-	pub(super) const ALL: [Self; 8] = [
+	pub(super) const ALL: [Self; 9] = [
 		Self::EditorCommand,
 		Self::EditorApply,
 		Self::SceneBuild,
 		Self::ResizeReflow,
 		Self::CanvasUpdate,
 		Self::CanvasStaticBuild,
+		Self::CanvasUnderlayDraw,
 		Self::CanvasOverlayDraw,
 		Self::CanvasDraw,
 	];
@@ -44,6 +46,7 @@ impl MetricKind {
 			Self::ResizeReflow => "resize.reflow",
 			Self::CanvasUpdate => "canvas.update",
 			Self::CanvasStaticBuild => "canvas.static",
+			Self::CanvasUnderlayDraw => "canvas.underlay",
 			Self::CanvasOverlayDraw => "canvas.overlay",
 			Self::CanvasDraw => "canvas.draw",
 		}
@@ -57,8 +60,9 @@ impl MetricKind {
 			Self::ResizeReflow => 3,
 			Self::CanvasUpdate => 4,
 			Self::CanvasStaticBuild => 5,
-			Self::CanvasOverlayDraw => 6,
-			Self::CanvasDraw => 7,
+			Self::CanvasUnderlayDraw => 6,
+			Self::CanvasOverlayDraw => 7,
+			Self::CanvasDraw => 8,
 		}
 	}
 }
@@ -140,12 +144,19 @@ impl PerfStore {
 			self.record(MetricKind::CanvasUpdate, duration);
 		}
 
+		for duration in pending.canvas_underlay {
+			self.record(MetricKind::CanvasUnderlayDraw, duration);
+		}
+
+		for duration in pending.canvas_overlay {
+			self.record(MetricKind::CanvasOverlayDraw, duration);
+		}
+
 		for sample in pending.canvas_draw {
 			self.record(MetricKind::CanvasDraw, sample.total);
 			if let Some(duration) = sample.static_build {
 				self.record(MetricKind::CanvasStaticBuild, duration);
 			}
-			self.record(MetricKind::CanvasOverlayDraw, sample.overlay);
 			self.frames.record_draw(sample.drawn_at);
 
 			if sample.cache_miss {
@@ -238,15 +249,20 @@ mod tests {
 		let sink = CanvasPerfSink::default();
 
 		sink.record_canvas_update(Duration::from_millis(3));
-		sink.record_canvas_draw(
-			Duration::from_millis(5),
-			Some(Duration::from_millis(2)),
-			Duration::from_millis(1),
-			false,
-		);
+		sink.record_canvas_underlay(Duration::from_millis(1));
+		sink.record_canvas_overlay(Duration::from_millis(1));
+		sink.record_canvas_draw(Duration::from_millis(5), Some(Duration::from_millis(2)), false);
 		store.flush_canvas_metrics(&sink);
 
 		assert_eq!(store.metrics[super::MetricKind::CanvasUpdate.index()].total_samples, 1);
+		assert_eq!(
+			store.metrics[super::MetricKind::CanvasUnderlayDraw.index()].total_samples,
+			1
+		);
+		assert_eq!(
+			store.metrics[super::MetricKind::CanvasOverlayDraw.index()].total_samples,
+			1
+		);
 		assert_eq!(store.metrics[super::MetricKind::CanvasDraw.index()].total_samples, 1);
 		assert_eq!(store.cache.hits, 1);
 	}

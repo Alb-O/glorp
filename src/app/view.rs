@@ -83,6 +83,7 @@ impl Playground {
 			show_hitboxes: self.controls.show_hitboxes,
 			inspect_overlays,
 			editor: self.session.view_state(),
+			focused: self.viewport.canvas_focused,
 			scene_revision: self.viewport.scene_revision,
 			scroll: self.viewport.canvas_scroll,
 			perf: self.perf.sink(),

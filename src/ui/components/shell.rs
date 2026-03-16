@@ -3,6 +3,7 @@ use {
 		canvas_view::GlyphCanvas,
 		editor::{EditorTextLayerState, EditorViewState},
 		overlay::OverlayPrimitive,
+		overlay_view::{EditorUnderlayLayer, SceneOverlayLayer},
 		perf::CanvasPerfSink,
 		scene::LayoutScene,
 		text_view::SceneTextLayer,
@@ -27,6 +28,7 @@ pub(crate) struct CanvasPaneProps {
 	pub(crate) show_hitboxes: bool,
 	pub(crate) inspect_overlays: std::sync::Arc<[OverlayPrimitive]>,
 	pub(crate) editor: EditorViewState,
+	pub(crate) focused: bool,
 	pub(crate) scene_revision: u64,
 	pub(crate) scroll: Vector,
 	pub(crate) perf: CanvasPerfSink,
@@ -65,23 +67,30 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	.backdrop_only()
 	.width(Length::Fill)
 	.height(Length::Fill);
-	let underlay = canvas(crate::canvas_view::GlyphCanvasUnderlay {
-		editor: props.editor.clone(),
-		scroll: props.scroll,
-	})
-	.width(Length::Fill)
-	.height(Length::Fill);
+	let underlay = EditorUnderlayLayer::new(props.editor.clone(), props.scroll, props.perf.clone())
+		.width(Length::Fill)
+		.height(Length::Fill);
 	let text_layer = SceneTextLayer::new(props.text_layer, props.editor.clone(), props.layout_width, props.scroll)
 		.text_only()
 		.width(Length::Fill)
 		.height(Length::Fill);
+	let overlay = SceneOverlayLayer::new(
+		props.scene.clone(),
+		props.layout_width,
+		props.inspect_overlays,
+		props.editor.clone(),
+		props.focused,
+		props.scroll,
+		props.perf.clone(),
+	)
+	.width(Length::Fill)
+	.height(Length::Fill);
 
 	let canvas_view = canvas(GlyphCanvas {
 		scene: props.scene,
 		layout_width: props.layout_width,
 		show_baselines: props.show_baselines,
 		show_hitboxes: props.show_hitboxes,
-		inspect_overlays: props.inspect_overlays,
 		editor: props.editor,
 		scene_revision: props.scene_revision,
 		scroll: props.scroll,
@@ -92,9 +101,15 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 
 	container(
 		sensor(
-			Stack::with_children([backdrop.into(), underlay.into(), text_layer.into(), canvas_view.into()])
-				.width(Length::Fill)
-				.height(Length::Fill),
+			Stack::with_children([
+				backdrop.into(),
+				underlay.into(),
+				text_layer.into(),
+				canvas_view.into(),
+				overlay.into(),
+			])
+			.width(Length::Fill)
+			.height(Length::Fill),
 		)
 		.on_resize(|size| Message::Viewport(ViewportMessage::CanvasResized(size))),
 	)

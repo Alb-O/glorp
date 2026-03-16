@@ -115,11 +115,14 @@ impl CanvasState {
 
 		match event.canvas_intent {
 			CanvasIntent::WheelScrolled(delta) => {
+				let focus_changed = !self.focused;
 				self.focused = true;
 				self.target_scroll = clamp_scroll(self.target_scroll + delta, max_scroll);
 
 				if vector_length(self.target_scroll - self.scroll) > 0.1 {
 					CanvasAction::RequestRedraw(true)
+				} else if focus_changed {
+					CanvasAction::publish_canvas(CanvasEvent::ScrollChanged(self.scroll), false)
 				} else {
 					CanvasAction::None
 				}
@@ -189,8 +192,12 @@ impl CanvasState {
 				}
 			}
 			CanvasIntent::Blur => {
-				self.focused = false;
-				CanvasAction::None
+				if self.focused {
+					self.focused = false;
+					CanvasAction::publish_canvas(CanvasEvent::FocusChanged(false), false)
+				} else {
+					CanvasAction::None
+				}
 			}
 			CanvasIntent::RetainFocus => CanvasAction::None,
 		}

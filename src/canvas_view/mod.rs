@@ -4,16 +4,10 @@ mod render;
 mod state;
 
 use {
-	self::{
-		geometry::max_scroll,
-		input::decode_event,
-		render::{draw_overlay, draw_static_scene, draw_underlay_overlay},
-	},
-	crate::{
-		editor::EditorViewState, overlay::OverlayPrimitive, perf::CanvasPerfSink, scene::LayoutScene, types::Message,
-	},
+	self::{geometry::max_scroll, input::decode_event, render::draw_static_scene},
+	crate::{editor::EditorViewState, perf::CanvasPerfSink, scene::LayoutScene, types::Message},
 	iced::{Rectangle, Theme, Vector, mouse, widget::canvas},
-	std::{sync::Arc, time::Instant},
+	std::time::Instant,
 	tracing::trace_span,
 };
 pub(crate) use {
@@ -27,17 +21,10 @@ pub(crate) struct GlyphCanvas {
 	pub(crate) layout_width: f32,
 	pub(crate) show_baselines: bool,
 	pub(crate) show_hitboxes: bool,
-	pub(crate) inspect_overlays: Arc<[OverlayPrimitive]>,
 	pub(crate) editor: EditorViewState,
 	pub(crate) scene_revision: u64,
 	pub(crate) scroll: Vector,
 	pub(crate) perf: CanvasPerfSink,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct GlyphCanvasUnderlay {
-	pub(crate) editor: EditorViewState,
-	pub(crate) scroll: Vector,
 }
 
 impl canvas::Program<Message> for GlyphCanvas {
@@ -99,15 +86,9 @@ impl canvas::Program<Message> for GlyphCanvas {
 			static_build = Some(build_started.elapsed());
 		});
 
-		let overlay_started = Instant::now();
-		let mut overlay = canvas::Frame::new(renderer, bounds.size());
-		draw_overlay(&mut overlay, bounds, self, state.focused(), self.scroll);
-		let overlay_elapsed = overlay_started.elapsed();
-
-		let geometry = vec![static_layer, overlay.into_geometry()];
 		self.perf
-			.record_canvas_draw(started.elapsed(), static_build, overlay_elapsed, cache_miss);
-		geometry
+			.record_canvas_draw(started.elapsed(), static_build, cache_miss);
+		vec![static_layer]
 	}
 
 	fn mouse_interaction(&self, _state: &Self::State, bounds: Rectangle, cursor: mouse::Cursor) -> mouse::Interaction {
@@ -115,18 +96,5 @@ impl canvas::Program<Message> for GlyphCanvas {
 			.position_in(bounds)
 			.map(|_| mouse::Interaction::Text)
 			.unwrap_or_default()
-	}
-}
-
-impl canvas::Program<Message> for GlyphCanvasUnderlay {
-	type State = ();
-
-	fn draw(
-		&self, _state: &Self::State, renderer: &iced::Renderer, _theme: &Theme, bounds: Rectangle,
-		_cursor: iced::mouse::Cursor,
-	) -> Vec<canvas::Geometry> {
-		let mut overlay = canvas::Frame::new(renderer, bounds.size());
-		draw_underlay_overlay(&mut overlay, &self.editor, self.scroll);
-		vec![overlay.into_geometry()]
 	}
 }

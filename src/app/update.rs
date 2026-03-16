@@ -131,10 +131,15 @@ impl Playground {
 			CanvasEvent::Hovered(target) => {
 				self.sidebar.set_hovered_target(target);
 			}
+			CanvasEvent::FocusChanged(focused) => {
+				self.viewport.canvas_focused = focused;
+			}
 			CanvasEvent::ScrollChanged(scroll) => {
+				self.viewport.canvas_focused = true;
 				self.viewport.canvas_scroll = scroll;
 			}
 			CanvasEvent::PointerSelectionStarted { target, intent } => {
+				self.viewport.canvas_focused = true;
 				self.sidebar.set_selected_target(target);
 				self.dispatch_editor_intent(EditorIntent::Pointer(intent), EditorDispatchSource::PointerPress);
 			}
