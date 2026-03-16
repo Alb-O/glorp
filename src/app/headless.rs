@@ -21,6 +21,7 @@ use {
 
 const HEADLESS_VIEWPORT_SIZE: Size = Size::new(1600.0, 1000.0);
 const HEADLESS_BENCH_DOCUMENT_LINES: usize = 768;
+const HEADLESS_LINE_BREAK_DOCUMENT_LINES: usize = 128;
 const HEADLESS_LARGE_PASTE_LINES: usize = 96;
 const HEADLESS_INCREMENTAL_TYPING_STEPS: usize = 256;
 const HEADLESS_INCREMENTAL_LINE_BREAK_STEPS: usize = 48;
@@ -93,7 +94,13 @@ impl Playground {
 
 	pub fn configure_headless_script_scenario(&mut self, scenario: HeadlessScriptScenario) {
 		self.configure_headless_viewport();
-		self.load_headless_document(headless_bench_document());
+		self.load_headless_document(match scenario {
+			// Incremental newline insertion rebuilds the retained buffer each step,
+			// so the full 768-line perf fixture turns this unit-test scenario into a
+			// multi-minute stress run. Keep it realistic, but bounded.
+			HeadlessScriptScenario::IncrementalLineBreaks => headless_line_break_document(),
+			_ => headless_bench_document(),
+		});
 
 		match scenario {
 			HeadlessScriptScenario::LargePaste
@@ -390,6 +397,12 @@ fn headless_large_paste_chunk() -> &'static str {
 	static CHUNK: OnceLock<String> = OnceLock::new();
 
 	CHUNK.get_or_init(|| build_headless_paste_chunk(HEADLESS_LARGE_PASTE_LINES))
+}
+
+fn headless_line_break_document() -> &'static str {
+	static DOCUMENT: OnceLock<String> = OnceLock::new();
+
+	DOCUMENT.get_or_init(|| build_headless_bench_document(HEADLESS_LINE_BREAK_DOCUMENT_LINES))
 }
 
 fn headless_delete_seed_chunk() -> &'static str {
