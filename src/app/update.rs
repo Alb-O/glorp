@@ -221,7 +221,7 @@ impl Playground {
 		self.viewport.mark_scene_applied();
 		let elapsed = started.elapsed();
 		self.finish_presentation_refresh(reason, Some(elapsed));
-		log_scene_refresh("scene rebuilt", elapsed, self.session.scene());
+		log_scene_refresh("scene rebuilt", elapsed, self.session.layout());
 	}
 
 	fn sync_editor_width(&mut self, width: f32) {
@@ -234,7 +234,7 @@ impl Playground {
 		self.perf.record_editor_width_sync(elapsed);
 		self.viewport.mark_scene_applied();
 		self.finish_presentation_refresh(SceneRefreshReason::ResizeReflow, Some(elapsed));
-		log_scene_refresh("scene rebuilt", elapsed, self.session.scene());
+		log_scene_refresh("scene rebuilt", elapsed, self.session.layout());
 	}
 
 	fn dispatch_editor_intent(&mut self, intent: EditorIntent, source: EditorDispatchSource) {
@@ -315,7 +315,7 @@ impl Playground {
 	fn finish_presentation_refresh(&mut self, reason: SceneRefreshReason, duration: Option<Duration>) {
 		self.sidebar.sync_after_scene_refresh();
 		self.viewport
-			.finish_scene_refresh(self.session.scene(), reason.resets_scroll());
+			.finish_scene_refresh(self.session.layout(), reason.resets_scroll());
 		self.sidebar_cache.invalidate_scene_derived();
 
 		if let Some(duration) = duration {
@@ -353,27 +353,27 @@ fn message_kind(message: &Message) -> &'static str {
 	}
 }
 
-fn log_scene_refresh(label: &str, elapsed: Duration, scene: &crate::scene::LayoutScene) {
+fn log_scene_refresh(label: &str, elapsed: Duration, layout: &crate::scene::DocumentLayout) {
 	let elapsed_ms = duration_ms(elapsed);
 	if elapsed_ms >= 16.7 {
 		warn!(
 			duration_ms = elapsed_ms,
-			scene_width = scene.measured_width,
-			scene_height = scene.measured_height,
+			scene_width = layout.measured_width,
+			scene_height = layout.measured_height,
 			"{label} over frame budget"
 		);
 	} else if elapsed_ms >= 8.0 {
 		debug!(
 			duration_ms = elapsed_ms,
-			scene_width = scene.measured_width,
-			scene_height = scene.measured_height,
+			scene_width = layout.measured_width,
+			scene_height = layout.measured_height,
 			"{label} over warning threshold"
 		);
 	} else {
 		trace!(
 			duration_ms = elapsed_ms,
-			scene_width = scene.measured_width,
-			scene_height = scene.measured_height,
+			scene_width = layout.measured_width,
+			scene_height = layout.measured_height,
 			"{label}"
 		);
 	}

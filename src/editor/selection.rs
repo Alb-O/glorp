@@ -1,14 +1,14 @@
 use {
 	super::{EditorEngine, EditorMode, EditorSelection},
-	crate::editor::{
-		layout::BufferLayoutSnapshot,
-		text::{is_word_char, next_char, previous_char},
+	crate::{
+		editor::text::{is_word_char, next_char, previous_char},
+		scene::DocumentLayout,
 	},
 	iced::Point,
 };
 
 impl EditorEngine {
-	pub(super) fn pointer_cluster_index(&self, layout: &BufferLayoutSnapshot, point: Point) -> Option<usize> {
+	pub(super) fn pointer_cluster_index(&self, layout: &DocumentLayout, point: Point) -> Option<usize> {
 		if !layout.has_run_at_y(point.y) {
 			// `cosmic-text` can clamp far-away hits onto nearby text; ignore clicks that
 			// are outside any laid-out line band so blank canvas space stays inert.
@@ -20,7 +20,7 @@ impl EditorEngine {
 			.or_else(|| layout.nearest_cluster_at(point.y, point.x))
 	}
 
-	pub(super) fn extend_pointer_selection(&mut self, layout: &BufferLayoutSnapshot, position: Point) {
+	pub(super) fn extend_pointer_selection(&mut self, layout: &DocumentLayout, position: Point) {
 		let Some(anchor_byte) = self.pointer_anchor() else {
 			return;
 		};
@@ -37,7 +37,7 @@ impl EditorEngine {
 		self.select_range(layout, anchor_index, target_index);
 	}
 
-	fn select_range(&mut self, layout: &BufferLayoutSnapshot, anchor_index: usize, target_index: usize) {
+	fn select_range(&mut self, layout: &DocumentLayout, anchor_index: usize, target_index: usize) {
 		let Some(anchor) = layout.cluster(anchor_index) else {
 			return;
 		};
@@ -51,7 +51,7 @@ impl EditorEngine {
 		self.set_preferred_x(Some(target.center_x()));
 	}
 
-	pub(super) fn select_word_at(&mut self, layout: &BufferLayoutSnapshot, position: Point) {
+	pub(super) fn select_word_at(&mut self, layout: &DocumentLayout, position: Point) {
 		let Some(cluster_index) = self.pointer_cluster_index(layout, position) else {
 			return;
 		};

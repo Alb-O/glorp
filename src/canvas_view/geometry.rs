@@ -1,5 +1,5 @@
 use {
-	crate::scene::LayoutScene,
+	crate::scene::DocumentLayout,
 	iced::{Point, Rectangle, Size, Vector, mouse},
 	std::time::Duration,
 };
@@ -30,11 +30,11 @@ pub(super) fn animate_scroll(current: Vector, target: Vector) -> Vector {
 	current + ((target - current) * 0.22)
 }
 
-pub(super) fn max_scroll(bounds: Rectangle, scene: &LayoutScene, layout_width: f32) -> Vector {
+pub(super) fn max_scroll(bounds: Rectangle, layout: &DocumentLayout, layout_width: f32) -> Vector {
 	let viewport = viewport_size(bounds);
 	Vector::new(
-		(scene_content_width(scene, layout_width) - viewport.width).max(0.0),
-		(scene.measured_height - viewport.height).max(0.0),
+		(scene_content_width(layout, layout_width) - viewport.width).max(0.0),
+		(layout.measured_height - viewport.height).max(0.0),
 	)
 }
 
@@ -62,9 +62,9 @@ pub(super) fn to_scene_local(position: Point, scroll: Vector) -> Point {
 	)
 }
 
-fn scene_content_width(scene: &LayoutScene, layout_width: f32) -> f32 {
-	if matches!(scene.wrapping, crate::types::WrapChoice::None) {
-		scene.measured_width.max(layout_width)
+fn scene_content_width(layout: &DocumentLayout, layout_width: f32) -> f32 {
+	if matches!(layout.wrapping, crate::types::WrapChoice::None) {
+		layout.measured_width.max(layout_width)
 	} else {
 		layout_width
 	}
@@ -74,17 +74,15 @@ fn scene_content_width(scene: &LayoutScene, layout_width: f32) -> f32 {
 mod tests {
 	use {
 		super::{clamp_scroll, max_scroll},
-		crate::scene::{LayoutScene, LayoutSceneTestSpec},
+		crate::scene::{DocumentLayout, DocumentLayoutTestSpec},
 		iced::{Rectangle, Vector},
 		std::sync::Arc,
 	};
 
-	fn scene(width: f32, height: f32) -> LayoutScene {
-		LayoutScene::new_for_test(LayoutSceneTestSpec {
+	fn scene(width: f32, height: f32) -> DocumentLayout {
+		DocumentLayout::new_for_test(DocumentLayoutTestSpec {
 			text: Arc::<str>::from(""),
 			wrapping: crate::types::WrapChoice::Word,
-			font_size: 16.0,
-			line_height: 20.0,
 			max_width: width,
 			measured_width: width,
 			measured_height: height,

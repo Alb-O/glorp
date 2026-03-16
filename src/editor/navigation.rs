@@ -1,13 +1,13 @@
 use {
 	super::{ApplyResult, EditorEngine, EditorMode},
-	crate::editor::{
-		layout::BufferLayoutSnapshot,
-		text::{next_char_boundary, previous_char_boundary},
+	crate::{
+		editor::text::{next_char_boundary, previous_char_boundary},
+		scene::DocumentLayout,
 	},
 };
 
 impl EditorEngine {
-	pub(super) fn move_left(&mut self, layout: &BufferLayoutSnapshot) {
+	pub(super) fn move_left(&mut self, layout: &DocumentLayout) {
 		self.clear_pointer_anchor();
 		match self.mode() {
 			EditorMode::Normal => {
@@ -29,7 +29,7 @@ impl EditorEngine {
 		}
 	}
 
-	pub(super) fn move_right(&mut self, layout: &BufferLayoutSnapshot) {
+	pub(super) fn move_right(&mut self, layout: &DocumentLayout) {
 		self.clear_pointer_anchor();
 		match self.mode() {
 			EditorMode::Normal => {
@@ -51,7 +51,7 @@ impl EditorEngine {
 		}
 	}
 
-	pub(super) fn move_vertical(&mut self, layout: &BufferLayoutSnapshot, direction: isize) {
+	pub(super) fn move_vertical(&mut self, layout: &DocumentLayout, direction: isize) {
 		self.clear_pointer_anchor();
 		match self.mode() {
 			EditorMode::Normal => {
@@ -87,7 +87,7 @@ impl EditorEngine {
 		}
 	}
 
-	pub(super) fn move_line_edge(&mut self, layout: &BufferLayoutSnapshot, to_start: bool) {
+	pub(super) fn move_line_edge(&mut self, layout: &DocumentLayout, to_start: bool) {
 		self.clear_pointer_anchor();
 		match self.mode() {
 			EditorMode::Normal => {
@@ -129,7 +129,7 @@ impl EditorEngine {
 			return ApplyResult::default();
 		}
 
-		let layout = self.layout_snapshot();
+		let layout = self.document_layout();
 		self.set_mode(EditorMode::Normal);
 		// Normal mode uses the same visible selection that insert mode showed, so
 		// Esc does not shift the cursor left as a separate reconciliation step.

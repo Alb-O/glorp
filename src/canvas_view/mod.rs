@@ -34,12 +34,12 @@ impl canvas::Program<Message> for GlyphCanvas {
 		)
 		.entered();
 		let started = Instant::now();
-		let max_scroll = max_scroll(bounds, &self.presentation.scene, self.layout_width);
+		let max_scroll = max_scroll(bounds, self.presentation.layout.as_ref(), self.layout_width);
 		let action = decode_event(
 			self.presentation.mode(),
 			state.focused(),
 			event,
-			&self.presentation.scene,
+			self.presentation.layout.as_ref(),
 			bounds,
 			cursor,
 			state.scroll(),

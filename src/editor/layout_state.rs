@@ -2,12 +2,11 @@ use {
 	super::{
 		EditorMode, EditorTextLayerState, EditorViewState, EditorViewportMetrics, TextEdit,
 		geometry::{insert_cursor_block, insert_cursor_rectangle},
-		layout::BufferLayoutSnapshot,
 		text::byte_to_cursor,
 	},
 	crate::{
 		overlay::LayoutRect,
-		scene::{SceneConfig, build_buffer},
+		scene::{DocumentLayout, FontNameMap, SceneConfig, build_buffer, resolve_font_names_from_buffer},
 		telemetry::duration_ms,
 	},
 	cosmic_text::{Buffer, Cursor, Edit as _, Editor as CosmicEditor, FontSystem},
@@ -24,21 +23,22 @@ use {
 pub(super) struct EditorLayout {
 	buffer: Arc<Buffer>,
 	config: SceneConfig,
-	snapshot: RefCell<Option<Arc<BufferLayoutSnapshot>>>,
+	document_layout: RefCell<Option<Arc<DocumentLayout>>>,
+	// Keep the resolved names next to the retained buffer so shared layout
+	// rebuilds do not need a wider `FontSystem` dependency.
+	font_names: RefCell<FontNameMap>,
 	viewport_metrics: Cell<Option<EditorViewportMetrics>>,
 	view_state: EditorViewState,
 }
 
 impl EditorLayout {
-	pub(super) fn config(&self) -> SceneConfig {
-		self.config
-	}
-
 	pub(super) fn new(font_system: &mut FontSystem, text: &str, config: SceneConfig) -> Self {
+		let buffer = Arc::new(build_buffer(font_system, text, config));
 		Self {
-			buffer: Arc::new(build_buffer(font_system, text, config)),
+			font_names: RefCell::new(resolve_font_names_from_buffer(font_system, &buffer)),
+			buffer,
 			config,
-			snapshot: RefCell::new(None),
+			document_layout: RefCell::new(None),
 			viewport_metrics: Cell::new(None),
 			view_state: default_view_state(),
 		}
@@ -74,6 +74,8 @@ impl EditorLayout {
 
 		self.config = config;
 		self.buffer = Arc::new(build_buffer(font_system, text, config));
+		self.font_names
+			.replace(resolve_font_names_from_buffer(font_system, &self.buffer));
 		true
 	}
 
@@ -91,26 +93,27 @@ impl EditorLayout {
 	pub(super) fn reset(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) {
 		self.config = config;
 		self.buffer = Arc::new(build_buffer(font_system, text, config));
+		self.font_names
+			.replace(resolve_font_names_from_buffer(font_system, &self.buffer));
 		self.clear_snapshot();
 		self.view_state = default_view_state();
 	}
 
-	pub(super) fn snapshot(&self, text: &str) -> BufferLayoutSnapshot {
-		BufferLayoutSnapshot::new(&self.buffer, text)
+	pub(super) fn document_layout(&self, text: &str) -> DocumentLayout {
+		DocumentLayout::build(text, &self.buffer, self.config, self.font_names.borrow().clone())
 	}
 
-	pub(super) fn cached_snapshot<T>(&self, f: impl FnOnce(Option<&BufferLayoutSnapshot>) -> T) -> T {
-		let snapshot = self.snapshot.borrow();
-		f(snapshot.as_deref())
+	pub(super) fn cached_document_layout_arc(&self) -> Option<Arc<DocumentLayout>> {
+		self.document_layout.borrow().clone()
 	}
 
-	pub(super) fn set_snapshot(&self, snapshot: Arc<BufferLayoutSnapshot>) {
+	pub(super) fn set_document_layout(&self, document_layout: Arc<DocumentLayout>) {
 		self.viewport_metrics.set(Some(EditorViewportMetrics {
 			wrapping: self.config.wrapping,
-			measured_width: snapshot.measured_width(),
-			measured_height: snapshot.measured_height(),
+			measured_width: document_layout.measured_width,
+			measured_height: document_layout.measured_height,
 		}));
-		self.snapshot.replace(Some(snapshot));
+		self.document_layout.replace(Some(document_layout));
 	}
 
 	pub(super) fn viewport_metrics(&self) -> EditorViewportMetrics {
@@ -155,6 +158,8 @@ impl EditorLayout {
 			let mut next_text = text.to_string();
 			next_text.replace_range(edit.range.clone(), &edit.inserted);
 			self.buffer = Arc::new(build_buffer(font_system, &next_text, self.config));
+			self.font_names
+				.replace(resolve_font_names_from_buffer(font_system, &self.buffer));
 			debug!(
 				duration_ms = duration_ms(started.elapsed()),
 				text_bytes = next_text.len(),
@@ -181,6 +186,8 @@ impl EditorLayout {
 		}
 
 		buffer.shape_until_scroll(font_system, false);
+		self.font_names
+			.replace(resolve_font_names_from_buffer(font_system, buffer));
 		trace!(
 			duration_ms = duration_ms(started.elapsed()),
 			text_bytes = text.len(),
@@ -215,7 +222,7 @@ impl EditorLayout {
 	}
 
 	fn clear_snapshot(&self) {
-		self.snapshot.replace(None);
+		self.document_layout.replace(None);
 		self.viewport_metrics.set(None);
 	}
 }

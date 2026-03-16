@@ -3,7 +3,7 @@ use {
 		editor::{EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorViewState, EditorViewportMetrics},
 		overlay::LayoutRect,
 		presentation::DocumentPresentation,
-		scene::{LayoutScene, SceneConfig, make_font_system},
+		scene::{DocumentLayout, SceneConfig, make_font_system},
 	},
 	cosmic_text::FontSystem,
 };
@@ -58,7 +58,7 @@ impl DocumentSession {
 	pub(super) fn new(text: &str, config: SceneConfig) -> Self {
 		let mut font_system = make_font_system();
 		let editor = EditorEngine::new(&mut font_system, text, config);
-		let presentation = build_presentation(&editor, &font_system, 1);
+		let presentation = build_presentation(&editor, 1);
 
 		Self {
 			editor,
@@ -77,9 +77,9 @@ impl DocumentSession {
 		self.editor.text()
 	}
 
-	/// Returns the current scene metadata for the active presentation.
-	pub(super) fn scene(&self) -> &LayoutScene {
-		&self.presentation.scene
+	/// Returns the current shared layout for the active presentation.
+	pub(super) fn layout(&self) -> &DocumentLayout {
+		self.presentation.layout.as_ref()
 	}
 
 	/// Returns the current editor mode.
@@ -144,7 +144,7 @@ impl DocumentSession {
 
 	fn refresh_presentation(&mut self) {
 		let revision = self.presentation.revision + 1;
-		self.presentation = build_presentation(&self.editor, &self.font_system, revision);
+		self.presentation = build_presentation(&self.editor, revision);
 	}
 
 	fn refresh_editor_view(&mut self) {
@@ -155,19 +155,12 @@ impl DocumentSession {
 	}
 }
 
-/// Rebuilds the full scene/editor presentation from the editor snapshot.
-fn build_presentation(editor: &EditorEngine, font_system: &FontSystem, revision: u64) -> DocumentPresentation {
+/// Rebuilds the full layout/editor presentation from the editor snapshot.
+fn build_presentation(editor: &EditorEngine, revision: u64) -> DocumentPresentation {
 	let text_layer = editor.text_layer_state();
 	let viewport_metrics = editor.viewport_metrics();
 	let editor_view = editor.view_state();
-	let buffer = editor.buffer();
-	let config = editor.scene_config();
-	let text = editor.text();
-	let scene = editor.with_cached_layout_snapshot(|snapshot| {
-		// Reuse the editor snapshot when available so scene derivation does not
-		// walk the shaped buffer a second time for the same revision.
-		LayoutScene::from_buffer(font_system, text, buffer, config, snapshot)
-	});
+	let layout = editor.shared_document_layout();
 
-	DocumentPresentation::new(revision, viewport_metrics, text_layer, scene, editor_view)
+	DocumentPresentation::new(revision, viewport_metrics, text_layer, layout, editor_view)
 }

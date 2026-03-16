@@ -5,7 +5,7 @@ use {
 		overlay::{EditorOverlayTone, OverlayRectKind},
 		perf::{PerfMonitor, PerfSnapshotKey},
 		presentation::DocumentPresentation,
-		scene::{LayoutScene, debug_snippet},
+		scene::{DocumentLayout, debug_snippet},
 		types::CanvasTarget,
 	},
 	std::{
@@ -85,7 +85,7 @@ impl SidebarCache {
 		let model = InspectSidebarModel {
 			key,
 			data: Arc::new(InspectSidebarData {
-				warnings: args.presentation.scene.warnings.clone(),
+				warnings: args.presentation.layout.warnings.clone(),
 				interaction_details: interaction_details(
 					args.presentation,
 					args.hovered_target,
@@ -118,7 +118,7 @@ impl SidebarCache {
 			key,
 			data: Arc::new(PerfSidebarData {
 				dashboard: Arc::new(perf.dashboard(
-					&presentation.scene,
+					presentation.layout.as_ref(),
 					presentation.mode(),
 					presentation.editor_bytes(),
 				)),
@@ -189,8 +189,8 @@ fn interaction_details(
 	Arc::<str>::from(format!(
 		"editor\n{}\n\nhover\n{}\n\nselection\n{}",
 		editor_selection_details(presentation.text(), &presentation.editor, undo_depth, redo_depth),
-		target_details_or_none(&presentation.scene, hovered_target),
-		target_details_or_none(&presentation.scene, selected_target),
+		target_details_or_none(presentation.layout.as_ref(), hovered_target),
+		target_details_or_none(presentation.layout.as_ref(), selected_target),
 	))
 }
 
@@ -232,8 +232,8 @@ fn preview_range(text: &str, range: &Range<usize>) -> String {
 		.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
 }
 
-fn target_details_or_none(scene: &LayoutScene, target: Option<CanvasTarget>) -> Arc<str> {
-	scene
+fn target_details_or_none(layout: &DocumentLayout, target: Option<CanvasTarget>) -> Arc<str> {
+	layout
 		.target_details(target)
 		.unwrap_or_else(|| Arc::<str>::from("  none"))
 }

@@ -3,7 +3,7 @@ use {
 		FRAME_BUDGET_MS, METRIC_WARNING_MS, MetricKind, PerfStore, RECENT_LIMIT, SEVERE_FRAME_MS, average_ms,
 		percentile_ms,
 	},
-	crate::{editor::EditorMode, scene::LayoutScene},
+	crate::{editor::EditorMode, scene::DocumentLayout},
 	std::{fmt::Write as _, sync::Arc},
 };
 
@@ -163,7 +163,7 @@ pub(crate) struct PerfDashboard {
 }
 
 pub(super) fn build_dashboard(
-	store: &PerfStore, scene: &LayoutScene, editor_mode: EditorMode, editor_bytes: usize,
+	store: &PerfStore, layout: &DocumentLayout, editor_mode: EditorMode, editor_bytes: usize,
 ) -> PerfDashboard {
 	let hot_paths = MetricKind::ALL
 		.into_iter()
@@ -187,16 +187,16 @@ pub(super) fn build_dashboard(
 		overview: PerfOverview {
 			editor_mode,
 			editor_bytes,
-			editor_chars: scene.text.chars().count(),
-			line_count: scene.text.lines().count().max(1),
-			run_count: scene.runs.len(),
-			glyph_count: scene.glyph_count,
-			cluster_count: scene.cluster_count,
-			font_count: scene.font_count,
-			warning_count: scene.warnings.len(),
-			scene_width: scene.measured_width,
-			scene_height: scene.measured_height,
-			layout_width: scene.max_width,
+			editor_chars: layout.text.chars().count(),
+			line_count: layout.text.lines().count().max(1),
+			run_count: layout.runs.len(),
+			glyph_count: layout.glyph_count,
+			cluster_count: layout.cluster_count,
+			font_count: layout.font_count,
+			warning_count: layout.warnings.len(),
+			scene_width: layout.measured_width,
+			scene_height: layout.measured_height,
+			layout_width: layout.max_width,
 		},
 		hot_paths,
 		recent_activity,
@@ -322,17 +322,15 @@ mod tests {
 		crate::{
 			editor::EditorMode,
 			perf::{CanvasPerfSink, store::PerfStore},
-			scene::{LayoutScene, LayoutSceneTestSpec},
+			scene::{DocumentLayout, DocumentLayoutTestSpec},
 		},
 		std::{sync::Arc, time::Duration},
 	};
 
-	fn scene() -> LayoutScene {
-		LayoutScene::new_for_test(LayoutSceneTestSpec {
+	fn scene() -> DocumentLayout {
+		DocumentLayout::new_for_test(DocumentLayoutTestSpec {
 			text: Arc::<str>::from("abc\ndef"),
 			wrapping: crate::types::WrapChoice::Word,
-			font_size: 16.0,
-			line_height: 20.0,
 			max_width: 300.0,
 			measured_width: 280.0,
 			measured_height: 120.0,

@@ -2,7 +2,6 @@ mod document;
 mod editing;
 mod geometry;
 mod history;
-mod layout;
 mod layout_state;
 mod navigation;
 mod reducer;
@@ -18,14 +17,13 @@ use {
 		document::DocumentState,
 		geometry::{cluster_rectangle, insert_selection_range, normal_selection_geometry, selection_rectangles},
 		history::{EditorSnapshot, HistoryEntry},
-		layout::BufferClusterInfo,
 		layout_state::EditorLayout,
 		reducer::apply_intent,
 		session::EditorSession,
 	},
 	crate::{
 		overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
-		scene::SceneConfig,
+		scene::{DocumentLayout, LayoutCluster, SceneConfig},
 		telemetry::duration_ms,
 		types::WrapChoice,
 	},
@@ -39,8 +37,6 @@ use {
 	},
 	tracing::{debug, trace, trace_span, warn},
 };
-
-pub(crate) use self::layout::BufferLayoutSnapshot;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum EditorMode {
@@ -166,7 +162,7 @@ pub(crate) struct EditorOutcome {
 #[derive(Debug, Clone, Default)]
 struct ApplyResult {
 	text_edit: Option<TextEdit>,
-	layout: Option<BufferLayoutSnapshot>,
+	layout: Option<DocumentLayout>,
 	view_refreshed: bool,
 }
 
@@ -269,10 +265,6 @@ impl EditorEngine {
 		self.layout_model.layout.buffer()
 	}
 
-	pub(crate) fn scene_config(&self) -> SceneConfig {
-		self.layout_model.layout.config()
-	}
-
 	pub(crate) fn history_depths(&self) -> (usize, usize) {
 		self.state.document.history_depths()
 	}
@@ -312,8 +304,11 @@ impl EditorEngine {
 		self.layout_model.layout.view_state()
 	}
 
-	pub(crate) fn with_cached_layout_snapshot<T>(&self, f: impl FnOnce(Option<&BufferLayoutSnapshot>) -> T) -> T {
-		self.layout_model.layout.cached_snapshot(f)
+	pub(crate) fn shared_document_layout(&self) -> Arc<DocumentLayout> {
+		self.layout_model
+			.layout
+			.cached_document_layout_arc()
+			.unwrap_or_else(|| Arc::new(self.document_layout()))
 	}
 
 	pub(crate) fn viewport_metrics(&self) -> EditorViewportMetrics {
@@ -382,31 +377,31 @@ impl EditorEngine {
 		self.layout_model.layout.buffer_text()
 	}
 
-	fn layout_snapshot(&self) -> BufferLayoutSnapshot {
+	fn document_layout(&self) -> DocumentLayout {
 		let started = Instant::now();
-		let snapshot = self.layout_model.layout.snapshot(self.text());
+		let document_layout = self.layout_model.layout.document_layout(self.text());
 		let elapsed_ms = duration_ms(started.elapsed());
 		if elapsed_ms >= 8.0 {
 			debug!(
 				duration_ms = elapsed_ms,
-				clusters = snapshot.clusters().len(),
+				clusters = document_layout.clusters.len(),
 				text_bytes = self.text().len(),
-				"layout snapshot"
+				"document layout"
 			);
 		} else {
 			trace!(
 				duration_ms = elapsed_ms,
-				clusters = snapshot.clusters().len(),
+				clusters = document_layout.clusters.len(),
 				text_bytes = self.text().len(),
-				"layout snapshot"
+				"document layout"
 			);
 		}
-		snapshot
+		document_layout
 	}
 
 	fn reset_normal_selection(&mut self) {
 		if let Some(selection) = self
-			.layout_snapshot()
+			.document_layout()
 			.cluster(0)
 			.map(|cluster| cluster.byte_range.clone())
 		{
@@ -420,7 +415,7 @@ impl EditorEngine {
 		}
 	}
 
-	fn select_cluster(&mut self, layout: &BufferLayoutSnapshot, cluster_index: usize) {
+	fn select_cluster(&mut self, layout: &DocumentLayout, cluster_index: usize) {
 		let Some(cluster) = layout.cluster(cluster_index) else {
 			return;
 		};
@@ -432,7 +427,7 @@ impl EditorEngine {
 		);
 	}
 
-	fn active_selection_index(&self, layout: &BufferLayoutSnapshot) -> Option<usize> {
+	fn active_selection_index(&self, layout: &DocumentLayout) -> Option<usize> {
 		self.selection()?;
 
 		layout
@@ -440,7 +435,7 @@ impl EditorEngine {
 			.or_else(|| layout.cluster_before(self.caret().saturating_add(1)))
 	}
 
-	fn active_selection<'a>(&self, layout: &'a BufferLayoutSnapshot) -> Option<&'a BufferClusterInfo> {
+	fn active_selection<'a>(&self, layout: &'a DocumentLayout) -> Option<&'a LayoutCluster> {
 		self.active_selection_index(layout)
 			.and_then(|index| layout.cluster(index))
 	}
@@ -467,7 +462,7 @@ impl EditorEngine {
 		});
 	}
 
-	fn active_viewport_target(&self, layout: &BufferLayoutSnapshot) -> Option<LayoutRect> {
+	fn active_viewport_target(&self, layout: &DocumentLayout) -> Option<LayoutRect> {
 		if matches!(self.mode(), EditorMode::Insert) {
 			return self.layout_model.layout.insert_cursor_block(self.text(), self.caret());
 		}
@@ -475,9 +470,9 @@ impl EditorEngine {
 		self.active_selection(layout).map(cluster_rectangle)
 	}
 
-	fn refresh_view_state(&mut self, layout: Option<BufferLayoutSnapshot>) {
+	fn refresh_view_state(&mut self, layout: Option<DocumentLayout>) {
 		let started = Instant::now();
-		let layout = Arc::new(layout.unwrap_or_else(|| self.layout_snapshot()));
+		let layout = Arc::new(layout.unwrap_or_else(|| self.document_layout()));
 		let layout_ref = layout.as_ref();
 		let layout_elapsed = started.elapsed();
 		let selection = self.selection().cloned();
@@ -500,7 +495,7 @@ impl EditorEngine {
 			overlays,
 			viewport_target,
 		});
-		self.layout_model.layout.set_snapshot(layout);
+		self.layout_model.layout.set_document_layout(layout);
 		let total_ms = duration_ms(started.elapsed());
 		if total_ms >= 8.0 {
 			debug!(
@@ -529,7 +524,7 @@ impl EditorEngine {
 	}
 
 	fn build_overlays(
-		&self, layout: &BufferLayoutSnapshot, selection: Option<&EditorSelection>, insert_cursor: Option<LayoutRect>,
+		&self, layout: &DocumentLayout, selection: Option<&EditorSelection>, insert_cursor: Option<LayoutRect>,
 		viewport_target: Option<LayoutRect>, tone: EditorOverlayTone,
 	) -> Arc<[OverlayPrimitive]> {
 		let mut overlays = Vec::new();
@@ -619,11 +614,11 @@ impl EditorEngine {
 	}
 
 	fn enter_insert_at(&mut self, caret: usize) {
-		let layout = self.layout_snapshot();
+		let layout = self.document_layout();
 		self.enter_insert_with_layout(&layout, caret);
 	}
 
-	fn enter_insert_with_layout(&mut self, layout: &BufferLayoutSnapshot, caret: usize) {
+	fn enter_insert_with_layout(&mut self, layout: &DocumentLayout, caret: usize) {
 		self.set_insert_head(layout, caret);
 	}
 
@@ -661,14 +656,14 @@ impl EditorEngine {
 		}
 	}
 
-	fn insert_selection(layout: &BufferLayoutSnapshot, head: usize) -> Option<EditorSelection> {
+	fn insert_selection(layout: &DocumentLayout, head: usize) -> Option<EditorSelection> {
 		layout
 			.cluster_at_insert_head(head)
 			.and_then(|index| layout.cluster(index))
 			.map(|cluster| EditorSelection::new(cluster.byte_range.clone(), head))
 	}
 
-	fn set_insert_head(&mut self, layout: &BufferLayoutSnapshot, head: usize) {
+	fn set_insert_head(&mut self, layout: &DocumentLayout, head: usize) {
 		self.state.session.enter_insert(Self::insert_selection(layout, head));
 	}
 

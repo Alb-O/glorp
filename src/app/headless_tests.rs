@@ -148,7 +148,7 @@ fn resize_reflow_script_scenario_changes_layout_width_and_revisions() {
 	let _ = playground.run_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
 
 	assert!(playground.viewport.scene_revision > revision_before);
-	assert_approx_eq(playground.session.scene().max_width, playground.viewport.layout_width);
+	assert_approx_eq(playground.session.layout().max_width, playground.viewport.layout_width);
 }
 
 #[test]
@@ -162,7 +162,7 @@ fn perf_incremental_typing_step_mutates_editor_state() {
 
 	assert_eq!(playground.session.text().len(), before + 1);
 	assert_eq!(playground.session.history_depths().0, history_before + 1);
-	assert_eq!(playground.session.scene().text.as_ref(), playground.session.text());
+	assert_eq!(playground.session.layout().text.as_ref(), playground.session.text());
 }
 
 #[test]

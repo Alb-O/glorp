@@ -3,6 +3,7 @@ use {
 		ApplyResult, EditorEditIntent, EditorEngine, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion,
 		EditorPointerIntent,
 	},
+	crate::scene::DocumentLayout,
 	cosmic_text::FontSystem,
 };
 
@@ -64,7 +65,7 @@ fn apply_history_intent(
 }
 
 fn apply_pointer_press(editor: &mut EditorEngine, position: iced::Point, select_word: bool) -> ApplyResult {
-	let layout = editor.layout_snapshot();
+	let layout = editor.document_layout();
 	if select_word {
 		editor.select_word_at(&layout, position);
 		return layout_result(layout);
@@ -82,7 +83,7 @@ fn apply_pointer_press(editor: &mut EditorEngine, position: iced::Point, select_
 }
 
 fn apply_pointer_drag(editor: &mut EditorEngine, position: iced::Point) -> ApplyResult {
-	let layout = editor.layout_snapshot();
+	let layout = editor.document_layout();
 	editor.extend_pointer_selection(&layout, position);
 	layout_result(layout)
 }
@@ -92,16 +93,14 @@ fn apply_pointer_release(editor: &mut EditorEngine) -> ApplyResult {
 	ApplyResult::default()
 }
 
-fn apply_motion(
-	editor: &mut EditorEngine, motion: impl FnOnce(&mut EditorEngine, &super::BufferLayoutSnapshot),
-) -> ApplyResult {
-	let layout = editor.layout_snapshot();
+fn apply_motion(editor: &mut EditorEngine, motion: impl FnOnce(&mut EditorEngine, &DocumentLayout)) -> ApplyResult {
+	let layout = editor.document_layout();
 	motion(editor, &layout);
 	layout_result(layout)
 }
 
 fn apply_enter_insert(editor: &mut EditorEngine, before: bool) -> ApplyResult {
-	let layout = editor.layout_snapshot();
+	let layout = editor.document_layout();
 	let default_caret = if before { 0 } else { editor.state.document.len() };
 	let caret = editor.selection().map_or(default_caret, |selection| {
 		let range = selection.range();
@@ -111,7 +110,7 @@ fn apply_enter_insert(editor: &mut EditorEngine, before: bool) -> ApplyResult {
 	layout_result(layout)
 }
 
-fn layout_result(layout: super::BufferLayoutSnapshot) -> ApplyResult {
+fn layout_result(layout: DocumentLayout) -> ApplyResult {
 	ApplyResult {
 		text_edit: None,
 		layout: Some(layout),

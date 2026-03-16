@@ -95,8 +95,8 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 		let scene_bounds = Rectangle::new(
 			Point::ORIGIN,
 			Size::new(
-				scene_content_width(&self.presentation.scene, self.layout_width),
-				self.presentation.scene.measured_height.max(1.0),
+				scene_content_width(self.presentation.layout.as_ref(), self.layout_width),
+				self.presentation.layout.measured_height.max(1.0),
 			),
 		);
 		let scene_size_key = (
@@ -148,7 +148,7 @@ impl From<StaticSceneLayer> for Element<'_, Message> {
 
 fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 	if layer.show_baselines {
-		for run in layer.presentation.scene.runs.iter() {
+		for run in layer.presentation.layout.runs.iter() {
 			let top_line = canvas::Path::line(
 				Point::new(0.0, run.line_top),
 				Point::new(layer.layout_width, run.line_top),
@@ -173,24 +173,22 @@ fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 		}
 	}
 
-	if let Some(inspect_runs) = layer.show_hitboxes.then(|| layer.presentation.scene.inspect_runs()) {
-		for run in inspect_runs {
-			for glyph in &run.glyphs {
-				frame.stroke_rectangle(
-					Point::new(glyph.x, glyph.y),
-					Size::new(glyph.width.max(0.5), glyph.height.max(0.5)),
-					canvas::Stroke::default()
-						.with_width(1.0)
-						.with_color(iced::Color::from_rgba(1.0, 0.3, 0.3, 0.6)),
-				);
-			}
+	if layer.show_hitboxes {
+		for cluster in layer.presentation.layout.clusters.iter() {
+			frame.stroke_rectangle(
+				Point::new(cluster.x, cluster.y),
+				Size::new(cluster.width.max(0.5), cluster.height.max(0.5)),
+				canvas::Stroke::default()
+					.with_width(1.0)
+					.with_color(iced::Color::from_rgba(1.0, 0.3, 0.3, 0.6)),
+			);
 		}
 	}
 }
 
-fn scene_content_width(scene: &crate::scene::LayoutScene, layout_width: f32) -> f32 {
-	if matches!(scene.wrapping, WrapChoice::None) {
-		scene.measured_width.max(layout_width).max(1.0)
+fn scene_content_width(layout: &crate::scene::DocumentLayout, layout_width: f32) -> f32 {
+	if matches!(layout.wrapping, WrapChoice::None) {
+		layout.measured_width.max(layout_width).max(1.0)
 	} else {
 		layout_width.max(1.0)
 	}

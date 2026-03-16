@@ -12,7 +12,7 @@ impl EditorEngine {
 
 		self.apply_document_edit(font_system, &entry.inverse);
 		self.restore_snapshot(&entry.before);
-		let next_layout = self.layout_snapshot();
+		let next_layout = self.document_layout();
 
 		ApplyResult {
 			text_edit: Some(entry.inverse),
@@ -28,7 +28,7 @@ impl EditorEngine {
 
 		self.apply_document_edit(font_system, &entry.forward);
 		self.restore_snapshot(&entry.after);
-		let next_layout = self.layout_snapshot();
+		let next_layout = self.document_layout();
 
 		ApplyResult {
 			text_edit: Some(entry.forward),
@@ -50,7 +50,7 @@ impl EditorEngine {
 		let inverse = self.apply_document_edit(font_system, &text_edit);
 		self.set_mode(EditorMode::Normal);
 		self.clear_pointer_anchor();
-		let next_layout = self.layout_snapshot();
+		let next_layout = self.document_layout();
 		self.set_selection(
 			next_layout
 				.cluster_at_or_after(selection.start)
@@ -148,7 +148,7 @@ impl EditorEngine {
 		structural: bool,
 	) -> ApplyResult {
 		let (layout, view_refreshed) = if structural {
-			let next_layout = self.layout_snapshot();
+			let next_layout = self.document_layout();
 			self.set_insert_head(&next_layout, next_head);
 			(Some(next_layout), false)
 		} else {

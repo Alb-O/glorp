@@ -8,19 +8,21 @@ mod tests;
 mod text;
 
 use {
-	self::inspect::SceneInspectCache,
 	crate::types::{FontChoice, ShapingChoice, WrapChoice},
 	iced::Font,
 	std::sync::Arc,
 };
 
 #[cfg(test)]
-pub(crate) use self::build::LayoutSceneTestSpec;
+pub(crate) use self::build::DocumentLayoutTestSpec;
 pub(crate) use self::{
-	data::{ClusterInfo, GlyphInfo, InspectRunInfo, RunInfo},
+	build::resolve_font_names_from_buffer,
+	data::{LayoutCaretMetrics, LayoutCluster, LayoutRun},
 	font::{build_buffer, make_font_system, scene_config},
 	text::{debug_snippet, line_byte_offsets},
 };
+
+pub(crate) type FontNameMap = Arc<[(cosmic_text::fontdb::ID, Arc<str>)]>;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct SceneConfig {
@@ -39,7 +41,7 @@ impl SceneConfig {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct LayoutScene {
+pub(crate) struct DocumentLayout {
 	pub(crate) text: Arc<str>,
 	pub(crate) wrapping: WrapChoice,
 	pub(crate) max_width: f32,
@@ -48,7 +50,9 @@ pub(crate) struct LayoutScene {
 	pub(crate) glyph_count: usize,
 	pub(crate) cluster_count: usize,
 	pub(crate) font_count: usize,
-	pub(crate) runs: Arc<[RunInfo]>,
+	pub(crate) runs: Arc<[LayoutRun]>,
+	pub(crate) clusters: Arc<[LayoutCluster]>,
+	pub(crate) line_byte_offsets: Arc<[usize]>,
+	byte_order: Arc<[usize]>,
 	pub(crate) warnings: Arc<[String]>,
-	inspect: Arc<SceneInspectCache>,
 }

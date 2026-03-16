@@ -103,7 +103,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 			self.height,
 			Size::new(
 				self.layout_width.max(1.0),
-				self.presentation.scene.measured_height.max(1.0),
+				self.presentation.layout.measured_height.max(1.0),
 			),
 		))
 	}
@@ -141,7 +141,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 					x: 0.0,
 					y: 0.0,
 					width: self.layout_width.max(1.0),
-					height: self.presentation.scene.measured_height.max(1.0),
+					height: self.presentation.layout.measured_height.max(1.0),
 				},
 				OverlayRectKind::EditorFocusFrame(EditorOverlayTone::from(self.presentation.editor.mode)),
 				OverlaySpace::Scene,
@@ -150,12 +150,12 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 
 		let scene_footer = format!(
 			"runs={} glyphs={} clusters={} fonts={} width={:.1} height={:.1}",
-			self.presentation.scene.runs.len(),
-			self.presentation.scene.glyph_count,
-			self.presentation.scene.cluster_count,
-			self.presentation.scene.font_count,
-			self.presentation.scene.measured_width,
-			self.presentation.scene.measured_height,
+			self.presentation.layout.runs.len(),
+			self.presentation.layout.glyph_count,
+			self.presentation.layout.cluster_count,
+			self.presentation.layout.font_count,
+			self.presentation.layout.measured_width,
+			self.presentation.layout.measured_height,
 		);
 		draw_label_primitive(
 			renderer,

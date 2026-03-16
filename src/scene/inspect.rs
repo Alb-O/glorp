@@ -1,63 +1,30 @@
 use {
-	super::{ClusterInfo, GlyphInfo, InspectRunInfo, LayoutScene, debug_snippet},
+	super::{DocumentLayout, LayoutCluster, debug_snippet},
 	crate::{
 		overlay::{LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
 		types::CanvasTarget,
 	},
-	cosmic_text::{Buffer, fontdb},
-	std::{
-		ops::Range,
-		sync::{Arc, OnceLock},
-	},
+	std::{ops::Range, sync::Arc},
 };
 
-type InspectGlyphDetails = Arc<[Arc<[Arc<str>]>]>;
-
-#[derive(Debug)]
-pub(super) struct SceneInspectCache {
-	pub(super) buffer: Arc<Buffer>,
-	pub(super) line_byte_offsets: Arc<[usize]>,
-	pub(super) font_names: Arc<[(fontdb::ID, Arc<str>)]>,
-	pub(super) clusters: OnceLock<Arc<[ClusterInfo]>>,
-	pub(super) runs: OnceLock<Arc<[InspectRunInfo]>>,
-	pub(super) run_details: OnceLock<Arc<[Arc<str>]>>,
-	pub(super) glyph_details: OnceLock<InspectGlyphDetails>,
-}
-
-impl LayoutScene {
-	pub(crate) fn inspect_runs(&self) -> &[InspectRunInfo] {
-		self.inspect
-			.runs
-			.get_or_init(|| build_inspect_runs(&self.inspect))
-			.as_ref()
-	}
-
-	pub(crate) fn glyph(&self, run_index: usize, glyph_index: usize) -> Option<&GlyphInfo> {
-		self.inspect_runs().get(run_index)?.glyphs.get(glyph_index)
-	}
-
+impl DocumentLayout {
 	pub(crate) fn target_details(&self, target: Option<CanvasTarget>) -> Option<Arc<str>> {
 		match target? {
-			CanvasTarget::Run(run_index) => self
-				.inspect
-				.run_details
-				.get_or_init(|| build_run_details(&self.runs))
-				.get(run_index)
-				.cloned(),
-			CanvasTarget::Glyph { run_index, glyph_index } => self
-				.inspect
-				.glyph_details
-				.get_or_init(|| build_glyph_details(self))
-				.get(run_index)
-				.and_then(|run| run.get(glyph_index))
-				.cloned(),
+			CanvasTarget::Run(run_index) => self.runs.get(run_index).map(|run| {
+				Arc::<str>::from(format!(
+					"  kind: run\n  run index: {run_index}\n  source line: {}\n  rtl: {}\n  top: {:.1}\n  baseline: {:.1}\n  height: {:.1}\n  width: {:.1}\n  glyphs: {}\n  clusters: {}",
+					run.line_index,
+					run.rtl,
+					run.line_top,
+					run.baseline,
+					run.line_height,
+					run.line_width,
+					run.glyph_count,
+					run.cluster_range.len(),
+				))
+			}),
+			CanvasTarget::Cluster(index) => self.cluster(index).map(|cluster| cluster_details(self, index, cluster)),
 		}
-	}
-
-	fn debug_snippet(&self, range: &Range<usize>) -> String {
-		self.text
-			.get(range.start..range.end)
-			.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
 	}
 
 	pub(crate) fn inspect_overlay_primitives(
@@ -102,8 +69,8 @@ impl LayoutScene {
 					OverlayLayer::OverText,
 				));
 			}
-			CanvasTarget::Glyph { .. } => {
-				let Some(rect) = self.target_rect(target) else {
+			CanvasTarget::Cluster(index) => {
+				let Some(rect) = self.target_rect(CanvasTarget::Cluster(index)) else {
 					return;
 				};
 				overlays.push(OverlayPrimitive::scene_rect(
@@ -130,119 +97,27 @@ impl LayoutScene {
 			}
 		}
 	}
+}
 
-	fn target_rect(&self, target: CanvasTarget) -> Option<LayoutRect> {
-		match target {
-			CanvasTarget::Run(run_index) => {
-				let run = self.runs.get(run_index)?;
-				Some(LayoutRect {
-					x: 0.0,
-					y: run.line_top,
-					width: self.max_width.max(run.line_width).max(1.0),
-					height: run.line_height.max(1.0),
-				})
-			}
-			CanvasTarget::Glyph { run_index, glyph_index } => self
-				.glyph(run_index, glyph_index)
-				.map(|glyph| LayoutRect {
-					x: glyph.x,
-					y: glyph.y,
-					width: glyph.width.max(1.0),
-					height: glyph.height.max(1.0),
-				})
-				.or_else(|| {
-					self.cluster_index_for_target(target)
-						.and_then(|index| self.cluster(index))
-						.map(|cluster| LayoutRect {
-							x: cluster.x,
-							y: cluster.y,
-							width: cluster.width.max(1.0),
-							height: cluster.height.max(1.0),
-						})
-				}),
-		}
+fn cluster_details(layout: &DocumentLayout, index: usize, cluster: &LayoutCluster) -> Arc<str> {
+	Arc::<str>::from(format!(
+		"  kind: cluster\n  cluster index: {index}\n  run index: {}\n  bytes: {:?}\n  text: {}\n  glyphs: {}\n  font: {}\n  x/y: {:.1}, {:.1}\n  w/h: {:.1}, {:.1}",
+		cluster.run_index,
+		cluster.byte_range,
+		layout.debug_snippet(&cluster.byte_range),
+		cluster.glyph_count,
+		cluster.font_summary,
+		cluster.x,
+		cluster.y,
+		cluster.width,
+		cluster.height,
+	))
+}
+
+impl DocumentLayout {
+	fn debug_snippet(&self, range: &Range<usize>) -> String {
+		self.text
+			.get(range.start..range.end)
+			.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
 	}
-}
-
-fn build_run_details(runs: &[super::RunInfo]) -> Arc<[Arc<str>]> {
-	runs.iter()
-		.enumerate()
-		.map(|(run_index, run)| {
-			Arc::<str>::from(format!(
-				"  kind: run\n  run index: {run_index}\n  source line: {}\n  rtl: {}\n  top: {:.1}\n  baseline: {:.1}\n  height: {:.1}\n  width: {:.1}\n  glyphs: {}",
-				run.line_index,
-				run.rtl,
-				run.line_top,
-				run.baseline,
-				run.line_height,
-				run.line_width,
-				run.glyph_count,
-			))
-		})
-		.collect()
-}
-
-fn build_glyph_details(scene: &LayoutScene) -> InspectGlyphDetails {
-	scene
-		.inspect_runs()
-		.iter()
-		.enumerate()
-		.map(|(run_index, run)| {
-			run.glyphs
-				.iter()
-				.enumerate()
-				.map(|(glyph_index, glyph)| {
-					Arc::<str>::from(format!(
-						"  kind: glyph\n  run index: {run_index}\n  glyph index: {glyph_index}\n  source line: {}\n  cluster: {}\n  bytes: {:?}\n  font: {}\n  glyph id: {}\n  x/y: {:.1}, {:.1}\n  w/h: {:.1}, {:.1}\n  size: {:.1}\n  x/y offset: {:.3}, {:.3}",
-						run.line_index,
-						scene.debug_snippet(&glyph.cluster_range),
-						glyph.cluster_range,
-						glyph.font_name,
-						glyph.glyph_id,
-						glyph.x,
-						glyph.y,
-						glyph.width,
-						glyph.height,
-						glyph.font_size,
-						glyph.x_offset,
-						glyph.y_offset,
-					))
-				})
-				.collect::<Arc<[Arc<str>]>>()
-		})
-		.collect()
-}
-
-pub(super) fn build_inspect_runs(inspect: &SceneInspectCache) -> Arc<[InspectRunInfo]> {
-	inspect
-		.buffer
-		.layout_runs()
-		.map(|run| {
-			let line_byte_offset = inspect.line_byte_offsets[run.line_i];
-			InspectRunInfo {
-				line_index: run.line_i,
-				glyphs: run
-					.glyphs
-					.iter()
-					.map(|glyph| {
-						GlyphInfo::from_layout_glyph(
-							glyph,
-							line_byte_offset,
-							run.line_top,
-							run.line_height,
-							lookup_font_name(&inspect.font_names, glyph.font_id),
-						)
-					})
-					.collect(),
-			}
-		})
-		.collect()
-}
-
-fn lookup_font_name(font_names: &[(fontdb::ID, Arc<str>)], font_id: fontdb::ID) -> Arc<str> {
-	font_names
-		.binary_search_by_key(&font_id, |(id, _)| *id)
-		.ok()
-		.and_then(|index| font_names.get(index))
-		.map_or_else(|| Arc::<str>::from("unknown-font"), |(_, name)| name.clone())
 }

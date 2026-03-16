@@ -5,7 +5,7 @@ use {
 	},
 	crate::{
 		overlay::{EditorOverlayTone, LayoutRect, OverlayRectKind},
-		scene::{LayoutScene, make_font_system, scene_config},
+		scene::{DocumentLayout, make_font_system, scene_config},
 		types::{FontChoice, ShapingChoice, WrapChoice},
 	},
 	iced::Point,
@@ -184,16 +184,6 @@ fn reset_rebuilds_document_session_and_layout_together() {
 fn delete_selection_on_later_line_handles_multibyte_text() {
 	let text = "🙂\né";
 	let mut font_system = make_font_system();
-	let scene = LayoutScene::build(
-		&mut font_system,
-		text,
-		FontChoice::SansSerif,
-		ShapingChoice::Advanced,
-		WrapChoice::None,
-		24.0,
-		32.0,
-		400.0,
-	);
 	let config = scene_config(
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
@@ -202,6 +192,7 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 		32.0,
 		400.0,
 	);
+	let layout = DocumentLayout::build_for_test(&mut font_system, text, config);
 	let mut editor = EditorEngine::new(&mut font_system, text, config);
 
 	assert_eq!(
@@ -209,7 +200,7 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 			.view_state()
 			.selection
 			.as_ref()
-			.and_then(|selection| scene.text.get(selection.clone())),
+			.and_then(|selection| layout.text.get(selection.clone())),
 		Some("🙂")
 	);
 
@@ -219,7 +210,7 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 			.view_state()
 			.selection
 			.as_ref()
-			.and_then(|selection| scene.text.get(selection.clone())),
+			.and_then(|selection| layout.text.get(selection.clone())),
 		Some("é")
 	);
 
@@ -335,7 +326,7 @@ fn insert_mode_caret_moves_to_the_trailing_edge_at_line_end() {
 	let block = view
 		.viewport_target
 		.expect("line-end insert mode should expose a caret block");
-	let layout = editor.layout_snapshot();
+	let layout = editor.document_layout();
 	let active = layout
 		.cluster(
 			layout
@@ -362,7 +353,7 @@ fn insert_mode_caret_stays_on_the_previous_row_before_a_newline() {
 	let active = view
 		.viewport_target
 		.expect("newline-boundary insert mode should expose a caret target");
-	let layout = editor.layout_snapshot();
+	let layout = editor.document_layout();
 	let previous = layout
 		.cluster(
 			layout
@@ -503,7 +494,7 @@ fn rtl_cluster_byte_lookup_matches_visual_cluster() {
 	let (mut font_system, mut editor) = editor(text);
 	editor.sync_buffer_width(&mut font_system, 150.0);
 
-	let layout = editor.layout_snapshot();
+	let layout = editor.document_layout();
 	let rtl_indices = layout
 		.clusters()
 		.iter()
@@ -534,7 +525,7 @@ fn rtl_selection_rectangles_keep_positive_width() {
 	let (mut font_system, mut editor) = editor(text);
 	editor.sync_buffer_width(&mut font_system, 150.0);
 
-	let layout = editor.layout_snapshot();
+	let layout = editor.document_layout();
 	let rtl_span = layout
 		.clusters()
 		.windows(2)

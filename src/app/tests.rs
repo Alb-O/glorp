@@ -19,7 +19,7 @@ fn metric_samples(playground: &Playground, label: &str) -> u64 {
 	playground
 		.perf
 		.dashboard(
-			playground.session.scene(),
+			playground.session.layout(),
 			playground.session.mode(),
 			playground.session.text().len(),
 		)
@@ -122,7 +122,7 @@ fn controls_tab_keeps_presentation_in_sync_after_text_edits() {
 
 	assert!(playground.viewport.scene_revision > revision_before);
 	assert!(playground.session.text().contains('!'));
-	assert_eq!(playground.session.scene().text.as_ref(), playground.session.text());
+	assert_eq!(playground.session.layout().text.as_ref(), playground.session.text());
 }
 
 #[test]
@@ -136,7 +136,7 @@ fn resize_reflow_updates_scene_immediately() {
 	)));
 
 	assert!(playground.viewport.scene_revision > revision_before);
-	assert_approx_eq(playground.session.scene().max_width, playground.viewport.layout_width);
+	assert_approx_eq(playground.session.layout().max_width, playground.viewport.layout_width);
 }
 
 #[test]
@@ -252,5 +252,5 @@ fn repeated_no_op_inputs_do_not_churn_scene_state() {
 	))));
 
 	assert!(playground.viewport.scene_revision > revision_before);
-	assert_eq!(playground.session.scene().text.as_ref(), playground.session.text());
+	assert_eq!(playground.session.layout().text.as_ref(), playground.session.text());
 }

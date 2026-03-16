@@ -88,7 +88,7 @@ impl Display for SidebarTab {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum CanvasTarget {
 	Run(usize),
-	Glyph { run_index: usize, glyph_index: usize },
+	Cluster(usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,76 +1,66 @@
 use {
-	super::{ClusterInfo, LayoutScene},
-	crate::types::CanvasTarget,
-	cosmic_text::{Buffer, LayoutGlyph},
+	super::{DocumentLayout, LayoutCaretMetrics, LayoutCluster, LayoutRun},
+	crate::{overlay::LayoutRect, types::CanvasTarget},
+	cosmic_text::Cursor,
 	iced::Point,
-	std::sync::Arc,
 };
 
-impl LayoutScene {
-	pub(crate) fn hit_test(&self, local: Point) -> Option<CanvasTarget> {
-		if let Some(runs) = self.inspect.runs.get() {
-			for (run_index, run) in runs.iter().enumerate() {
-				for (glyph_index, glyph) in run.glyphs.iter().enumerate() {
-					if contains_point(local, glyph.x, glyph.y, glyph.width.max(1.0), glyph.height.max(1.0)) {
-						return Some(CanvasTarget::Glyph { run_index, glyph_index });
-					}
-				}
-			}
+impl DocumentLayout {
+	pub(crate) fn clusters(&self) -> &[LayoutCluster] {
+		&self.clusters
+	}
+
+	pub(crate) fn cluster(&self, index: usize) -> Option<&LayoutCluster> {
+		self.clusters.get(index)
+	}
+
+	pub(crate) fn cluster_at_or_after(&self, byte: usize) -> Option<usize> {
+		let index = self
+			.byte_order
+			.partition_point(|cluster_index| self.clusters[*cluster_index].byte_range.end <= byte);
+		self.byte_order.get(index).copied()
+	}
+
+	pub(crate) fn cluster_before(&self, byte: usize) -> Option<usize> {
+		self.byte_order
+			.partition_point(|cluster_index| self.clusters[*cluster_index].byte_range.start < byte)
+			.checked_sub(1)
+			.and_then(|index| self.byte_order.get(index))
+			.copied()
+	}
+
+	pub(crate) fn cluster_index_for_cursor(&self, cursor: Cursor) -> Option<usize> {
+		if self.clusters.is_empty() {
+			return None;
+		}
+
+		let line_offset = self.line_byte_offsets.get(cursor.line).copied().unwrap_or_default();
+		let byte = line_offset + cursor.index;
+
+		if cursor.affinity.before() {
+			self.clusters
+				.iter()
+				.enumerate()
+				.find(|(_, cluster)| cluster.byte_range.end == byte)
+				.map(|(index, _)| index)
+				.or_else(|| self.cluster_before(byte.saturating_add(1)))
 		} else {
-			for cluster in self.clusters() {
-				if contains_point(
-					local,
-					cluster.x,
-					cluster.y,
-					cluster.width.max(1.0),
-					cluster.height.max(1.0),
-				) {
-					return Some(CanvasTarget::Glyph {
-						run_index: cluster.run_index,
-						glyph_index: cluster.glyph_start,
-					});
-				}
-			}
+			self.cluster_at_or_after(byte)
+				.filter(|index| self.clusters[*index].byte_range.start <= byte)
+				.or_else(|| self.cluster_before(byte))
 		}
-
-		for (run_index, run) in self.runs.iter().enumerate() {
-			if contains_point(
-				local,
-				0.0,
-				run.line_top,
-				self.max_width.max(run.line_width).max(1.0),
-				run.line_height.max(1.0),
-			) {
-				return Some(CanvasTarget::Run(run_index));
-			}
-		}
-
-		None
 	}
 
-	pub(crate) fn clusters(&self) -> &[ClusterInfo] {
-		self.inspect
-			.clusters
-			.get_or_init(|| build_scene_clusters(&self.inspect.buffer, &self.inspect.line_byte_offsets))
-			.as_ref()
+	pub(crate) fn first_cluster_in_run(&self, run_index: usize) -> Option<usize> {
+		self.runs
+			.get(run_index)
+			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.start))
 	}
 
-	pub(crate) fn cluster(&self, index: usize) -> Option<&ClusterInfo> {
-		self.clusters().get(index)
-	}
-
-	pub(crate) fn cluster_index_for_target(&self, target: CanvasTarget) -> Option<usize> {
-		match target {
-			CanvasTarget::Run(run_index) => self.nearest_cluster_in_run(run_index, 0.0),
-			CanvasTarget::Glyph { run_index, glyph_index } => {
-				let run = self.runs.get(run_index)?;
-				self.clusters()[run.cluster_range.clone()]
-					.iter()
-					.enumerate()
-					.find(|(_, cluster)| glyph_index >= cluster.glyph_start && glyph_index < cluster.glyph_end)
-					.map(|(offset, _)| run.cluster_range.start + offset)
-			}
-		}
+	pub(crate) fn last_cluster_in_run(&self, run_index: usize) -> Option<usize> {
+		self.runs
+			.get(run_index)
+			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.end - 1))
 	}
 
 	pub(crate) fn nearest_cluster_in_run(&self, run_index: usize, preferred_x: f32) -> Option<usize> {
@@ -79,7 +69,7 @@ impl LayoutScene {
 			return None;
 		}
 
-		self.clusters()[run.cluster_range.clone()]
+		self.clusters[run.cluster_range.clone()]
 			.iter()
 			.enumerate()
 			.min_by(|(_, a), (_, b)| {
@@ -89,81 +79,152 @@ impl LayoutScene {
 			})
 			.map(|(offset, _)| run.cluster_range.start + offset)
 	}
-}
 
-pub(super) fn count_clusters(glyphs: &[LayoutGlyph]) -> usize {
-	let mut count = 0usize;
-	let mut current = None;
-
-	for glyph in glyphs {
-		let next = (glyph.start, glyph.end);
-		if current != Some(next) {
-			count += 1;
-			current = Some(next);
-		}
-	}
-
-	count
-}
-
-fn build_scene_clusters(buffer: &Buffer, line_byte_offsets: &[usize]) -> Arc<[ClusterInfo]> {
-	buffer
-		.layout_runs()
-		.enumerate()
-		.flat_map(|(run_index, run)| {
-			build_clusters(
-				run_index,
-				line_byte_offsets[run.line_i],
-				run.line_top,
-				run.line_height,
-				run.glyphs,
-			)
-		})
-		.collect()
-}
-
-pub(super) fn build_clusters(
-	run_index: usize, line_byte_offset: usize, line_top: f32, line_height: f32, glyphs: &[LayoutGlyph],
-) -> Vec<ClusterInfo> {
-	let mut clusters = Vec::with_capacity(glyphs.len());
-	let mut current: Option<ClusterInfo> = None;
-
-	for (glyph_index, glyph) in glyphs.iter().enumerate() {
-		let byte_range = (line_byte_offset + glyph.start)..(line_byte_offset + glyph.end);
-		let glyph_y = line_top + glyph.y;
-		let glyph_height = glyph.line_height_opt.unwrap_or(line_height);
-
-		match current.as_mut() {
-			Some(cluster) if cluster.byte_range == byte_range => {
-				cluster.width = (glyph.x + glyph.w - cluster.x).max(cluster.width);
-				cluster.height = cluster.height.max(glyph_height);
-				cluster.glyph_end = glyph_index + 1;
-				cluster.y = cluster.y.min(glyph_y);
-			}
-			_ => {
-				if let Some(cluster) = current.take() {
-					clusters.push(cluster);
+	pub(crate) fn nearest_cluster_on_adjacent_run(
+		&self, run_index: usize, preferred_x: f32, direction: isize,
+	) -> Option<usize> {
+		if direction < 0 {
+			for next_run in (0..run_index).rev() {
+				if let Some(target) = self.nearest_cluster_in_run(next_run, preferred_x) {
+					return Some(target);
 				}
-
-				current = Some(ClusterInfo {
-					run_index,
-					glyph_start: glyph_index,
-					glyph_end: glyph_index + 1,
-					byte_range,
-					x: glyph.x,
-					y: glyph_y,
-					width: glyph.w.max(1.0),
-					height: glyph_height.max(1.0),
-				});
+			}
+		} else {
+			for next_run in (run_index.saturating_add(1))..self.runs.len() {
+				if let Some(target) = self.nearest_cluster_in_run(next_run, preferred_x) {
+					return Some(target);
+				}
 			}
 		}
+
+		None
 	}
 
-	if let Some(cluster) = current {
-		clusters.push(cluster);
+	pub(crate) fn nearest_cluster_at(&self, y: f32, preferred_x: f32) -> Option<usize> {
+		let run_index = self
+			.runs
+			.iter()
+			.enumerate()
+			.min_by(|(_, a), (_, b)| {
+				run_distance(a, y)
+					.total_cmp(&run_distance(b, y))
+					.then_with(|| a.line_top.total_cmp(&b.line_top))
+			})
+			.map(|(index, _)| index)?;
+		self.nearest_cluster_in_run(run_index, preferred_x)
 	}
 
-	clusters
+	pub(crate) fn has_run_at_y(&self, y: f32) -> bool {
+		self.runs.iter().any(|run| {
+			let run_bottom = run.line_top + run.line_height;
+			y >= run.line_top && y <= run_bottom
+		})
+	}
+
+	pub(crate) fn ends_hard_line(&self, byte: usize) -> bool {
+		byte.checked_add(1)
+			.is_some_and(|next| self.line_byte_offsets[1..].binary_search(&next).is_ok())
+	}
+
+	pub(crate) fn cluster_at_insert_head(&self, byte: usize) -> Option<usize> {
+		// A caret parked on a hard newline should stay visually attached to the
+		// preceding cluster instead of jumping onto the next rendered row.
+		if self.ends_hard_line(byte) {
+			return self.cluster_before(byte.saturating_add(1));
+		}
+
+		self.cluster_at_or_after(byte).or_else(|| self.cluster_before(byte))
+	}
+
+	pub(crate) fn caret_metrics(&self, byte: usize) -> LayoutCaretMetrics {
+		if self.clusters.is_empty() {
+			return LayoutCaretMetrics { run_index: 0, x: 0.0 };
+		}
+
+		if let Some(index) = self.cluster_at_or_after(byte) {
+			let cluster = &self.clusters[index];
+			if byte <= cluster.byte_range.start {
+				return LayoutCaretMetrics {
+					run_index: cluster.run_index,
+					x: cluster.x,
+				};
+			}
+		}
+
+		if let Some(index) = self.cluster_before(byte) {
+			let cluster = &self.clusters[index];
+			return LayoutCaretMetrics {
+				run_index: cluster.run_index,
+				x: cluster.x + cluster.width,
+			};
+		}
+
+		LayoutCaretMetrics { run_index: 0, x: 0.0 }
+	}
+
+	pub(crate) fn hit_test(&self, local: Point) -> Option<CanvasTarget> {
+		// Cluster hit boxes win over run bands so inspect mode stays precise when
+		// both would match the same pointer position.
+		if let Some((index, _)) = self.clusters.iter().enumerate().find(|(_, cluster)| {
+			contains_point(
+				local,
+				cluster.x,
+				cluster.y,
+				cluster.width.max(1.0),
+				cluster.height.max(1.0),
+			)
+		}) {
+			return Some(CanvasTarget::Cluster(index));
+		}
+
+		self.runs.iter().enumerate().find_map(|(run_index, run)| {
+			contains_point(
+				local,
+				0.0,
+				run.line_top,
+				self.max_width.max(run.line_width).max(1.0),
+				run.line_height.max(1.0),
+			)
+			.then_some(CanvasTarget::Run(run_index))
+		})
+	}
+
+	pub(crate) fn target_rect(&self, target: CanvasTarget) -> Option<LayoutRect> {
+		match target {
+			CanvasTarget::Run(run_index) => {
+				let run = self.runs.get(run_index)?;
+				Some(LayoutRect {
+					x: 0.0,
+					y: run.line_top,
+					width: self.max_width.max(run.line_width).max(1.0),
+					height: run.line_height.max(1.0),
+				})
+			}
+			CanvasTarget::Cluster(index) => self.cluster(index).map(cluster_rectangle),
+		}
+	}
+}
+
+pub(crate) fn cluster_rectangle(cluster: &LayoutCluster) -> LayoutRect {
+	LayoutRect {
+		x: cluster.x,
+		y: cluster.y,
+		width: cluster.width.max(1.0),
+		height: cluster.height.max(1.0),
+	}
+}
+
+fn run_distance(run: &LayoutRun, y: f32) -> f32 {
+	let top = run.line_top;
+	let bottom = run.line_top + run.line_height;
+
+	if y < top {
+		top - y
+	} else if y > bottom {
+		y - bottom
+	} else {
+		0.0
+	}
 }
 
 fn contains_point(point: Point, x: f32, y: f32, width: f32, height: f32) -> bool {

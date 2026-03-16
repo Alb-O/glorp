@@ -1,9 +1,9 @@
 use {
-	super::{
-		layout::{BufferClusterInfo, BufferLayoutSnapshot},
-		text::byte_to_cursor,
+	super::text::byte_to_cursor,
+	crate::{
+		overlay::LayoutRect,
+		scene::{DocumentLayout, LayoutCluster, line_byte_offsets},
 	},
-	crate::{overlay::LayoutRect, scene::line_byte_offsets},
 	cosmic_text::Buffer,
 	std::{ops::Range, sync::Arc},
 };
@@ -16,7 +16,7 @@ struct InsertCursorGeometry {
 	block_width: f32,
 }
 
-pub(super) fn cluster_rectangle(cluster: &BufferClusterInfo) -> LayoutRect {
+pub(super) fn cluster_rectangle(cluster: &LayoutCluster) -> LayoutRect {
 	LayoutRect {
 		x: cluster.x,
 		y: cluster.y,
@@ -25,7 +25,7 @@ pub(super) fn cluster_rectangle(cluster: &BufferClusterInfo) -> LayoutRect {
 	}
 }
 
-pub(super) fn span_rectangle(start: &BufferClusterInfo, end: &BufferClusterInfo) -> LayoutRect {
+pub(super) fn span_rectangle(start: &LayoutCluster, end: &LayoutCluster) -> LayoutRect {
 	let left = start.x.min(end.x);
 	let right = (start.x + start.width).max(end.x + end.width);
 
@@ -93,7 +93,7 @@ pub(super) fn insert_selection_range(buffer: &Buffer, text: &str, byte: usize) -
 	previous_cluster
 }
 
-pub(super) fn selection_rectangles(layout: &BufferLayoutSnapshot, range: &Range<usize>) -> Arc<[LayoutRect]> {
+pub(super) fn selection_rectangles(layout: &DocumentLayout, range: &Range<usize>) -> Arc<[LayoutRect]> {
 	let mut rectangles = Vec::new();
 	let mut selected = layout
 		.clusters()

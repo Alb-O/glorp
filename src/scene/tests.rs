@@ -1,14 +1,13 @@
 use {
-	super::{LayoutScene, make_font_system, scene_config},
+	super::{DocumentLayout, make_font_system, scene_config},
 	crate::{
 		overlay::{OverlayLayer, OverlayRectKind},
 		types::{CanvasTarget, FontChoice, ShapingChoice, WrapChoice},
 	},
-	std::sync::Arc,
 };
 
 #[test]
-fn scene_build_is_stable_for_unicode_replace() {
+fn document_layout_build_is_stable_for_unicode_replace() {
 	let expected = "abX\n漢字\n最後".to_string();
 	let config = scene_config(
 		FontChoice::SansSerif,
@@ -19,26 +18,19 @@ fn scene_build_is_stable_for_unicode_replace() {
 		320.0,
 	);
 
-	let mut rebuilt_font_system = make_font_system();
-	let rebuilt = LayoutScene::build(
-		&mut rebuilt_font_system,
-		&expected,
-		config.font_choice,
-		config.shaping,
-		config.wrapping,
-		config.font_size,
-		config.line_height,
-		config.max_width,
-	);
+	let mut font_system = make_font_system();
+	let buffer = super::build_buffer(&mut font_system, &expected, config);
+	let font_names = super::resolve_font_names_from_buffer(&font_system, &buffer);
+	let layout = DocumentLayout::build(&expected, &buffer, config, font_names);
 
-	assert_eq!(rebuilt.text.as_ref(), expected);
-	assert!(rebuilt.glyph_count > 0);
-	assert!(rebuilt.measured_width > 0.0);
-	assert!(rebuilt.measured_height > 0.0);
+	assert_eq!(layout.text.as_ref(), expected);
+	assert!(layout.glyph_count > 0);
+	assert!(layout.measured_width > 0.0);
+	assert!(layout.measured_height > 0.0);
 }
 
 #[test]
-fn inspect_overlays_emit_run_and_glyph_primitives() {
+fn inspect_overlays_emit_run_and_cluster_primitives() {
 	let config = scene_config(
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
@@ -48,23 +40,13 @@ fn inspect_overlays_emit_run_and_glyph_primitives() {
 		320.0,
 	);
 	let mut font_system = make_font_system();
-	let scene = LayoutScene::build(
-		&mut font_system,
-		"alpha beta",
-		config.font_choice,
-		config.shaping,
-		config.wrapping,
-		config.font_size,
-		config.line_height,
-		config.max_width,
-	);
+	let buffer = super::build_buffer(&mut font_system, "alpha beta", config);
+	let font_names = super::resolve_font_names_from_buffer(&font_system, &buffer);
+	let layout = DocumentLayout::build("alpha beta", &buffer, config, font_names);
 
-	let overlays = scene.inspect_overlay_primitives(
+	let overlays = layout.inspect_overlay_primitives(
 		Some(CanvasTarget::Run(0)),
-		Some(CanvasTarget::Glyph {
-			run_index: 0,
-			glyph_index: 0,
-		}),
+		Some(CanvasTarget::Cluster(0)),
 		config.max_width,
 		true,
 	);
@@ -84,7 +66,7 @@ fn inspect_overlays_emit_run_and_glyph_primitives() {
 }
 
 #[test]
-fn inspect_overlays_fall_back_to_clusters_without_lazy_runs() {
+fn cluster_target_details_are_rebuilt_without_cache_layer() {
 	let config = scene_config(
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
@@ -94,73 +76,14 @@ fn inspect_overlays_fall_back_to_clusters_without_lazy_runs() {
 		320.0,
 	);
 	let mut font_system = make_font_system();
-	let scene = LayoutScene::build(
-		&mut font_system,
-		"alpha beta",
-		config.font_choice,
-		config.shaping,
-		config.wrapping,
-		config.font_size,
-		config.line_height,
-		config.max_width,
-	);
+	let buffer = super::build_buffer(&mut font_system, "alpha beta", config);
+	let font_names = super::resolve_font_names_from_buffer(&font_system, &buffer);
+	let layout = DocumentLayout::build("alpha beta", &buffer, config, font_names);
 
-	let overlays = scene.inspect_overlay_primitives(
-		None,
-		Some(CanvasTarget::Glyph {
-			run_index: 0,
-			glyph_index: 0,
-		}),
-		config.max_width,
-		false,
-	);
+	let details = layout
+		.target_details(Some(CanvasTarget::Cluster(0)))
+		.expect("cluster details should exist");
 
-	assert_eq!(overlays.len(), 1);
-	assert!(matches!(
-		(overlays[0].kind, overlays[0].layer),
-		(OverlayRectKind::InspectGlyphSelected, OverlayLayer::OverText)
-	));
-}
-
-#[test]
-fn target_details_reuse_cached_strings() {
-	let config = scene_config(
-		FontChoice::SansSerif,
-		ShapingChoice::Advanced,
-		WrapChoice::Word,
-		22.0,
-		30.0,
-		320.0,
-	);
-	let mut font_system = make_font_system();
-	let scene = LayoutScene::build(
-		&mut font_system,
-		"alpha beta",
-		config.font_choice,
-		config.shaping,
-		config.wrapping,
-		config.font_size,
-		config.line_height,
-		config.max_width,
-	);
-
-	let run_a = scene
-		.target_details(Some(CanvasTarget::Run(0)))
-		.expect("run details should exist");
-	let run_b = scene
-		.target_details(Some(CanvasTarget::Run(0)))
-		.expect("run details should stay cached");
-	assert!(Arc::ptr_eq(&run_a, &run_b));
-
-	let glyph_target = CanvasTarget::Glyph {
-		run_index: 0,
-		glyph_index: 0,
-	};
-	let glyph_a = scene
-		.target_details(Some(glyph_target))
-		.expect("glyph details should exist");
-	let glyph_b = scene
-		.target_details(Some(glyph_target))
-		.expect("glyph details should stay cached");
-	assert!(Arc::ptr_eq(&glyph_a, &glyph_b));
+	assert!(details.contains("kind: cluster"));
+	assert!(details.contains("cluster index: 0"));
 }

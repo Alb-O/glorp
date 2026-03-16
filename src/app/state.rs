@@ -3,7 +3,7 @@ use {
 		canvas_view::scene_viewport_size,
 		editor::EditorViewportMetrics,
 		overlay::LayoutRect,
-		scene::{LayoutScene, SceneConfig, scene_config},
+		scene::{DocumentLayout, SceneConfig, scene_config},
 		types::{CanvasTarget, FontChoice, SamplePreset, ShapingChoice, SidebarTab, WrapChoice},
 		ui::default_sidebar_ratio,
 	},
@@ -165,8 +165,8 @@ impl ViewportState {
 		self.resize_coalescer.mark_applied(self.layout_width);
 	}
 
-	pub(super) fn clamp_scroll(&mut self, scene: &LayoutScene) {
-		self.canvas_scroll = self.clamped_scroll(self.canvas_scroll, scene);
+	pub(super) fn clamp_scroll(&mut self, layout: &DocumentLayout) {
+		self.canvas_scroll = self.clamped_scroll(self.canvas_scroll, layout);
 	}
 
 	pub(super) fn clamp_scroll_to_metrics(&mut self, metrics: EditorViewportMetrics) {
@@ -203,22 +203,22 @@ impl ViewportState {
 		self.canvas_scroll = self.clamped_scroll_to_metrics(scroll, metrics);
 	}
 
-	pub(super) fn finish_scene_refresh(&mut self, scene: &LayoutScene, reset_scroll: bool) {
+	pub(super) fn finish_scene_refresh(&mut self, layout: &DocumentLayout, reset_scroll: bool) {
 		if reset_scroll {
 			self.canvas_scroll = Vector::ZERO;
 		}
 
-		self.clamp_scroll(scene);
+		self.clamp_scroll(layout);
 		self.scene_revision += 1;
 	}
 
-	fn clamped_scroll(&self, scroll: Vector, scene: &LayoutScene) -> Vector {
+	fn clamped_scroll(&self, scroll: Vector, layout: &DocumentLayout) -> Vector {
 		self.clamped_scroll_to_metrics(
 			scroll,
 			EditorViewportMetrics {
-				wrapping: scene.wrapping,
-				measured_width: scene.measured_width,
-				measured_height: scene.measured_height,
+				wrapping: layout.wrapping,
+				measured_width: layout.measured_width,
+				measured_height: layout.measured_height,
 			},
 		)
 	}

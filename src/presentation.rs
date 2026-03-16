@@ -5,7 +5,7 @@ use {
 	crate::{
 		editor::{EditorMode, EditorTextLayerState, EditorViewState, EditorViewportMetrics},
 		overlay::OverlayPrimitive,
-		scene::LayoutScene,
+		scene::DocumentLayout,
 		types::CanvasTarget,
 	},
 	std::sync::Arc,
@@ -24,31 +24,31 @@ pub(crate) struct DocumentPresentation {
 	pub(crate) viewport_metrics: EditorViewportMetrics,
 	/// Shared text buffer handle for the text renderer.
 	pub(crate) text_layer: EditorTextLayerState,
-	/// Derived scene metadata for hit testing, inspection, and decoration draw.
-	pub(crate) scene: LayoutScene,
-	/// Editor mode, selection, overlays, and viewport target for the same scene.
+	/// Shared layout metadata for hit testing, inspection, and decoration draw.
+	pub(crate) layout: Arc<DocumentLayout>,
+	/// Editor mode, selection, overlays, and viewport target for the same layout.
 	pub(crate) editor: EditorViewState,
 }
 
 impl DocumentPresentation {
-	/// Builds a synchronized presentation from already-derived editor and scene
+	/// Builds a synchronized presentation from already-derived editor and layout
 	/// state.
 	pub(crate) fn new(
-		revision: u64, viewport_metrics: EditorViewportMetrics, text_layer: EditorTextLayerState, scene: LayoutScene,
-		editor: EditorViewState,
+		revision: u64, viewport_metrics: EditorViewportMetrics, text_layer: EditorTextLayerState,
+		layout: Arc<DocumentLayout>, editor: EditorViewState,
 	) -> Self {
 		Self {
 			revision,
 			viewport_metrics,
 			text_layer,
-			scene,
+			layout,
 			editor,
 		}
 	}
 
-	/// Returns the current document text as rendered by the scene.
+	/// Returns the current document text as rendered by the layout.
 	pub(crate) fn text(&self) -> &str {
-		self.scene.text.as_ref()
+		self.layout.text.as_ref()
 	}
 
 	/// Returns the active editor mode for this presentation revision.
@@ -58,15 +58,15 @@ impl DocumentPresentation {
 
 	/// Returns the current document length in bytes.
 	pub(crate) fn editor_bytes(&self) -> usize {
-		self.scene.text.len()
+		self.layout.text.len()
 	}
 
-	/// Builds transient inspect overlays without mutating the underlying scene.
+	/// Builds transient inspect overlays without mutating the underlying layout.
 	pub(crate) fn inspect_overlay_primitives(
 		&self, hovered_target: Option<CanvasTarget>, selected_target: Option<CanvasTarget>, layout_width: f32,
 		show_hitboxes: bool,
 	) -> Arc<[OverlayPrimitive]> {
-		self.scene
+		self.layout
 			.inspect_overlay_primitives(hovered_target, selected_target, layout_width, show_hitboxes)
 	}
 }

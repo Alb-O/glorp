@@ -4,7 +4,7 @@ mod store;
 
 use {
 	self::{bridge::CanvasPerfSink as Sink, report::build_dashboard, store::PerfStore},
-	crate::{editor::EditorMode, scene::LayoutScene},
+	crate::{editor::EditorMode, scene::DocumentLayout},
 	std::{hash::Hash, time::Duration},
 };
 pub(crate) use {
@@ -67,8 +67,10 @@ impl PerfMonitor {
 		self.store.flush_canvas_metrics(&self.sink);
 	}
 
-	pub(crate) fn dashboard(&self, scene: &LayoutScene, editor_mode: EditorMode, editor_bytes: usize) -> PerfDashboard {
-		build_dashboard(&self.store, scene, editor_mode, editor_bytes)
+	pub(crate) fn dashboard(
+		&self, layout: &DocumentLayout, editor_mode: EditorMode, editor_bytes: usize,
+	) -> PerfDashboard {
+		build_dashboard(&self.store, layout, editor_mode, editor_bytes)
 	}
 }
 

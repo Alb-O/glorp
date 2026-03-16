@@ -46,17 +46,8 @@ const HEADLESS_POINTER_SWEEP_POINTS: [((f32, f32), (f32, f32)); 4] = [
 	((56.0, 96.0), (360.0, 128.0)),
 	((72.0, 160.0), (300.0, 160.0)),
 ];
-const HEADLESS_INSPECT_HOVERS: [CanvasTarget; 3] = [
-	CanvasTarget::Glyph {
-		run_index: 0,
-		glyph_index: 0,
-	},
-	CanvasTarget::Glyph {
-		run_index: 1,
-		glyph_index: 1,
-	},
-	CanvasTarget::Run(2),
-];
+const HEADLESS_INSPECT_HOVERS: [CanvasTarget; 3] =
+	[CanvasTarget::Cluster(0), CanvasTarget::Cluster(1), CanvasTarget::Run(2)];
 const HEADLESS_BENCH_LINE_SEEDS: [&str; 6] = [
 	"office affine ffi ffl fj with mixed wrap probes",
 	"漢字カタカナ and Latin share one buffer lane",
@@ -79,10 +70,7 @@ impl Playground {
 			HeadlessScenario::TallInspect => {
 				let _ = self.update(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
 				self.enable_headless_inspect_mode();
-				let _ = self.update(Message::Canvas(CanvasEvent::Hovered(Some(CanvasTarget::Glyph {
-					run_index: 0,
-					glyph_index: 0,
-				}))));
+				let _ = self.update(Message::Canvas(CanvasEvent::Hovered(Some(CanvasTarget::Cluster(0)))));
 			}
 			HeadlessScenario::TallPerf => {
 				let _ = self.update(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
@@ -219,7 +207,7 @@ impl Playground {
 
 	pub(crate) fn perf_dashboard(&self) -> crate::perf::PerfDashboard {
 		self.perf
-			.dashboard(self.session.scene(), self.session.mode(), self.session.text().len())
+			.dashboard(self.session.layout(), self.session.mode(), self.session.text().len())
 	}
 
 	fn configure_headless_viewport(&mut self) {
@@ -241,7 +229,7 @@ impl Playground {
 		self.session.reset_with_preset(text, self.scene_config());
 		self.sidebar.sync_after_scene_refresh();
 		self.viewport.mark_scene_applied();
-		self.viewport.finish_scene_refresh(self.session.scene(), true);
+		self.viewport.finish_scene_refresh(self.session.layout(), true);
 	}
 
 	fn position_headless_insert_point(&mut self) {
