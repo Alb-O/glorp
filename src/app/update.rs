@@ -137,8 +137,13 @@ impl EditorApp {
 				if self.sidebar.active_tab == tab {
 					return;
 				}
+				let was_inspect = self.sidebar.active_tab == SidebarTab::Inspect;
 				self.sidebar.set_active_tab(tab);
-				self.sidebar_cache.invalidate_inspect();
+				// The inspect pane is the only consumer of this cache, so unrelated
+				// tab switches should not force it cold.
+				if was_inspect || tab == SidebarTab::Inspect {
+					self.sidebar_cache.invalidate_inspect();
+				}
 			}
 		}
 	}
@@ -146,8 +151,11 @@ impl EditorApp {
 	fn handle_canvas_message(&mut self, message: CanvasEvent) {
 		match message {
 			CanvasEvent::Hovered(target) => {
+				let previous = self.sidebar.hovered_target;
 				self.sidebar.set_hovered_target(target);
-				self.sidebar_cache.invalidate_inspect();
+				if self.sidebar.hovered_target != previous {
+					self.sidebar_cache.invalidate_inspect();
+				}
 			}
 			CanvasEvent::FocusChanged(focused) => {
 				self.viewport.canvas_focused = focused;
@@ -158,8 +166,13 @@ impl EditorApp {
 			}
 			CanvasEvent::PointerSelectionStarted { target, intent } => {
 				self.viewport.canvas_focused = true;
+				let previous = self.sidebar.selected_target;
 				self.sidebar.set_selected_target(target);
-				self.sidebar_cache.invalidate_inspect();
+				// Selection can be normalized inside the sidebar state, so compare the
+				// stored target rather than the incoming payload before invalidating.
+				if self.sidebar.selected_target != previous {
+					self.sidebar_cache.invalidate_inspect();
+				}
 				self.dispatch_editor_intent(EditorIntent::Pointer(intent), EditorDispatchSource::PointerPress);
 			}
 		}

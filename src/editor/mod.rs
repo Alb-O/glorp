@@ -453,7 +453,15 @@ impl EditorEngine {
 		self.state.session.restore_snapshot(snapshot, self.state.document.len());
 	}
 
-	fn apply_document_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) -> TextEdit {
+	fn apply_document_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit, structural: bool) -> TextEdit {
+		if structural {
+			// Line-structure edits can invalidate the buffer's internal segmentation,
+			// so rebuild from the post-edit document text instead of patching in place.
+			let inverse = self.state.document.apply_edit(edit);
+			self.rebuild_buffer(font_system, edit);
+			return inverse;
+		}
+
 		self.apply_buffer_edit(font_system, edit);
 		self.state.document.apply_edit(edit)
 	}
@@ -640,7 +648,9 @@ impl EditorEngine {
 		let started = Instant::now();
 		let Self { state, layout_model } = self;
 		let apply_started = Instant::now();
-		layout_model.layout.apply_edit(font_system, state.document.text(), edit);
+		layout_model
+			.layout
+			.apply_incremental_edit(font_system, state.document.text(), edit);
 		let apply_elapsed = apply_started.elapsed();
 		let total_ms = duration_ms(started.elapsed());
 		if total_ms >= 8.0 {
@@ -662,6 +672,38 @@ impl EditorEngine {
 				range_start = edit.range.start,
 				range_end = edit.range.end,
 				"apply buffer edit"
+			);
+		}
+	}
+
+	fn rebuild_buffer(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
+		let started = Instant::now();
+		let Self { state, layout_model } = self;
+		let rebuild_started = Instant::now();
+		layout_model
+			.layout
+			.rebuild_buffer(font_system, state.document.text(), edit);
+		let rebuild_elapsed = rebuild_started.elapsed();
+		let total_ms = duration_ms(started.elapsed());
+		if total_ms >= 8.0 {
+			debug!(
+				text_bytes = state.document.len(),
+				layout_apply_ms = duration_ms(rebuild_elapsed),
+				total_ms,
+				inserted_bytes = edit.inserted.len(),
+				range_start = edit.range.start,
+				range_end = edit.range.end,
+				"rebuild buffer"
+			);
+		} else {
+			trace!(
+				text_bytes = state.document.len(),
+				layout_apply_ms = duration_ms(rebuild_elapsed),
+				total_ms,
+				inserted_bytes = edit.inserted.len(),
+				range_start = edit.range.start,
+				range_end = edit.range.end,
+				"rebuild buffer"
 			);
 		}
 	}

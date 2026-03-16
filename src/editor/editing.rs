@@ -1,6 +1,9 @@
 use {
 	super::{ApplyResult, EditorEngine, EditorMode, EditorSelection, TextEdit},
-	crate::editor::text::{clamp_char_boundary, next_char_boundary, previous_char_boundary},
+	crate::editor::{
+		layout_state::edit_changes_line_structure,
+		text::{clamp_char_boundary, next_char_boundary, previous_char_boundary},
+	},
 	cosmic_text::FontSystem,
 };
 
@@ -10,7 +13,11 @@ impl EditorEngine {
 			return ApplyResult::default();
 		};
 
-		self.apply_document_edit(font_system, &entry.inverse);
+		self.apply_document_edit(
+			font_system,
+			&entry.inverse,
+			edit_changes_line_structure(self.text(), &entry.inverse),
+		);
 		self.restore_snapshot(&entry.before);
 		let next_layout = self.document_layout();
 
@@ -26,7 +33,11 @@ impl EditorEngine {
 			return ApplyResult::default();
 		};
 
-		self.apply_document_edit(font_system, &entry.forward);
+		self.apply_document_edit(
+			font_system,
+			&entry.forward,
+			edit_changes_line_structure(self.text(), &entry.forward),
+		);
 		self.restore_snapshot(&entry.after);
 		let next_layout = self.document_layout();
 
@@ -47,7 +58,11 @@ impl EditorEngine {
 			range: selection.clone(),
 			inserted: String::new(),
 		};
-		let inverse = self.apply_document_edit(font_system, &text_edit);
+		let inverse = self.apply_document_edit(
+			font_system,
+			&text_edit,
+			edit_changes_line_structure(self.text(), &text_edit),
+		);
 		self.set_mode(EditorMode::Normal);
 		self.clear_pointer_anchor();
 		let next_layout = self.document_layout();
@@ -82,8 +97,8 @@ impl EditorEngine {
 					range,
 					inserted: String::new(),
 				};
-				let structural = self.edit_changes_line_structure(&text_edit);
-				let inverse = self.apply_document_edit(font_system, &text_edit);
+				let structural = edit_changes_line_structure(self.text(), &text_edit);
+				let inverse = self.apply_document_edit(font_system, &text_edit, structural);
 				self.set_preferred_x(None);
 				self.clear_pointer_anchor();
 				self.finish_insert_edit(before, text_edit, inverse, previous, structural)
@@ -104,8 +119,8 @@ impl EditorEngine {
 					range: self.caret()..next,
 					inserted: String::new(),
 				};
-				let structural = self.edit_changes_line_structure(&text_edit);
-				let inverse = self.apply_document_edit(font_system, &text_edit);
+				let structural = edit_changes_line_structure(self.text(), &text_edit);
+				let inverse = self.apply_document_edit(font_system, &text_edit, structural);
 				self.set_preferred_x(None);
 				self.clear_pointer_anchor();
 				self.finish_insert_edit(before, text_edit, inverse, self.caret(), structural)
@@ -129,18 +144,11 @@ impl EditorEngine {
 			inserted: text,
 		};
 		let next_head = caret + text_edit.inserted.len();
-		let structural = self.edit_changes_line_structure(&text_edit);
-		let inverse = self.apply_document_edit(font_system, &text_edit);
+		let structural = edit_changes_line_structure(self.text(), &text_edit);
+		let inverse = self.apply_document_edit(font_system, &text_edit, structural);
 		self.set_preferred_x(None);
 		self.clear_pointer_anchor();
 		self.finish_insert_edit(before, text_edit, inverse, next_head, structural)
-	}
-
-	fn edit_changes_line_structure(&self, edit: &TextEdit) -> bool {
-		self.text()
-			.get(edit.range.clone())
-			.is_some_and(|removed| removed.contains('\n'))
-			|| edit.inserted.contains('\n')
 	}
 
 	fn finish_insert_edit(

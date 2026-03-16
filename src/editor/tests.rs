@@ -243,6 +243,7 @@ fn deleting_a_full_line_rebuilds_without_a_zombie_visual_row() {
 			range: 6..11,
 			inserted: String::new(),
 		},
+		true,
 	);
 
 	assert_eq!(editor.text(), "alpha\ngamma");

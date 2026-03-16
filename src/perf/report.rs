@@ -180,10 +180,9 @@ pub(crate) struct PerfDashboard {
 pub(super) fn build_dashboard(
 	store: &PerfStore, layout: &DocumentLayout, editor_mode: EditorMode, editor_bytes: usize,
 ) -> PerfDashboard {
-	let hot_paths = MetricKind::ALL
-		.into_iter()
-		.map(|kind| metric_summary(store, kind))
-		.collect::<Vec<_>>();
+	// Summaries back both the table and the graphs; compute them once so a
+	// dashboard rebuild does not rescan the same metric windows twice.
+	let hot_paths = MetricKind::ALL.map(|kind| metric_summary(store, kind));
 	let frame_pacing = frame_pacing_summary(store);
 	let mut recent_activity = Vec::with_capacity(10);
 	for kind in [
@@ -216,9 +215,9 @@ pub(super) fn build_dashboard(
 			scene_height: layout.measured_height,
 			layout_width: layout.max_width,
 		},
-		hot_paths,
+		hot_paths: hot_paths.to_vec(),
 		recent_activity,
-		graphs: graphs(store, &frame_pacing),
+		graphs: graphs(store, &frame_pacing, &hot_paths),
 		frame_pacing,
 	}
 }
@@ -264,7 +263,9 @@ fn frame_pacing_summary(store: &PerfStore) -> PerfFramePacingSummary {
 	}
 }
 
-fn graphs(store: &PerfStore, frame_pacing: &PerfFramePacingSummary) -> Vec<PerfGraphSeries> {
+fn graphs(
+	store: &PerfStore, frame_pacing: &PerfFramePacingSummary, hot_paths: &[PerfMetricSummary; MetricKind::ALL.len()],
+) -> Vec<PerfGraphSeries> {
 	let frame_p95 = percentile_ms(&store.frames.intervals_ms, 95);
 	let mut graphs = vec![PerfGraphSeries {
 		title: "frame delta",
@@ -279,7 +280,7 @@ fn graphs(store: &PerfStore, frame_pacing: &PerfFramePacingSummary) -> Vec<PerfG
 	graphs.reserve(GRAPH_METRICS.len());
 
 	for kind in GRAPH_METRICS {
-		let summary = metric_summary(store, kind);
+		let summary = &hot_paths[kind.index()];
 		graphs.push(PerfGraphSeries {
 			title: kind.label(),
 			samples_ms: store.metrics[kind.index()].window.iter().copied().collect(),

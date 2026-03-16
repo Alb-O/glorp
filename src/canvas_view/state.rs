@@ -10,6 +10,8 @@ use {
 	std::time::Instant,
 };
 
+const SCROLL_SETTLE_EPSILON: f32 = 0.01;
+
 #[derive(Debug, Default)]
 pub(crate) struct CanvasState {
 	hovered_target: Option<CanvasTarget>,
@@ -164,19 +166,14 @@ impl CanvasState {
 				}
 			}
 			CanvasIntent::RedrawRequested => {
-				let previous_scroll = self.scroll;
-				let next_scroll = animate_scroll(self.scroll, self.target_scroll);
-				if vector_length(next_scroll - self.scroll) > 0.01 {
-					self.scroll = clamp_scroll(next_scroll, max_scroll);
-					CanvasAction::publish_canvas(CanvasEvent::ScrollChanged(self.scroll), false)
+				let animated_scroll = animate_scroll(self.scroll, self.target_scroll);
+				let next_scroll = if vector_length(animated_scroll - self.scroll) > SCROLL_SETTLE_EPSILON {
+					clamp_scroll(animated_scroll, max_scroll)
 				} else {
-					self.scroll = clamp_scroll(self.target_scroll, max_scroll);
-					if vector_length(self.scroll - previous_scroll) > 0.01 {
-						CanvasAction::publish_canvas(CanvasEvent::ScrollChanged(self.scroll), false)
-					} else {
-						CanvasAction::None
-					}
-				}
+					clamp_scroll(self.target_scroll, max_scroll)
+				};
+
+				self.publish_scroll_if_changed(next_scroll)
 			}
 			CanvasIntent::CursorLeft => {
 				if self.hovered_target.take().is_some() {
@@ -194,6 +191,19 @@ impl CanvasState {
 				}
 			}
 			CanvasIntent::RetainFocus => CanvasAction::None,
+		}
+	}
+
+	fn publish_scroll_if_changed(&mut self, next_scroll: Vector) -> CanvasAction {
+		let previous_scroll = self.scroll;
+		self.scroll = next_scroll;
+
+		// Match redraw settling: once movement is below epsilon, stop publishing
+		// "changed" events for the final float noise.
+		if vector_length(self.scroll - previous_scroll) > SCROLL_SETTLE_EPSILON {
+			CanvasAction::publish_canvas(CanvasEvent::ScrollChanged(self.scroll), false)
+		} else {
+			CanvasAction::None
 		}
 	}
 }
