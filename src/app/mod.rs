@@ -20,7 +20,7 @@ use {
 	iced::Task,
 };
 
-pub struct Playground {
+pub struct EditorApp {
 	session: DocumentSession,
 	controls: ControlsState,
 	sidebar: SidebarState,
@@ -30,7 +30,7 @@ pub struct Playground {
 	sidebar_cache: SidebarCache,
 }
 
-impl Playground {
+impl EditorApp {
 	pub(crate) fn new() -> (Self, Task<Message>) {
 		let controls = ControlsState::new();
 		let viewport = ViewportState::new(ControlsState::initial_layout_width());

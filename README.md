@@ -1,6 +1,6 @@
 # glorp
 
-Text layout and editor playground built on `iced` and `cosmic-text`.
+Simple text editor and inspection app built on `iced` and `cosmic-text`.
 
 ## Run
 

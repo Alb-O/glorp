@@ -1,6 +1,6 @@
 use {
 	super::{
-		Playground,
+		EditorApp,
 		session::DocumentUpdate,
 		state::{EditorDispatchSource, RESIZE_REFLOW_INTERVAL},
 	},
@@ -35,7 +35,7 @@ impl SceneRefreshReason {
 	}
 }
 
-impl Playground {
+impl EditorApp {
 	pub(crate) fn subscription(&self) -> Subscription<Message> {
 		let perf = self.sidebar.active_tab == SidebarTab::Perf;
 		let resize = self.viewport.resize_coalescer.has_pending();
@@ -54,7 +54,7 @@ impl Playground {
 	}
 
 	pub(crate) fn update(&mut self, message: Message) -> Task<Message> {
-		let _span = trace_span!("playground.update", message = message_kind(&message)).entered();
+		let _span = trace_span!("editor_app.update", message = message_kind(&message)).entered();
 
 		match message {
 			Message::Controls(message) => self.handle_controls_message(message),

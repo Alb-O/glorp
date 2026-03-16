@@ -51,10 +51,6 @@ in
       cargo run
     '';
 
-    run-example.exec = ''
-      cargo run --example glyph_playground
-    '';
-
     check-targets.exec = lib.mkForce ''
       cargo check --all-targets --all-features
     '';
@@ -62,7 +58,6 @@ in
 
   enterShell = ''
     echo "Run: cargo run"
-    echo "Run: cargo run --example glyph_playground"
     echo "Run: check-targets"
   '';
 }

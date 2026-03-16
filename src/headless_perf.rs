@@ -1,5 +1,5 @@
 use {
-	crate::{PerfScenario, Playground, perf::PerfDashboard},
+	crate::{EditorApp, PerfScenario, perf::PerfDashboard},
 	iced::{
 		Color, Font, Pixels, Size, Theme,
 		advanced::{
@@ -160,7 +160,7 @@ fn run(config: PerfCliConfig) -> Result<String, String> {
 }
 
 struct Harness {
-	playground: Playground,
+	app: EditorApp,
 	renderer: iced::Renderer,
 	renderer_name: String,
 	cache: user_interface::Cache,
@@ -184,10 +184,10 @@ impl Harness {
 		let renderer_name = renderer.name();
 		let viewport_physical = Size::new(VIEWPORT_PHYSICAL_WIDTH, VIEWPORT_PHYSICAL_HEIGHT);
 		let viewport_logical = VIEWPORT_LOGICAL_SIZE;
-		let playground = Playground::headless();
+		let app = EditorApp::headless();
 
 		let mut harness = Self {
-			playground,
+			app,
 			renderer,
 			renderer_name,
 			cache: user_interface::Cache::default(),
@@ -196,24 +196,24 @@ impl Harness {
 			theme: Theme::TokyoNightStorm,
 			scenario,
 		};
-		harness.playground.configure_headless_perf_scenario(scenario);
+		harness.app.configure_headless_perf_scenario(scenario);
 		Ok(harness)
 	}
 
 	fn step(&mut self, step: usize) {
-		self.playground.run_headless_perf_step(self.scenario, step);
+		self.app.run_headless_perf_step(self.scenario, step);
 	}
 
 	fn render_frame(&mut self) {
 		self.draw_frame();
-		self.playground.flush_perf_metrics();
+		self.app.flush_perf_metrics();
 	}
 
 	fn draw_frame(&mut self) {
 		let (cache, build_duration, draw_duration) = {
 			let build_started = std::time::Instant::now();
 			let mut user_interface = UserInterface::build(
-				self.playground.headless_view(),
+				self.app.headless_view(),
 				self.viewport_logical,
 				std::mem::take(&mut self.cache),
 				&mut self.renderer,
@@ -235,8 +235,8 @@ impl Harness {
 		};
 
 		self.cache = cache;
-		self.playground.record_headless_ui_build(build_duration);
-		self.playground.record_headless_ui_draw(draw_duration);
+		self.app.record_headless_ui_build(build_duration);
+		self.app.record_headless_ui_draw(draw_duration);
 	}
 
 	fn capture_screenshot(&mut self) -> CaptureSummary {
@@ -251,11 +251,11 @@ impl Harness {
 	}
 
 	fn reset_perf_monitor(&mut self) {
-		self.playground.reset_perf_monitor();
+		self.app.reset_perf_monitor();
 	}
 
 	fn dashboard(&self) -> PerfDashboard {
-		self.playground.perf_dashboard()
+		self.app.perf_dashboard()
 	}
 }
 

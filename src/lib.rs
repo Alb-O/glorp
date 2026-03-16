@@ -1,4 +1,4 @@
-//! Low-level text and glyph playground.
+//! Editor-first text layout and glyph inspection app.
 //!
 //! This example sits between `iced` widget code and the text stack underneath
 //! it. It is intentionally not a full custom renderer. The point is to expose
@@ -77,7 +77,7 @@ mod text_view;
 mod types;
 mod ui;
 
-pub use app::Playground;
+pub use app::EditorApp;
 use {
 	iced::{Font, Theme},
 	std::process::ExitCode,
@@ -225,7 +225,7 @@ impl HeadlessScriptScenario {
 	}
 }
 
-/// Runs the interactive playground application.
+/// Runs the interactive editor application.
 ///
 /// # Errors
 ///
@@ -238,8 +238,8 @@ pub fn run() -> iced::Result {
 		..Default::default()
 	};
 
-	iced::application(Playground::new, Playground::update, Playground::view)
-		.subscription(Playground::subscription)
+	iced::application(EditorApp::new, EditorApp::update, EditorApp::view)
+		.subscription(EditorApp::subscription)
 		.theme(app_theme)
 		.settings(settings)
 		.run()
@@ -264,6 +264,6 @@ pub fn init_tracing() {
 	telemetry::init_tracing();
 }
 
-fn app_theme(_playground: &Playground) -> Theme {
+fn app_theme(_app: &EditorApp) -> Theme {
 	Theme::TokyoNightStorm
 }

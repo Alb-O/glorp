@@ -31,7 +31,7 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 	panel_scrollable(
 		column![
 			control_row(
-				"Preset",
+				"Document",
 				pick_list(Some(props.preset), SamplePreset::ALL, ToString::to_string)
 					.on_select(|preset| Message::Controls(ControlsMessage::LoadPreset(preset)))
 					.padding(PICK_LIST_PADDING)
@@ -96,7 +96,7 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 				.label("Show glyph hitboxes")
 				.style(rounded_checkbox_style)
 				.on_toggle(|show_hitboxes| Message::Controls(ControlsMessage::ShowHitboxesChanged(show_hitboxes))),
-			text("Canvas editor").size(18),
+			text("Editor input").size(18),
 			view_editor_help(),
 		]
 		.spacing(14),
@@ -107,7 +107,7 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 fn view_editor_help() -> Element<'static, Message> {
 	iced::widget::container(
 		text(
-			"Wheel or touchpad-scroll to pan the canvas.\nClick the canvas to focus.\nOpen the Perf tab to watch edit and render timings live while you type or scroll.\nNormal: h/j/k/l or arrows move, i inserts before, a inserts after, x deletes.\nInsert: type, Enter/Tab insert text, Backspace/Delete edit, Esc returns to normal mode.\nUndo/redo: Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y."
+			"Wheel or touchpad-scroll to pan the editor surface.\nClick to focus the editor.\nOpen the Perf tab to watch edit and render timings live while you type or scroll.\nNormal: h/j/k/l or arrows move, i inserts before, a inserts after, x deletes.\nInsert: type, Enter/Tab insert text, Backspace/Delete edit, Esc returns to normal mode.\nUndo/redo: Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y."
 		)
 		.size(14)
 		.width(Length::Fill),

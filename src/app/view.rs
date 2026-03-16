@@ -1,6 +1,6 @@
 use {
 	super::{
-		Playground,
+		EditorApp,
 		sidebar_cache::{InspectSidebarArgs, InspectSidebarModel, PerfSidebarModel},
 		sidebar_data::{ControlsSidebarData, SidebarBodyData},
 		state::ShellPane,
@@ -20,7 +20,7 @@ use {
 	std::sync::Arc,
 };
 
-impl Playground {
+impl EditorApp {
 	pub(crate) fn view(&self) -> Element<'_, Message> {
 		responsive(|size| {
 			if is_stacked_shell(size) {

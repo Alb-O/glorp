@@ -1,5 +1,5 @@
 use {
-	super::Playground,
+	super::EditorApp,
 	crate::{
 		HeadlessScenario, HeadlessScriptScenario, PerfScenario,
 		editor::{
@@ -58,7 +58,7 @@ const HEADLESS_BENCH_LINE_SEEDS: [&str; 6] = [
 ];
 const ASCII_LOWERCASE: &[u8; 26] = b"abcdefghijklmnopqrstuvwxyz";
 
-impl Playground {
+impl EditorApp {
 	pub fn configure_headless_scenario(&mut self, scenario: HeadlessScenario) {
 		self.configure_headless_viewport();
 
