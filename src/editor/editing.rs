@@ -9,7 +9,7 @@ use {
 
 impl EditorEngine {
 	pub(super) fn undo(&mut self, font_system: &mut FontSystem) -> ApplyResult {
-		let Some(entry) = self.state.document.undo() else {
+		let Some(entry) = self.core.document.undo() else {
 			return ApplyResult::default();
 		};
 
@@ -29,7 +29,7 @@ impl EditorEngine {
 	}
 
 	pub(super) fn redo(&mut self, font_system: &mut FontSystem) -> ApplyResult {
-		let Some(entry) = self.state.document.redo() else {
+		let Some(entry) = self.core.document.redo() else {
 			return ApplyResult::default();
 		};
 

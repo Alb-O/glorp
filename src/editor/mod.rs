@@ -1,9 +1,11 @@
+mod core;
 mod document;
 mod editing;
 mod geometry;
 mod history;
 mod layout_state;
 mod navigation;
+mod projection;
 mod reducer;
 mod selection;
 mod session;
@@ -13,21 +15,14 @@ mod text;
 mod tests;
 
 use {
-	self::{
-		document::DocumentState,
-		geometry::{cluster_rectangle, insert_selection_range, normal_selection_geometry, selection_rectangles},
-		history::{EditorSnapshot, HistoryEntry},
-		layout_state::EditorLayout,
-		reducer::apply_intent,
-		session::EditorSession,
-	},
+	self::{core::EditorCore, projection::EditorProjection, reducer::apply_intent},
 	crate::{
-		overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
-		scene::{DocumentLayout, LayoutCluster, SceneConfig},
+		overlay::{LayoutRect, OverlayPrimitive, OverlayRectKind},
+		scene::{DocumentLayout, SceneConfig},
 		telemetry::duration_ms,
 		types::WrapChoice,
 	},
-	cosmic_text::{Buffer, FontSystem},
+	cosmic_text::FontSystem,
 	iced::Point,
 	std::{
 		fmt::{self, Display},
@@ -180,20 +175,9 @@ pub(crate) struct EditorTextLayerState {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct EditorState {
-	document: DocumentState,
-	session: EditorSession,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct EditorLayoutModel {
-	layout: EditorLayout,
-}
-
-#[derive(Debug, Clone)]
 pub(crate) struct EditorEngine {
-	state: EditorState,
-	layout_model: EditorLayoutModel,
+	core: EditorCore,
+	projection: EditorProjection,
 }
 
 impl EditorOutcome {
@@ -224,108 +208,21 @@ impl EditorViewState {
 	}
 }
 
-impl EditorState {
-	fn new(text: impl Into<String>) -> Self {
-		Self {
-			document: DocumentState::new(text),
-			session: EditorSession::new(),
-		}
-	}
-}
-
-impl EditorLayoutModel {
-	fn new(font_system: &mut FontSystem, text: &str, config: SceneConfig) -> Self {
-		Self {
-			layout: EditorLayout::new(font_system, text, config),
-		}
-	}
-}
-
 impl EditorEngine {
 	pub(crate) fn new(font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) -> Self {
-		let state = EditorState::new(text);
+		let text = text.into();
 		let mut editor = Self {
-			layout_model: EditorLayoutModel::new(font_system, state.document.text(), config),
-			state,
+			core: EditorCore::new(text.clone()),
+			projection: EditorProjection::new(font_system, &text, config),
 		};
 		editor.reset_normal_selection();
 		editor.refresh_view_state(None);
 		editor
 	}
 
-	pub(crate) fn text(&self) -> &str {
-		self.state.document.text()
-	}
-
-	pub(crate) fn mode(&self) -> EditorMode {
-		self.state.session.mode()
-	}
-
-	pub(crate) fn buffer(&self) -> Arc<Buffer> {
-		self.layout_model.layout.buffer()
-	}
-
-	pub(crate) fn history_depths(&self) -> (usize, usize) {
-		self.state.document.history_depths()
-	}
-
-	pub(crate) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, config: SceneConfig) -> bool {
-		let changed = {
-			let Self { state, layout_model } = self;
-			layout_model
-				.layout
-				.sync_buffer_config(font_system, state.document.text(), config)
-		};
-		if changed {
-			self.refresh_view_state(None);
-		}
-		changed
-	}
-
-	pub(crate) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) -> bool {
-		let changed = self.layout_model.layout.sync_buffer_width(font_system, width);
-		if changed {
-			self.refresh_view_state_after_width_sync();
-		}
-		changed
-	}
-
-	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
-		self.state.document.reset(text);
-		self.state.session = EditorSession::new();
-		let Self { state, layout_model } = self;
-		layout_model.layout.reset(font_system, state.document.text(), config);
-		self.reset_normal_selection();
-		self.refresh_view_state(None);
-	}
-
-	pub(crate) fn view_state(&self) -> EditorViewState {
-		self.layout_model.layout.view_state()
-	}
-
-	pub(crate) fn shared_document_layout(&self) -> Arc<DocumentLayout> {
-		if let Some(layout) = self.layout_model.layout.cached_document_layout_arc() {
-			return layout;
-		}
-
-		// Seed the cache on first demand so later presentation/metric reads stay
-		// on the same derived layout instead of rebuilding in parallel.
-		let layout = Arc::new(self.document_layout());
-		self.layout_model.layout.set_document_layout(layout.clone());
-		layout
-	}
-
-	pub(crate) fn viewport_metrics(&self) -> EditorViewportMetrics {
-		self.layout_model.layout.viewport_metrics()
-	}
-
-	pub(crate) fn text_layer_state(&self) -> EditorTextLayerState {
-		self.layout_model.layout.text_layer_state()
-	}
-
 	pub(crate) fn apply(&mut self, font_system: &mut FontSystem, intent: EditorIntent) -> EditorOutcome {
 		let _span = trace_span!("editor.apply", intent = ?intent).entered();
-		let previous_view = self.layout_model.layout.view_state();
+		let previous_view = self.view_state();
 		let apply_started = Instant::now();
 		let ApplyResult {
 			text_edit,
@@ -367,436 +264,12 @@ impl EditorEngine {
 		}
 		EditorOutcome::from_apply_result(
 			&previous_view,
-			self.layout_model.layout.view_state_ref(),
+			self.projection.layout.view_state_ref(),
 			ApplyResult {
 				text_edit,
 				layout: None,
 				view_refreshed: false,
 			},
 		)
-	}
-
-	#[cfg(test)]
-	pub(crate) fn buffer_text(&self) -> String {
-		self.layout_model.layout.buffer_text()
-	}
-
-	fn document_layout(&self) -> DocumentLayout {
-		let started = Instant::now();
-		let document_layout = self.layout_model.layout.document_layout(self.text());
-		let elapsed_ms = duration_ms(started.elapsed());
-		if elapsed_ms >= 8.0 {
-			debug!(
-				duration_ms = elapsed_ms,
-				clusters = document_layout.clusters.len(),
-				text_bytes = self.text().len(),
-				"document layout"
-			);
-		} else {
-			trace!(
-				duration_ms = elapsed_ms,
-				clusters = document_layout.clusters.len(),
-				text_bytes = self.text().len(),
-				"document layout"
-			);
-		}
-		document_layout
-	}
-
-	fn reset_normal_selection(&mut self) {
-		if let Some(selection) = self
-			.document_layout()
-			.cluster(0)
-			.map(|cluster| cluster.byte_range.clone())
-		{
-			let head = selection.start;
-			self.state
-				.session
-				.set_normal_selection(EditorSelection::new(selection, head), None, Some(head));
-		} else {
-			self.set_selection(None);
-			self.clear_pointer_anchor();
-		}
-	}
-
-	fn select_cluster(&mut self, layout: &DocumentLayout, cluster_index: usize) {
-		let Some(cluster) = layout.cluster(cluster_index) else {
-			return;
-		};
-
-		self.state.session.set_normal_selection(
-			EditorSelection::new(cluster.byte_range.clone(), cluster.byte_range.start),
-			Some(cluster.center_x()),
-			Some(cluster.byte_range.start),
-		);
-	}
-
-	fn active_selection_index(&self, layout: &DocumentLayout) -> Option<usize> {
-		self.selection()?;
-
-		layout
-			.cluster_at_or_after(self.caret())
-			.or_else(|| layout.cluster_before(self.caret().saturating_add(1)))
-	}
-
-	fn active_selection<'a>(&self, layout: &'a DocumentLayout) -> Option<&'a LayoutCluster> {
-		self.active_selection_index(layout)
-			.and_then(|index| layout.cluster(index))
-	}
-
-	fn history_snapshot(&self) -> EditorSnapshot {
-		self.state.session.history_snapshot()
-	}
-
-	fn restore_snapshot(&mut self, snapshot: &EditorSnapshot) {
-		self.state.session.restore_snapshot(snapshot, self.state.document.len());
-	}
-
-	fn apply_document_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit, structural: bool) -> TextEdit {
-		if structural {
-			// Line-structure edits can invalidate the buffer's internal segmentation,
-			// so rebuild from the post-edit document text instead of patching in place.
-			let inverse = self.state.document.apply_edit(edit);
-			self.rebuild_buffer(font_system, edit);
-			return inverse;
-		}
-
-		self.apply_buffer_edit(font_system, edit);
-		self.state.document.apply_edit(edit)
-	}
-
-	fn record_history(&mut self, forward: TextEdit, inverse: TextEdit, before: EditorSnapshot) {
-		self.state.document.record_history(HistoryEntry {
-			forward,
-			inverse,
-			before,
-			after: self.history_snapshot(),
-		});
-	}
-
-	fn active_viewport_target(&self, layout: &DocumentLayout) -> Option<LayoutRect> {
-		if matches!(self.mode(), EditorMode::Insert) {
-			self.layout_model.layout.insert_cursor_block(self.text(), self.caret())
-		} else {
-			self.active_selection(layout).map(cluster_rectangle)
-		}
-	}
-
-	fn refresh_view_state(&mut self, layout: Option<DocumentLayout>) {
-		let started = Instant::now();
-		let layout = Arc::new(layout.unwrap_or_else(|| self.document_layout()));
-		let layout_ref = layout.as_ref();
-		let layout_elapsed = started.elapsed();
-		let selection = self.selection().cloned();
-		let selection_head = selection.as_ref().map(EditorSelection::head);
-		let tone = EditorOverlayTone::from(self.mode());
-		let insert_cursor = if matches!(self.mode(), EditorMode::Insert) {
-			selection_head.and_then(|head| self.layout_model.layout.insert_cursor_rectangle(self.text(), head))
-		} else {
-			None
-		};
-		let viewport_target = self.active_viewport_target(layout_ref);
-		let overlay_started = Instant::now();
-		let overlays = self.build_overlays(layout_ref, selection.as_ref(), insert_cursor, viewport_target, tone);
-		let overlay_elapsed = overlay_started.elapsed();
-		self.layout_model.layout.set_view_state(EditorViewState {
-			mode: self.mode(),
-			selection: selection.as_ref().map(EditorSelection::range_cloned),
-			selection_head,
-			pointer_anchor: self.pointer_anchor(),
-			overlays,
-			viewport_target,
-		});
-		self.layout_model.layout.set_document_layout(layout);
-		let total_ms = duration_ms(started.elapsed());
-		if total_ms >= 8.0 {
-			debug!(
-				layout_ms = duration_ms(layout_elapsed),
-				overlay_ms = duration_ms(overlay_elapsed),
-				total_ms,
-				text_bytes = self.text().len(),
-				"refresh view state"
-			);
-		} else {
-			trace!(
-				layout_ms = duration_ms(layout_elapsed),
-				overlay_ms = duration_ms(overlay_elapsed),
-				total_ms,
-				text_bytes = self.text().len(),
-				"refresh view state"
-			);
-		}
-	}
-
-	fn refresh_view_state_after_width_sync(&mut self) {
-		match self.mode() {
-			EditorMode::Insert => self.refresh_insert_view_state_fast(),
-			EditorMode::Normal => self.refresh_normal_view_state_fast(),
-		}
-	}
-
-	fn build_overlays(
-		&self, layout: &DocumentLayout, selection: Option<&EditorSelection>, insert_cursor: Option<LayoutRect>,
-		viewport_target: Option<LayoutRect>, tone: EditorOverlayTone,
-	) -> Arc<[OverlayPrimitive]> {
-		// Insert mode never needs more than the block highlight plus the thin
-		// caret; normal mode is selection-driven and can grow with wrapped spans.
-		let mut overlays = Vec::with_capacity(match self.mode() {
-			EditorMode::Insert => 2,
-			EditorMode::Normal => usize::from(viewport_target.is_some()),
-		});
-
-		if matches!(self.mode(), EditorMode::Insert) {
-			if let Some(insert_block) = viewport_target {
-				overlays.push(OverlayPrimitive::scene_rect(
-					insert_block,
-					OverlayRectKind::EditorInsertBlock(tone),
-					OverlayLayer::UnderText,
-				));
-			}
-
-			if let Some(caret) = insert_cursor {
-				overlays.push(OverlayPrimitive::scene_rect(
-					caret,
-					OverlayRectKind::EditorCaret(tone),
-					OverlayLayer::UnderText,
-				));
-			}
-		} else {
-			if let Some(selection) = selection {
-				overlays.extend(
-					selection_rectangles(layout, selection.range())
-						.iter()
-						.copied()
-						.map(|rect| {
-							OverlayPrimitive::scene_rect(
-								rect,
-								OverlayRectKind::EditorSelection(tone),
-								OverlayLayer::UnderText,
-							)
-						}),
-				);
-			}
-
-			if let Some(active) = viewport_target {
-				overlays.push(OverlayPrimitive::scene_rect(
-					active,
-					OverlayRectKind::EditorActive(tone),
-					OverlayLayer::UnderText,
-				));
-			}
-		}
-
-		overlays.into()
-	}
-
-	fn selection(&self) -> Option<&EditorSelection> {
-		self.state.session.selection()
-	}
-
-	fn selection_range(&self) -> Option<Range<usize>> {
-		self.selection().map(EditorSelection::range_cloned)
-	}
-
-	fn set_selection(&mut self, selection: Option<EditorSelection>) {
-		self.state.session.set_selection(selection);
-	}
-
-	fn set_mode(&mut self, mode: EditorMode) {
-		self.state.session.set_mode(mode);
-	}
-
-	fn caret(&self) -> usize {
-		self.state.session.caret()
-	}
-
-	fn preferred_x(&self) -> Option<f32> {
-		self.state.session.preferred_x()
-	}
-
-	fn set_preferred_x(&mut self, preferred_x: Option<f32>) {
-		self.state.session.set_preferred_x(preferred_x);
-	}
-
-	fn pointer_anchor(&self) -> Option<usize> {
-		self.state.session.pointer_anchor()
-	}
-
-	fn set_pointer_anchor(&mut self, pointer_anchor: Option<usize>) {
-		self.state.session.set_pointer_anchor(pointer_anchor);
-	}
-
-	fn clear_pointer_anchor(&mut self) {
-		self.set_pointer_anchor(None);
-	}
-
-	fn enter_insert_at(&mut self, caret: usize) {
-		let layout = self.document_layout();
-		self.enter_insert_with_layout(&layout, caret);
-	}
-
-	fn enter_insert_with_layout(&mut self, layout: &DocumentLayout, caret: usize) {
-		self.set_insert_head(layout, caret);
-	}
-
-	fn buffer_hit(&self, point: Point) -> Option<cosmic_text::Cursor> {
-		self.layout_model.layout.hit(point)
-	}
-
-	fn apply_buffer_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
-		let started = Instant::now();
-		let Self { state, layout_model } = self;
-		let apply_started = Instant::now();
-		layout_model
-			.layout
-			.apply_incremental_edit(font_system, state.document.text(), edit);
-		let apply_elapsed = apply_started.elapsed();
-		let total_ms = duration_ms(started.elapsed());
-		if total_ms >= 8.0 {
-			debug!(
-				text_bytes = state.document.len(),
-				layout_apply_ms = duration_ms(apply_elapsed),
-				total_ms,
-				inserted_bytes = edit.inserted.len(),
-				range_start = edit.range.start,
-				range_end = edit.range.end,
-				"apply buffer edit"
-			);
-		} else {
-			trace!(
-				text_bytes = state.document.len(),
-				layout_apply_ms = duration_ms(apply_elapsed),
-				total_ms,
-				inserted_bytes = edit.inserted.len(),
-				range_start = edit.range.start,
-				range_end = edit.range.end,
-				"apply buffer edit"
-			);
-		}
-	}
-
-	fn rebuild_buffer(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
-		let started = Instant::now();
-		let Self { state, layout_model } = self;
-		let rebuild_started = Instant::now();
-		layout_model
-			.layout
-			.rebuild_buffer(font_system, state.document.text(), edit);
-		let rebuild_elapsed = rebuild_started.elapsed();
-		let total_ms = duration_ms(started.elapsed());
-		if total_ms >= 8.0 {
-			debug!(
-				text_bytes = state.document.len(),
-				layout_apply_ms = duration_ms(rebuild_elapsed),
-				total_ms,
-				inserted_bytes = edit.inserted.len(),
-				range_start = edit.range.start,
-				range_end = edit.range.end,
-				"rebuild buffer"
-			);
-		} else {
-			trace!(
-				text_bytes = state.document.len(),
-				layout_apply_ms = duration_ms(rebuild_elapsed),
-				total_ms,
-				inserted_bytes = edit.inserted.len(),
-				range_start = edit.range.start,
-				range_end = edit.range.end,
-				"rebuild buffer"
-			);
-		}
-	}
-
-	fn insert_selection(layout: &DocumentLayout, head: usize) -> Option<EditorSelection> {
-		layout
-			.cluster_at_insert_head(head)
-			.and_then(|index| layout.cluster(index))
-			.map(|cluster| EditorSelection::new(cluster.byte_range.clone(), head))
-	}
-
-	fn set_insert_head(&mut self, layout: &DocumentLayout, head: usize) {
-		self.state.session.enter_insert(Self::insert_selection(layout, head));
-	}
-
-	fn set_insert_head_fast(&mut self, head: usize) {
-		let selection =
-			insert_selection_range(&self.buffer(), self.text(), head).map(|range| EditorSelection::new(range, head));
-		self.state.session.enter_insert(selection);
-	}
-
-	fn refresh_insert_view_state_fast(&mut self) {
-		let selection = self.selection().cloned();
-		let selection_head = selection.as_ref().map(EditorSelection::head);
-		let tone = EditorOverlayTone::from(self.mode());
-		let insert_cursor =
-			selection_head.and_then(|head| self.layout_model.layout.insert_cursor_rectangle(self.text(), head));
-		let viewport_target =
-			selection_head.and_then(|head| self.layout_model.layout.insert_cursor_block(self.text(), head));
-		let mut overlays =
-			Vec::with_capacity(usize::from(viewport_target.is_some()) + usize::from(insert_cursor.is_some()));
-
-		if let Some(insert_block) = viewport_target {
-			overlays.push(OverlayPrimitive::scene_rect(
-				insert_block,
-				OverlayRectKind::EditorInsertBlock(tone),
-				OverlayLayer::UnderText,
-			));
-		}
-
-		if let Some(caret) = insert_cursor {
-			overlays.push(OverlayPrimitive::scene_rect(
-				caret,
-				OverlayRectKind::EditorCaret(tone),
-				OverlayLayer::UnderText,
-			));
-		}
-
-		self.layout_model.layout.set_view_state(EditorViewState {
-			mode: self.mode(),
-			selection: selection.as_ref().map(EditorSelection::range_cloned),
-			selection_head,
-			pointer_anchor: self.pointer_anchor(),
-			overlays: overlays.into(),
-			viewport_target,
-		});
-	}
-
-	fn refresh_normal_view_state_fast(&mut self) {
-		let selection = self.selection().cloned();
-		let selection_head = selection.as_ref().map(EditorSelection::head);
-		let tone = EditorOverlayTone::from(self.mode());
-		let (selection_rectangles, viewport_target) = selection.as_ref().map_or_else(
-			|| (Arc::from([]), None),
-			|selection| {
-				normal_selection_geometry(
-					&self.buffer(),
-					self.text(),
-					selection.range(),
-					selection_head.unwrap_or(selection.range().start),
-				)
-			},
-		);
-		let mut overlays = Vec::with_capacity(selection_rectangles.len() + usize::from(viewport_target.is_some()));
-
-		overlays.extend(selection_rectangles.iter().copied().map(|rect| {
-			OverlayPrimitive::scene_rect(rect, OverlayRectKind::EditorSelection(tone), OverlayLayer::UnderText)
-		}));
-
-		if let Some(active) = viewport_target {
-			overlays.push(OverlayPrimitive::scene_rect(
-				active,
-				OverlayRectKind::EditorActive(tone),
-				OverlayLayer::UnderText,
-			));
-		}
-
-		self.layout_model.layout.set_view_state(EditorViewState {
-			mode: self.mode(),
-			selection: selection.as_ref().map(EditorSelection::range_cloned),
-			selection_head,
-			pointer_anchor: self.pointer_anchor(),
-			overlays: overlays.into(),
-			viewport_target,
-		});
 	}
 }

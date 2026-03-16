@@ -74,7 +74,9 @@ fn apply_pointer_press(editor: &mut EditorEngine, position: iced::Point, select_
 	if let Some(cluster_index) = editor.pointer_cluster_index(&layout, position) {
 		editor.set_pointer_anchor(layout.cluster(cluster_index).map(|cluster| cluster.byte_range.start));
 		editor.select_cluster(&layout, cluster_index);
-	} else if editor.state.document.is_empty() {
+	} else if editor.core.document.is_empty() {
+		// An empty document treats a canvas press as an invitation to place the
+		// caret; non-empty blank space stays inert instead of clamping to text.
 		editor.enter_insert_at(0);
 		editor.set_selection(None);
 	}
@@ -101,7 +103,7 @@ fn apply_motion(editor: &mut EditorEngine, motion: impl FnOnce(&mut EditorEngine
 
 fn apply_enter_insert(editor: &mut EditorEngine, before: bool) -> ApplyResult {
 	let layout = editor.document_layout();
-	let default_caret = if before { 0 } else { editor.state.document.len() };
+	let default_caret = if before { 0 } else { editor.core.document.len() };
 	let caret = editor.selection().map_or(default_caret, |selection| {
 		let range = selection.range();
 		if before { range.start } else { range.end }
