@@ -1,11 +1,10 @@
 use {
 	crate::{
 		canvas_view::GlyphCanvas,
-		editor::{EditorTextLayerState, EditorViewState},
 		overlay::OverlayPrimitive,
 		overlay_view::{EditorUnderlayLayer, SceneOverlayLayer},
 		perf::CanvasPerfSink,
-		scene::LayoutScene,
+		presentation::DocumentPresentation,
 		scene_view::StaticSceneLayer,
 		text_view::SceneTextLayer,
 		types::{Message, ViewportMessage},
@@ -22,22 +21,34 @@ const MIN_CANVAS_WIDTH: f32 = 620.0;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CanvasDecorations {
+	/// Draw run top and baseline guides over the scene.
 	pub(crate) show_baselines: bool,
+	/// Draw glyph hitbox overlays for inspect mode.
 	pub(crate) show_hitboxes: bool,
 }
 
-/// Props for the canvas pane.
+/// Immutable inputs for rendering the stacked canvas surface.
+///
+/// The pane is driven from a single [`DocumentPresentation`] plus a small set
+/// of view-local flags such as scroll position and focus state.
 pub(crate) struct CanvasPaneProps {
-	pub(crate) scene: LayoutScene,
-	pub(crate) text_layer: EditorTextLayerState,
+	/// Shared presentation snapshot for all canvas sublayers.
+	pub(crate) presentation: DocumentPresentation,
+	/// Current visible layout width after shell sizing and padding.
 	pub(crate) layout_width: f32,
+	/// Optional static scene decorations.
 	pub(crate) decorations: CanvasDecorations,
+	/// Transient inspect overlays derived from hover/selection state.
 	pub(crate) inspect_overlays: std::sync::Arc<[OverlayPrimitive]>,
-	pub(crate) editor: EditorViewState,
+	/// Whether the canvas currently owns keyboard focus.
 	pub(crate) focused: bool,
+	/// Revision key for static-scene cache invalidation.
 	pub(crate) scene_revision: u64,
+	/// Viewport scroll offset in scene coordinates.
 	pub(crate) scroll: Vector,
+	/// Metrics sink shared by the layered canvas widgets.
 	pub(crate) perf: CanvasPerfSink,
+	/// Whether the shell is in stacked mobile layout.
 	pub(crate) stacked: bool,
 }
 
@@ -64,24 +75,19 @@ pub(crate) fn view_stacked_shell<'a>(
 
 /// Renders the canvas pane inside the shared app surface.
 pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
-	let backdrop = SceneTextLayer::new(
-		props.text_layer.clone(),
-		props.editor.clone(),
-		props.layout_width,
-		props.scroll,
-	)
-	.backdrop_only()
-	.width(Length::Fill)
-	.height(Length::Fill);
-	let underlay = EditorUnderlayLayer::new(props.editor.clone(), props.scroll, props.perf.clone())
+	let backdrop = SceneTextLayer::new(props.presentation.clone(), props.layout_width, props.scroll)
+		.backdrop_only()
 		.width(Length::Fill)
 		.height(Length::Fill);
-	let text_layer = SceneTextLayer::new(props.text_layer, props.editor.clone(), props.layout_width, props.scroll)
+	let underlay = EditorUnderlayLayer::new(props.presentation.clone(), props.scroll, props.perf.clone())
+		.width(Length::Fill)
+		.height(Length::Fill);
+	let text_layer = SceneTextLayer::new(props.presentation.clone(), props.layout_width, props.scroll)
 		.text_only()
 		.width(Length::Fill)
 		.height(Length::Fill);
 	let static_scene = StaticSceneLayer::new(
-		props.scene.clone(),
+		props.presentation.clone(),
 		props.layout_width,
 		props.decorations.show_baselines,
 		props.decorations.show_hitboxes,
@@ -92,10 +98,9 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	.width(Length::Fill)
 	.height(Length::Fill);
 	let overlay = SceneOverlayLayer::new(
-		props.scene.clone(),
+		props.presentation.clone(),
 		props.layout_width,
 		props.inspect_overlays,
-		props.editor.clone(),
 		props.focused,
 		props.scroll,
 		props.perf.clone(),
@@ -104,9 +109,8 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	.height(Length::Fill);
 
 	let canvas_view = canvas(GlyphCanvas {
-		scene: props.scene,
+		presentation: props.presentation,
 		layout_width: props.layout_width,
-		editor: props.editor,
 		perf: props.perf,
 	})
 	.width(Length::Fill)

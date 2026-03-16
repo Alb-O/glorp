@@ -147,17 +147,7 @@ fn resize_reflow_script_scenario_changes_layout_width_and_revisions() {
 
 	let _ = playground.run_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
 
-	assert_eq!(playground.viewport.scene_revision, revision_before);
-	assert!(playground.scene_dirty);
-	assert!(playground.deferred_resize_reflow);
-
-	let _ = playground.update(crate::types::Message::Sidebar(crate::types::SidebarMessage::SelectTab(
-		crate::types::SidebarTab::Inspect,
-	)));
-
 	assert!(playground.viewport.scene_revision > revision_before);
-	assert!(!playground.scene_dirty);
-	assert!(!playground.deferred_resize_reflow);
 	assert_approx_eq(playground.session.scene().max_width, playground.viewport.layout_width);
 }
 
@@ -172,7 +162,7 @@ fn perf_incremental_typing_step_mutates_editor_state() {
 
 	assert_eq!(playground.session.text().len(), before + 1);
 	assert_eq!(playground.session.history_depths().0, history_before + 1);
-	assert!(playground.scene_dirty);
+	assert_eq!(playground.session.scene().text.as_ref(), playground.session.text());
 }
 
 #[test]
@@ -184,8 +174,6 @@ fn perf_resize_reflow_step_rebuilds_immediately_when_scene_ui_is_active() {
 	playground.run_headless_perf_step(crate::PerfScenario::ResizeReflow, 0);
 
 	assert!(playground.viewport.scene_revision > revision_before);
-	assert!(!playground.scene_dirty);
-	assert!(!playground.deferred_resize_reflow);
 }
 
 #[test]

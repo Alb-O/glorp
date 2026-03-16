@@ -38,11 +38,6 @@ impl SceneConfig {
 	}
 }
 
-#[derive(Debug)]
-pub(crate) struct LayoutSceneModel {
-	scene: LayoutScene,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct LayoutScene {
 	pub(crate) text: Arc<str>,

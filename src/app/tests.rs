@@ -111,50 +111,30 @@ fn text_edits_flip_the_preset_to_custom() {
 }
 
 #[test]
-fn controls_tab_defers_scene_rebuild_until_inspect_needs_it() {
+fn controls_tab_keeps_presentation_in_sync_after_text_edits() {
 	let (mut playground, _) = Playground::new();
 	let revision_before = playground.viewport.scene_revision;
-	let scene_text_before = playground.session.scene().text.to_string();
 
 	let _ = playground.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
 	let _ = playground.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
 		"!".to_string(),
 	))));
 
-	assert!(playground.scene_dirty);
-	assert_eq!(playground.viewport.scene_revision, revision_before);
-	assert_eq!(playground.session.text().len(), scene_text_before.len() + 1);
-	assert!(playground.session.text().contains('!'));
-	assert_eq!(playground.session.scene().text.as_ref(), scene_text_before);
-
-	let _ = playground.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
-
-	assert!(!playground.scene_dirty);
 	assert!(playground.viewport.scene_revision > revision_before);
+	assert!(playground.session.text().contains('!'));
 	assert_eq!(playground.session.scene().text.as_ref(), playground.session.text());
 }
 
 #[test]
-fn controls_tab_defers_resize_reflow_until_scene_ui_needs_it() {
+fn resize_reflow_updates_scene_immediately() {
 	let (mut playground, _) = Playground::new();
 	let revision_before = playground.viewport.scene_revision;
-	let scene_width_before = playground.session.scene().max_width;
 
 	let _ = playground.update(resize(Size::new(980.0, 280.0)));
 	let _ = playground.update(Message::Viewport(ViewportMessage::ResizeTick(
 		Instant::now() + RESIZE_REFLOW_INTERVAL,
 	)));
 
-	assert!(playground.scene_dirty);
-	assert!(playground.deferred_resize_reflow);
-	assert_eq!(playground.viewport.scene_revision, revision_before);
-	assert!((playground.viewport.layout_width - scene_width_before).abs() > 0.001);
-	assert_approx_eq(playground.session.scene().max_width, scene_width_before);
-
-	let _ = playground.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
-
-	assert!(!playground.scene_dirty);
-	assert!(!playground.deferred_resize_reflow);
 	assert!(playground.viewport.scene_revision > revision_before);
 	assert_approx_eq(playground.session.scene().max_width, playground.viewport.layout_width);
 }
@@ -258,7 +238,6 @@ fn perf_sidebar_cache_reuses_model_until_metrics_change() {
 fn repeated_no_op_inputs_do_not_churn_scene_state() {
 	let (mut playground, _) = Playground::new();
 	let revision_before = playground.viewport.scene_revision;
-	let scene_text_before = playground.session.scene().text.to_string();
 
 	let _ = playground.update(Message::Controls(ControlsMessage::FontSelected(
 		playground.controls.font,
@@ -271,11 +250,7 @@ fn repeated_no_op_inputs_do_not_churn_scene_state() {
 	let _ = playground.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
 		"!".to_string(),
 	))));
-	assert!(playground.scene_dirty);
 
-	let _ = playground.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Controls)));
-
-	assert_eq!(playground.viewport.scene_revision, revision_before);
-	assert!(playground.scene_dirty);
-	assert_eq!(playground.session.scene().text.as_ref(), scene_text_before);
+	assert!(playground.viewport.scene_revision > revision_before);
+	assert_eq!(playground.session.scene().text.as_ref(), playground.session.text());
 }

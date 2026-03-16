@@ -4,7 +4,7 @@ mod state;
 
 use {
 	self::{geometry::max_scroll, input::decode_event},
-	crate::{editor::EditorViewState, perf::CanvasPerfSink, scene::LayoutScene, types::Message},
+	crate::{perf::CanvasPerfSink, presentation::DocumentPresentation, types::Message},
 	iced::{Rectangle, Theme, mouse, widget::canvas},
 	std::time::Instant,
 	tracing::trace_span,
@@ -16,9 +16,8 @@ pub(crate) use {
 
 #[derive(Debug, Clone)]
 pub(crate) struct GlyphCanvas {
-	pub(crate) scene: LayoutScene,
+	pub(crate) presentation: DocumentPresentation,
 	pub(crate) layout_width: f32,
-	pub(crate) editor: EditorViewState,
 	pub(crate) perf: CanvasPerfSink,
 }
 
@@ -35,12 +34,12 @@ impl canvas::Program<Message> for GlyphCanvas {
 		)
 		.entered();
 		let started = Instant::now();
-		let max_scroll = max_scroll(bounds, &self.scene, self.layout_width);
+		let max_scroll = max_scroll(bounds, &self.presentation.scene, self.layout_width);
 		let action = decode_event(
-			self.editor.mode,
+			self.presentation.mode(),
 			state.focused(),
 			event,
-			&self.scene,
+			&self.presentation.scene,
 			bounds,
 			cursor,
 			state.scroll(),

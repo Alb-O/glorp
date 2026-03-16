@@ -216,6 +216,7 @@ impl EditorOutcome {
 		self.text_edit.is_some()
 	}
 
+	#[cfg(test)]
 	pub(crate) fn requires_scene_rebuild(&self) -> bool {
 		self.document_changed()
 	}
@@ -268,6 +269,10 @@ impl EditorEngine {
 		self.layout_model.layout.buffer()
 	}
 
+	pub(crate) fn scene_config(&self) -> SceneConfig {
+		self.layout_model.layout.config()
+	}
+
 	pub(crate) fn history_depths(&self) -> (usize, usize) {
 		self.state.document.history_depths()
 	}
@@ -285,10 +290,13 @@ impl EditorEngine {
 		false
 	}
 
-	pub(crate) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) {
-		if self.layout_model.layout.sync_buffer_width(font_system, width) {
-			self.refresh_view_state_after_width_sync();
+	pub(crate) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) -> bool {
+		if !self.layout_model.layout.sync_buffer_width(font_system, width) {
+			return false;
 		}
+
+		self.refresh_view_state_after_width_sync();
+		true
 	}
 
 	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
@@ -302,10 +310,6 @@ impl EditorEngine {
 
 	pub(crate) fn view_state(&self) -> EditorViewState {
 		self.layout_model.layout.view_state()
-	}
-
-	pub(crate) fn view_state_ref(&self) -> &EditorViewState {
-		self.layout_model.layout.view_state_ref()
 	}
 
 	pub(crate) fn with_cached_layout_snapshot<T>(&self, f: impl FnOnce(Option<&BufferLayoutSnapshot>) -> T) -> T {

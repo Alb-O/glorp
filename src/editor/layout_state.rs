@@ -30,6 +30,10 @@ pub(super) struct EditorLayout {
 }
 
 impl EditorLayout {
+	pub(super) fn config(&self) -> SceneConfig {
+		self.config
+	}
+
 	pub(super) fn new(font_system: &mut FontSystem, text: &str, config: SceneConfig) -> Self {
 		Self {
 			buffer: Arc::new(build_buffer(font_system, text, config)),

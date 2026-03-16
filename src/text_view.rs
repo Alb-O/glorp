@@ -1,9 +1,5 @@
 use {
-	crate::{
-		canvas_view::scene_origin,
-		editor::{EditorMode, EditorTextLayerState, EditorViewState},
-		types::Message,
-	},
+	crate::{canvas_view::scene_origin, editor::EditorMode, presentation::DocumentPresentation, types::Message},
 	iced::{
 		Color, Element, Length, Point, Rectangle, Size, Theme, Vector,
 		advanced::{Layout, Renderer as _, Widget, graphics::text::Renderer as _, layout, mouse, renderer},
@@ -19,8 +15,7 @@ const BORDER_COLOR: Color = Color::from_rgba(0.8, 0.8, 0.9, 0.65);
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneTextLayer {
-	text_layer: EditorTextLayerState,
-	editor: EditorViewState,
+	presentation: DocumentPresentation,
 	layout_width: f32,
 	scroll: Vector,
 	draw_backdrop: bool,
@@ -30,12 +25,9 @@ pub(crate) struct SceneTextLayer {
 }
 
 impl SceneTextLayer {
-	pub(crate) fn new(
-		text_layer: EditorTextLayerState, editor: EditorViewState, layout_width: f32, scroll: Vector,
-	) -> Self {
+	pub(crate) fn new(presentation: DocumentPresentation, layout_width: f32, scroll: Vector) -> Self {
 		Self {
-			text_layer,
-			editor,
+			presentation,
 			layout_width,
 			scroll,
 			draw_backdrop: true,
@@ -79,7 +71,10 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 		layout::Node::new(limits.resolve(
 			self.width,
 			self.height,
-			Size::new(self.layout_width.max(1.0), self.text_layer.measured_height.max(1.0)),
+			Size::new(
+				self.layout_width.max(1.0),
+				self.presentation.text_layer.measured_height.max(1.0),
+			),
 		))
 	}
 
@@ -89,7 +84,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 	) {
 		let bounds = layout.bounds();
 		let content_width = self.layout_width.max(1.0);
-		let text_height = self.text_layer.measured_height.max(1.0);
+		let text_height = self.presentation.text_layer.measured_height.max(1.0);
 		let origin = Point::new(
 			bounds.x + scene_origin().x - self.scroll.x,
 			bounds.y + scene_origin().y - self.scroll.y,
@@ -141,14 +136,18 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 		}
 
 		if self.draw_text {
-			let buffer = self.text_layer.buffer.clone();
+			let buffer = self.presentation.text_layer.buffer.clone();
 			renderer.fill_raw(iced::advanced::graphics::text::Raw {
 				buffer: buffer.clone(),
 				position: origin,
 				color: TEXT_COLOR,
 				clip_bounds: bounds,
 			});
-			if let Some(clip) = insert_repaint_clip(origin, self.editor.mode, self.editor.viewport_target) {
+			if let Some(clip) = insert_repaint_clip(
+				origin,
+				self.presentation.editor.mode,
+				self.presentation.editor.viewport_target,
+			) {
 				renderer.fill_raw(iced::advanced::graphics::text::Raw {
 					buffer,
 					position: origin,

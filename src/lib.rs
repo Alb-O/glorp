@@ -69,6 +69,7 @@ mod headless_perf;
 mod overlay;
 mod overlay_view;
 mod perf;
+mod presentation;
 mod scene;
 mod scene_view;
 mod telemetry;

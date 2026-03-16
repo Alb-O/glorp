@@ -12,7 +12,7 @@ mod view;
 
 use {
 	self::{
-		session::SceneSession,
+		session::DocumentSession,
 		sidebar_cache::SidebarCache,
 		state::{ControlsState, ShellState, SidebarState, ViewportState},
 	},
@@ -21,9 +21,7 @@ use {
 };
 
 pub struct Playground {
-	session: SceneSession,
-	scene_dirty: bool,
-	deferred_resize_reflow: bool,
+	session: DocumentSession,
 	controls: ControlsState,
 	sidebar: SidebarState,
 	viewport: ViewportState,
@@ -36,13 +34,11 @@ impl Playground {
 	pub(crate) fn new() -> (Self, Task<Message>) {
 		let controls = ControlsState::new();
 		let viewport = ViewportState::new(ControlsState::initial_layout_width());
-		let session = SceneSession::new(controls.preset.text(), controls.scene_config(viewport.layout_width));
+		let session = DocumentSession::new(controls.preset.text(), controls.scene_config(viewport.layout_width));
 
 		(
 			Self {
 				session,
-				scene_dirty: false,
-				deferred_resize_reflow: false,
 				controls,
 				sidebar: SidebarState::new(),
 				viewport,

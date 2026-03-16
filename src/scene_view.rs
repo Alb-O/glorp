@@ -2,7 +2,7 @@ use {
 	crate::{
 		canvas_view::scene_origin,
 		perf::CanvasPerfSink,
-		scene::LayoutScene,
+		presentation::DocumentPresentation,
 		types::{Message, WrapChoice},
 	},
 	iced::{
@@ -24,7 +24,7 @@ struct StaticSceneState {
 
 #[derive(Debug, Clone)]
 pub(crate) struct StaticSceneLayer {
-	scene: LayoutScene,
+	presentation: DocumentPresentation,
 	layout_width: f32,
 	show_baselines: bool,
 	show_hitboxes: bool,
@@ -37,11 +37,11 @@ pub(crate) struct StaticSceneLayer {
 
 impl StaticSceneLayer {
 	pub(crate) fn new(
-		scene: LayoutScene, layout_width: f32, show_baselines: bool, show_hitboxes: bool, scene_revision: u64,
-		scroll: Vector, perf: CanvasPerfSink,
+		presentation: DocumentPresentation, layout_width: f32, show_baselines: bool, show_hitboxes: bool,
+		scene_revision: u64, scroll: Vector, perf: CanvasPerfSink,
 	) -> Self {
 		Self {
-			scene,
+			presentation,
 			layout_width,
 			show_baselines,
 			show_hitboxes,
@@ -95,14 +95,16 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 		let scene_bounds = Rectangle::new(
 			Point::ORIGIN,
 			Size::new(
-				scene_content_width(&self.scene, self.layout_width),
-				self.scene.measured_height.max(1.0),
+				scene_content_width(&self.presentation.scene, self.layout_width),
+				self.presentation.scene.measured_height.max(1.0),
 			),
 		);
 		let scene_size_key = (
 			scene_bounds.width.round().to_bits(),
 			scene_bounds.height.round().to_bits(),
 		);
+		// `scene_revision` deliberately includes decoration-only invalidations
+		// such as baseline/hitbox toggles that do not change the presentation.
 		let revision_changed = state.cached_scene_revision.get() != Some(self.scene_revision);
 		let size_changed = state.cached_scene_size.get() != Some(scene_size_key);
 		let cache_miss = revision_changed || size_changed;
@@ -146,7 +148,7 @@ impl From<StaticSceneLayer> for Element<'_, Message> {
 
 fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 	if layer.show_baselines {
-		for run in layer.scene.runs.iter() {
+		for run in layer.presentation.scene.runs.iter() {
 			let top_line = canvas::Path::line(
 				Point::new(0.0, run.line_top),
 				Point::new(layer.layout_width, run.line_top),
@@ -171,7 +173,7 @@ fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 		}
 	}
 
-	if let Some(inspect_runs) = layer.show_hitboxes.then(|| layer.scene.inspect_runs()) {
+	if let Some(inspect_runs) = layer.show_hitboxes.then(|| layer.presentation.scene.inspect_runs()) {
 		for run in inspect_runs {
 			for glyph in &run.glyphs {
 				frame.stroke_rectangle(
@@ -186,7 +188,7 @@ fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 	}
 }
 
-fn scene_content_width(scene: &LayoutScene, layout_width: f32) -> f32 {
+fn scene_content_width(scene: &crate::scene::LayoutScene, layout_width: f32) -> f32 {
 	if matches!(scene.wrapping, WrapChoice::None) {
 		scene.measured_width.max(layout_width).max(1.0)
 	} else {

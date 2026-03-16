@@ -1,10 +1,11 @@
 use {
 	super::{
 		Playground,
+		session::DocumentUpdate,
 		state::{EditorDispatchSource, RESIZE_REFLOW_INTERVAL},
 	},
 	crate::{
-		editor::{EditorIntent, EditorOutcome, EditorPointerIntent},
+		editor::{EditorIntent, EditorPointerIntent},
 		telemetry::duration_ms,
 		types::{
 			CanvasEvent, ControlsMessage, Message, PerfMessage, SamplePreset, ShellMessage, SidebarMessage, SidebarTab,
@@ -82,21 +83,21 @@ impl Playground {
 					return;
 				}
 				self.controls.font = font;
-				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
+				self.refresh_session_config(SceneRefreshReason::ControlsChanged);
 			}
 			ControlsMessage::ShapingSelected(shaping) => {
 				if self.controls.shaping == shaping {
 					return;
 				}
 				self.controls.shaping = shaping;
-				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
+				self.refresh_session_config(SceneRefreshReason::ControlsChanged);
 			}
 			ControlsMessage::WrappingSelected(wrapping) => {
 				if self.controls.wrapping == wrapping {
 					return;
 				}
 				self.controls.wrapping = wrapping;
-				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
+				self.refresh_session_config(SceneRefreshReason::ControlsChanged);
 			}
 			ControlsMessage::FontSizeChanged(font_size) => {
 				if (self.controls.font_size - font_size).abs() < f32::EPSILON {
@@ -104,28 +105,28 @@ impl Playground {
 				}
 				self.controls.font_size = font_size;
 				self.controls.line_height = self.controls.line_height.max(self.controls.font_size);
-				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
+				self.refresh_session_config(SceneRefreshReason::ControlsChanged);
 			}
 			ControlsMessage::LineHeightChanged(line_height) => {
 				if (self.controls.line_height - line_height).abs() < f32::EPSILON {
 					return;
 				}
 				self.controls.line_height = line_height;
-				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
+				self.refresh_session_config(SceneRefreshReason::ControlsChanged);
 			}
 			ControlsMessage::ShowBaselinesChanged(show_baselines) => {
 				if self.controls.show_baselines == show_baselines {
 					return;
 				}
 				self.controls.show_baselines = show_baselines;
-				self.finish_decoration_toggle(show_baselines);
+				self.finish_decoration_toggle();
 			}
 			ControlsMessage::ShowHitboxesChanged(show_hitboxes) => {
 				if self.controls.show_hitboxes == show_hitboxes {
 					return;
 				}
 				self.controls.show_hitboxes = show_hitboxes;
-				self.finish_decoration_toggle(show_hitboxes);
+				self.finish_decoration_toggle();
 			}
 		}
 	}
@@ -138,7 +139,6 @@ impl Playground {
 				}
 				self.sidebar.set_active_tab(tab);
 				self.sidebar_cache.invalidate_inspect();
-				self.ensure_scene_current(SceneRefreshReason::DocumentEdited);
 			}
 		}
 	}
@@ -171,7 +171,6 @@ impl Playground {
 			ViewportMessage::ResizeTick(_now) => {
 				if let Some(width) = self.viewport.flush_resize() {
 					self.sync_editor_width(width);
-					self.rebuild_scene_or_defer(SceneRefreshReason::ResizeReflow);
 				}
 			}
 		}
@@ -184,13 +183,11 @@ impl Playground {
 			return;
 		}
 
-		let config = self.scene_config();
 		let started = Instant::now();
-		self.session.reset_with_preset(preset.text(), config);
+		self.session.reset_with_preset(preset.text(), self.scene_config());
 		self.viewport.mark_scene_applied();
-		self.scene_dirty = false;
 		let elapsed = started.elapsed();
-		self.finish_scene_refresh(SceneRefreshReason::PresetLoaded, elapsed);
+		self.finish_presentation_refresh(SceneRefreshReason::PresetLoaded, Some(elapsed));
 		trace!(
 			preset = %preset,
 			duration_ms = duration_ms(elapsed),
@@ -215,10 +212,29 @@ impl Playground {
 		}
 	}
 
+	fn refresh_session_config(&mut self, reason: SceneRefreshReason) {
+		let started = Instant::now();
+		if !self.session.sync_config(self.scene_config()) {
+			return;
+		}
+
+		self.viewport.mark_scene_applied();
+		let elapsed = started.elapsed();
+		self.finish_presentation_refresh(reason, Some(elapsed));
+		log_scene_refresh("scene rebuilt", elapsed, self.session.scene());
+	}
+
 	fn sync_editor_width(&mut self, width: f32) {
 		let started = Instant::now();
-		self.session.sync_width(width);
-		self.perf.record_editor_width_sync(started.elapsed());
+		if !self.session.sync_width(width) {
+			return;
+		}
+
+		let elapsed = started.elapsed();
+		self.perf.record_editor_width_sync(elapsed);
+		self.viewport.mark_scene_applied();
+		self.finish_presentation_refresh(SceneRefreshReason::ResizeReflow, Some(elapsed));
+		log_scene_refresh("scene rebuilt", elapsed, self.session.scene());
 	}
 
 	fn dispatch_editor_intent(&mut self, intent: EditorIntent, source: EditorDispatchSource) {
@@ -226,14 +242,13 @@ impl Playground {
 		let command_started = Instant::now();
 		let apply_started = Instant::now();
 		let outcome = self.session.apply_editor_intent(intent);
-		let document_changed = outcome.document_changed();
+		let document_changed = outcome.document_changed;
 		let view_changed = outcome.view_changed;
 		let selection_changed = outcome.selection_changed;
 		let mode_changed = outcome.mode_changed;
-		let requires_scene_rebuild = outcome.requires_scene_rebuild();
 		let apply_elapsed = apply_started.elapsed();
 		self.perf.record_editor_apply(apply_elapsed);
-		self.handle_editor_outcome(&outcome, source);
+		self.handle_document_update(&outcome, source);
 		let command_elapsed = command_started.elapsed();
 		self.perf.record_editor_command(command_elapsed);
 
@@ -248,7 +263,6 @@ impl Playground {
 				view_changed,
 				selection_changed,
 				mode_changed,
-				requires_scene_rebuild,
 				text_bytes = self.session.text().len(),
 				"editor command over frame budget"
 			);
@@ -260,7 +274,6 @@ impl Playground {
 				view_changed,
 				selection_changed,
 				mode_changed,
-				requires_scene_rebuild,
 				text_bytes = self.session.text().len(),
 				"editor command over warning threshold"
 			);
@@ -272,16 +285,16 @@ impl Playground {
 				view_changed,
 				selection_changed,
 				mode_changed,
-				requires_scene_rebuild,
 				text_bytes = self.session.text().len(),
 				"editor command applied"
 			);
 		}
 	}
 
-	fn handle_editor_outcome(&mut self, outcome: &EditorOutcome, source: EditorDispatchSource) {
-		if outcome.document_changed() {
+	fn handle_document_update(&mut self, outcome: &DocumentUpdate, source: EditorDispatchSource) {
+		if outcome.document_changed {
 			self.controls.preset = SamplePreset::Custom;
+			self.finish_presentation_refresh(SceneRefreshReason::DocumentEdited, None);
 			self.sidebar_cache.invalidate_perf();
 		}
 
@@ -293,100 +306,29 @@ impl Playground {
 			self.sidebar_cache.invalidate_perf();
 		}
 
-		if outcome.requires_scene_rebuild() {
-			self.rebuild_scene_or_defer(SceneRefreshReason::DocumentEdited);
-		}
-
 		if source.reveals_viewport() && outcome.view_changed {
 			self.viewport
 				.reveal_target_with_metrics(outcome.viewport_target, self.session.viewport_metrics());
 		}
 	}
 
-	fn rebuild_scene(&mut self, reason: SceneRefreshReason) {
-		let _span = trace_span!("scene.rebuild", reason = ?reason).entered();
-		let config = self.scene_config();
-		let started = Instant::now();
-		self.session.rebuild(config);
-		self.viewport.mark_scene_applied();
-		self.scene_dirty = false;
-		self.deferred_resize_reflow = false;
-		let elapsed = started.elapsed();
-		self.finish_scene_refresh(reason, elapsed);
-
-		let elapsed_ms = duration_ms(elapsed);
-		if elapsed_ms >= 16.7 {
-			warn!(
-				duration_ms = elapsed_ms,
-				scene_width = self.session.scene().measured_width,
-				scene_height = self.session.scene().measured_height,
-				"scene rebuild over frame budget"
-			);
-		} else if elapsed_ms >= 8.0 {
-			debug!(
-				duration_ms = elapsed_ms,
-				scene_width = self.session.scene().measured_width,
-				scene_height = self.session.scene().measured_height,
-				"scene rebuild over warning threshold"
-			);
-		} else {
-			trace!(
-				duration_ms = elapsed_ms,
-				scene_width = self.session.scene().measured_width,
-				scene_height = self.session.scene().measured_height,
-				"scene rebuilt"
-			);
-		}
-	}
-
-	fn finish_scene_refresh(&mut self, reason: SceneRefreshReason, duration: Duration) {
+	fn finish_presentation_refresh(&mut self, reason: SceneRefreshReason, duration: Option<Duration>) {
 		self.sidebar.sync_after_scene_refresh();
 		self.viewport
 			.finish_scene_refresh(self.session.scene(), reason.resets_scroll());
 		self.sidebar_cache.invalidate_scene_derived();
-		self.perf.record_scene_build(duration);
 
-		if reason.records_resize_reflow() {
-			self.perf.record_resize_reflow(duration);
+		if let Some(duration) = duration {
+			self.perf.record_scene_build(duration);
+			if reason.records_resize_reflow() {
+				self.perf.record_resize_reflow(duration);
+			}
 		}
 	}
 
-	fn finish_decoration_toggle(&mut self, enabled: bool) {
-		if enabled && self.scene_dirty {
-			self.rebuild_scene(SceneRefreshReason::ControlsChanged);
-			return;
-		}
-
+	fn finish_decoration_toggle(&mut self) {
 		self.viewport.scene_revision += 1;
 		self.sidebar_cache.invalidate_scene_derived();
-	}
-
-	fn ensure_scene_current(&mut self, reason: SceneRefreshReason) {
-		if self.scene_dirty && self.requires_immediate_scene_refresh() {
-			self.rebuild_scene(self.pending_scene_refresh_reason(reason));
-		}
-	}
-
-	fn rebuild_scene_or_defer(&mut self, reason: SceneRefreshReason) {
-		if self.requires_immediate_scene_refresh() {
-			self.rebuild_scene(self.pending_scene_refresh_reason(reason));
-			return;
-		}
-
-		self.scene_dirty = true;
-		self.deferred_resize_reflow |= matches!(reason, SceneRefreshReason::ResizeReflow);
-	}
-
-	fn pending_scene_refresh_reason(&self, fallback: SceneRefreshReason) -> SceneRefreshReason {
-		if self.deferred_resize_reflow {
-			SceneRefreshReason::ResizeReflow
-		} else {
-			fallback
-		}
-	}
-
-	fn requires_immediate_scene_refresh(&self) -> bool {
-		self.sidebar.active_tab != SidebarTab::Controls || self.controls.show_baselines || self.controls.show_hitboxes
 	}
 }
 
@@ -408,5 +350,31 @@ fn message_kind(message: &Message) -> &'static str {
 		Message::Perf(_) => "perf",
 		Message::Viewport(_) => "viewport",
 		Message::Shell(_) => "shell",
+	}
+}
+
+fn log_scene_refresh(label: &str, elapsed: Duration, scene: &crate::scene::LayoutScene) {
+	let elapsed_ms = duration_ms(elapsed);
+	if elapsed_ms >= 16.7 {
+		warn!(
+			duration_ms = elapsed_ms,
+			scene_width = scene.measured_width,
+			scene_height = scene.measured_height,
+			"{label} over frame budget"
+		);
+	} else if elapsed_ms >= 8.0 {
+		debug!(
+			duration_ms = elapsed_ms,
+			scene_width = scene.measured_width,
+			scene_height = scene.measured_height,
+			"{label} over warning threshold"
+		);
+	} else {
+		trace!(
+			duration_ms = elapsed_ms,
+			scene_width = scene.measured_width,
+			scene_height = scene.measured_height,
+			"{label}"
+		);
 	}
 }

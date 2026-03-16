@@ -4,6 +4,7 @@ use {
 		editor::{EditorMode, EditorViewState},
 		overlay::{EditorOverlayTone, OverlayRectKind},
 		perf::{PerfMonitor, PerfSnapshotKey},
+		presentation::DocumentPresentation,
 		scene::{LayoutScene, debug_snippet},
 		types::CanvasTarget,
 	},
@@ -16,7 +17,7 @@ use {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) struct InspectSidebarKey {
-	scene_revision: u64,
+	presentation_revision: u64,
 	hovered_target: Option<CanvasTarget>,
 	selected_target: Option<CanvasTarget>,
 	editor_mode: EditorMode,
@@ -30,7 +31,7 @@ pub(super) struct InspectSidebarKey {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) struct PerfSidebarKey {
-	scene_revision: u64,
+	presentation_revision: u64,
 	editor_mode: EditorMode,
 	editor_bytes: usize,
 	perf: PerfSnapshotKey,
@@ -84,10 +85,9 @@ impl SidebarCache {
 		let model = InspectSidebarModel {
 			key,
 			data: Arc::new(InspectSidebarData {
-				warnings: args.scene.warnings.clone(),
+				warnings: args.presentation.scene.warnings.clone(),
 				interaction_details: interaction_details(
-					args.scene,
-					args.editor,
+					args.presentation,
 					args.hovered_target,
 					args.selected_target,
 					args.undo_depth,
@@ -102,14 +102,11 @@ impl SidebarCache {
 		model
 	}
 
-	pub(super) fn perf_model(
-		&self, scene_revision: u64, scene: &LayoutScene, perf: &PerfMonitor, editor_mode: EditorMode,
-		editor_bytes: usize,
-	) -> PerfSidebarModel {
+	pub(super) fn perf_model(&self, presentation: &DocumentPresentation, perf: &PerfMonitor) -> PerfSidebarModel {
 		let key = PerfSidebarKey {
-			scene_revision,
-			editor_mode,
-			editor_bytes,
+			presentation_revision: presentation.revision,
+			editor_mode: presentation.mode(),
+			editor_bytes: presentation.editor_bytes(),
 			perf: perf.key(),
 		};
 
@@ -120,7 +117,11 @@ impl SidebarCache {
 		let model = PerfSidebarModel {
 			key,
 			data: Arc::new(PerfSidebarData {
-				dashboard: Arc::new(perf.dashboard(scene, editor_mode, editor_bytes)),
+				dashboard: Arc::new(perf.dashboard(
+					&presentation.scene,
+					presentation.mode(),
+					presentation.editor_bytes(),
+				)),
 			}),
 		};
 		self.perf_dirty.set(false);
@@ -143,9 +144,7 @@ impl SidebarCache {
 
 #[derive(Clone, Copy)]
 pub(super) struct InspectSidebarArgs<'a> {
-	pub(super) scene_revision: u64,
-	pub(super) scene: &'a LayoutScene,
-	pub(super) editor: &'a EditorViewState,
+	pub(super) presentation: &'a DocumentPresentation,
 	pub(super) hovered_target: Option<CanvasTarget>,
 	pub(super) selected_target: Option<CanvasTarget>,
 	pub(super) undo_depth: usize,
@@ -155,14 +154,14 @@ pub(super) struct InspectSidebarArgs<'a> {
 impl InspectSidebarArgs<'_> {
 	fn key(self) -> InspectSidebarKey {
 		InspectSidebarKey {
-			scene_revision: self.scene_revision,
+			presentation_revision: self.presentation.revision,
 			hovered_target: self.hovered_target,
 			selected_target: self.selected_target,
-			editor_mode: self.editor.mode,
-			selection_start: self.editor.selection.as_ref().map(|range| range.start),
-			selection_end: self.editor.selection.as_ref().map(|range| range.end),
-			selection_head: self.editor.selection_head,
-			pointer_anchor: self.editor.pointer_anchor,
+			editor_mode: self.presentation.editor.mode,
+			selection_start: self.presentation.editor.selection.as_ref().map(|range| range.start),
+			selection_end: self.presentation.editor.selection.as_ref().map(|range| range.end),
+			selection_head: self.presentation.editor.selection_head,
+			pointer_anchor: self.presentation.editor.pointer_anchor,
 			undo_depth: self.undo_depth,
 			redo_depth: self.redo_depth,
 		}
@@ -184,14 +183,14 @@ where
 }
 
 fn interaction_details(
-	scene: &LayoutScene, editor: &EditorViewState, hovered_target: Option<CanvasTarget>,
-	selected_target: Option<CanvasTarget>, undo_depth: usize, redo_depth: usize,
+	presentation: &DocumentPresentation, hovered_target: Option<CanvasTarget>, selected_target: Option<CanvasTarget>,
+	undo_depth: usize, redo_depth: usize,
 ) -> Arc<str> {
 	Arc::<str>::from(format!(
 		"editor\n{}\n\nhover\n{}\n\nselection\n{}",
-		editor_selection_details(&scene.text, editor, undo_depth, redo_depth),
-		target_details_or_none(scene, hovered_target),
-		target_details_or_none(scene, selected_target),
+		editor_selection_details(presentation.text(), &presentation.editor, undo_depth, redo_depth),
+		target_details_or_none(&presentation.scene, hovered_target),
+		target_details_or_none(&presentation.scene, selected_target),
 	))
 }
 

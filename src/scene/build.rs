@@ -2,7 +2,7 @@
 use cosmic_text::Metrics;
 use {
 	super::{
-		LayoutScene, LayoutSceneModel, RunInfo, SceneConfig, geometry::count_clusters, inspect::SceneInspectCache,
+		LayoutScene, RunInfo, SceneConfig, geometry::count_clusters, inspect::SceneInspectCache,
 		text::line_byte_offsets,
 	},
 	crate::editor::BufferLayoutSnapshot,
@@ -28,27 +28,14 @@ pub(crate) struct LayoutSceneTestSpec {
 	pub(crate) clusters: Vec<super::ClusterInfo>,
 }
 
-impl LayoutSceneModel {
-	pub(crate) fn new(
-		font_system: &FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig,
-		snapshot: Option<&BufferLayoutSnapshot>,
-	) -> Self {
-		let scene = LayoutScene::from_buffer(font_system, text, buffer, config, snapshot);
-
-		Self { scene }
-	}
-
-	pub(crate) fn scene(&self) -> &LayoutScene {
-		&self.scene
-	}
-
-	pub(crate) fn rebuild(
-		&mut self, font_system: &FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig,
-		snapshot: Option<&BufferLayoutSnapshot>,
-	) {
-		self.scene = LayoutScene::from_buffer(font_system, text, buffer, config, snapshot);
-	}
-}
+type SceneData = (
+	Vec<RunInfo>,
+	f32,
+	f32,
+	usize,
+	Arc<[usize]>,
+	Arc<[(cosmic_text::fontdb::ID, Arc<str>)]>,
+);
 
 impl LayoutScene {
 	#[cfg(test)]
@@ -68,17 +55,19 @@ impl LayoutScene {
 		};
 
 		let buffer = Arc::new(build_buffer(font_system, text, config));
-		let model = LayoutSceneModel::new(font_system, text, buffer, config, None);
-		model.scene
+		Self::from_buffer(font_system, text, buffer, config, None)
 	}
 
-	fn from_buffer(
+	pub(crate) fn from_buffer(
 		font_system: &FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig,
 		snapshot: Option<&BufferLayoutSnapshot>,
 	) -> Self {
 		let (runs, measured_width, measured_height, cluster_count, line_byte_offsets, font_names) =
 			if let Some(snapshot) = snapshot {
 				(
+					// The editor snapshot already computed run geometry and line
+					// offsets; keep inspect data lazy and only copy the summary
+					// needed for scene-level rendering and stats here.
 					snapshot
 						.runs()
 						.iter()
@@ -138,16 +127,7 @@ impl LayoutScene {
 	}
 }
 
-fn derive_scene_data(
-	font_system: &FontSystem, text: &str, buffer: &Buffer,
-) -> (
-	Vec<RunInfo>,
-	f32,
-	f32,
-	usize,
-	Arc<[usize]>,
-	Arc<[(cosmic_text::fontdb::ID, Arc<str>)]>,
-) {
+fn derive_scene_data(font_system: &FontSystem, text: &str, buffer: &Buffer) -> SceneData {
 	let mut runs = Vec::new();
 	let mut measured_width: f32 = 0.0;
 	let mut measured_height: f32 = 0.0;
@@ -180,7 +160,7 @@ fn derive_scene_data(
 		measured_height,
 		cluster_count,
 		line_byte_offsets,
-		resolve_font_names(font_system, font_ids.into_iter()),
+		resolve_font_names(font_system, font_ids),
 	)
 }
 
@@ -207,7 +187,7 @@ fn resolve_font_names_from_buffer(
 		font_ids.extend(run.glyphs.iter().map(|glyph| glyph.font_id));
 	}
 
-	resolve_font_names(font_system, font_ids.into_iter())
+	resolve_font_names(font_system, font_ids)
 }
 
 #[cfg(test)]

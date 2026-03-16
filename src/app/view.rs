@@ -58,11 +58,12 @@ impl Playground {
 
 	fn view_sidebar(&self, stacked: bool) -> Element<'_, Message> {
 		let (undo_depth, redo_depth) = self.session.history_depths();
+		let presentation = self.session.presentation();
 		let body = render_sidebar_body(self.sidebar_body_data(undo_depth, redo_depth));
 		view_sidebar(SidebarProps {
 			active_tab: self.sidebar.active_tab,
-			editor_mode: self.session.mode(),
-			editor_bytes: self.session.text().len(),
+			editor_mode: presentation.mode(),
+			editor_bytes: presentation.editor_bytes(),
 			undo_depth,
 			redo_depth,
 			body,
@@ -76,8 +77,9 @@ impl Playground {
 	}
 
 	fn view_canvas(&self, stacked: bool) -> Element<'static, Message> {
+		let presentation = self.session.presentation();
 		let inspect_overlays = if self.sidebar.active_tab == SidebarTab::Inspect {
-			self.session.inspect_overlay_primitives(
+			presentation.inspect_overlay_primitives(
 				self.sidebar.hovered_target,
 				self.sidebar.selected_target,
 				self.viewport.layout_width,
@@ -88,15 +90,13 @@ impl Playground {
 		};
 
 		view_canvas_pane(CanvasPaneProps {
-			scene: self.session.scene().clone(),
-			text_layer: self.session.text_layer_state(),
+			presentation: presentation.clone(),
 			layout_width: self.viewport.layout_width,
 			decorations: CanvasDecorations {
 				show_baselines: self.controls.show_baselines,
 				show_hitboxes: self.controls.show_hitboxes,
 			},
 			inspect_overlays,
-			editor: self.session.view_state(),
 			focused: self.viewport.canvas_focused,
 			scene_revision: self.viewport.scene_revision,
 			scroll: self.viewport.canvas_scroll,
@@ -124,9 +124,7 @@ impl Playground {
 
 	fn inspect_sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
 		let model = self.sidebar_cache.inspect_model(InspectSidebarArgs {
-			scene_revision: self.viewport.scene_revision,
-			scene: self.session.scene(),
-			editor: self.session.view_state_ref(),
+			presentation: self.session.presentation(),
 			hovered_target: self.sidebar.hovered_target,
 			selected_target: self.sidebar.selected_target,
 			undo_depth,
@@ -138,15 +136,7 @@ impl Playground {
 	}
 
 	fn perf_sidebar_body_data(&self) -> SidebarBodyData {
-		let editor_mode = self.session.mode();
-		let editor_bytes = self.session.text().len();
-		let model = self.sidebar_cache.perf_model(
-			self.viewport.scene_revision,
-			self.session.scene(),
-			&self.perf,
-			editor_mode,
-			editor_bytes,
-		);
+		let model = self.sidebar_cache.perf_model(self.session.presentation(), &self.perf);
 
 		let PerfSidebarModel { data, .. } = model;
 		SidebarBodyData::Perf(data)
