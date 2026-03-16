@@ -305,10 +305,15 @@ impl EditorEngine {
 	}
 
 	pub(crate) fn shared_document_layout(&self) -> Arc<DocumentLayout> {
-		self.layout_model
-			.layout
-			.cached_document_layout_arc()
-			.unwrap_or_else(|| Arc::new(self.document_layout()))
+		if let Some(layout) = self.layout_model.layout.cached_document_layout_arc() {
+			return layout;
+		}
+
+		// Seed the cache on first demand so later presentation/metric reads stay
+		// on the same derived layout instead of rebuilding in parallel.
+		let layout = Arc::new(self.document_layout());
+		self.layout_model.layout.set_document_layout(layout.clone());
+		layout
 	}
 
 	pub(crate) fn viewport_metrics(&self) -> EditorViewportMetrics {

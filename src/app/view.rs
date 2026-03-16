@@ -158,10 +158,11 @@ fn render_sidebar_body(body: SidebarBodyData) -> Element<'static, Message> {
 		SidebarBodyData::Inspect(data) => {
 			let key = Arc::as_ptr(&data);
 			lazy(key, move |_| {
-				view_inspect_tab(InspectTabProps {
+				let props = InspectTabProps {
 					warnings: data.warnings.clone(),
 					interaction_details: data.interaction_details.clone(),
-				})
+				};
+				view_inspect_tab(&props)
 			})
 			.into()
 		}

@@ -21,7 +21,7 @@ fn document_layout_build_is_stable_for_unicode_replace() {
 	let mut font_system = make_font_system();
 	let buffer = super::build_buffer(&mut font_system, &expected, config);
 	let font_names = super::resolve_font_names_from_buffer(&font_system, &buffer);
-	let layout = DocumentLayout::build(&expected, &buffer, config, font_names);
+	let layout = DocumentLayout::build(&expected, &buffer, config, font_names.as_ref());
 
 	assert_eq!(layout.text.as_ref(), expected);
 	assert!(layout.glyph_count > 0);
@@ -42,7 +42,7 @@ fn inspect_overlays_emit_run_and_cluster_primitives() {
 	let mut font_system = make_font_system();
 	let buffer = super::build_buffer(&mut font_system, "alpha beta", config);
 	let font_names = super::resolve_font_names_from_buffer(&font_system, &buffer);
-	let layout = DocumentLayout::build("alpha beta", &buffer, config, font_names);
+	let layout = DocumentLayout::build("alpha beta", &buffer, config, font_names.as_ref());
 
 	let overlays = layout.inspect_overlay_primitives(
 		Some(CanvasTarget::Run(0)),
@@ -78,7 +78,7 @@ fn cluster_target_details_are_rebuilt_without_cache_layer() {
 	let mut font_system = make_font_system();
 	let buffer = super::build_buffer(&mut font_system, "alpha beta", config);
 	let font_names = super::resolve_font_names_from_buffer(&font_system, &buffer);
-	let layout = DocumentLayout::build("alpha beta", &buffer, config, font_names);
+	let layout = DocumentLayout::build("alpha beta", &buffer, config, font_names.as_ref());
 
 	let details = layout
 		.target_details(Some(CanvasTarget::Cluster(0)))

@@ -34,54 +34,33 @@ pub(crate) struct CanvasPerfSink {
 
 impl CanvasPerfSink {
 	pub(crate) fn record_canvas_update(&self, duration: Duration) {
-		let Ok(mut pending) = self.pending.lock() else {
-			return;
-		};
-
-		push_bounded(&mut pending.updates, duration, PENDING_LIMIT);
-
-		let elapsed_ms = duration_ms(duration);
-		if elapsed_ms >= 16.7 {
-			warn!(duration_ms = elapsed_ms, "canvas update over frame budget");
-		} else if elapsed_ms >= 8.0 {
-			debug!(duration_ms = elapsed_ms, "canvas update over warning threshold");
-		} else {
-			trace!(duration_ms = elapsed_ms, "canvas update");
-		}
+		self.record_pending_duration(
+			duration,
+			|pending| &mut pending.updates,
+			"canvas update over frame budget",
+			"canvas update over warning threshold",
+			"canvas update",
+		);
 	}
 
 	pub(crate) fn record_canvas_underlay(&self, duration: Duration) {
-		let Ok(mut pending) = self.pending.lock() else {
-			return;
-		};
-
-		push_bounded(&mut pending.underlay, duration, PENDING_LIMIT);
-
-		let elapsed_ms = duration_ms(duration);
-		if elapsed_ms >= 16.7 {
-			warn!(duration_ms = elapsed_ms, "underlay draw over frame budget");
-		} else if elapsed_ms >= 8.0 {
-			debug!(duration_ms = elapsed_ms, "underlay draw over warning threshold");
-		} else {
-			trace!(duration_ms = elapsed_ms, "underlay draw");
-		}
+		self.record_pending_duration(
+			duration,
+			|pending| &mut pending.underlay,
+			"underlay draw over frame budget",
+			"underlay draw over warning threshold",
+			"underlay draw",
+		);
 	}
 
 	pub(crate) fn record_canvas_overlay(&self, duration: Duration) {
-		let Ok(mut pending) = self.pending.lock() else {
-			return;
-		};
-
-		push_bounded(&mut pending.overlay, duration, PENDING_LIMIT);
-
-		let elapsed_ms = duration_ms(duration);
-		if elapsed_ms >= 16.7 {
-			warn!(duration_ms = elapsed_ms, "overlay draw over frame budget");
-		} else if elapsed_ms >= 8.0 {
-			debug!(duration_ms = elapsed_ms, "overlay draw over warning threshold");
-		} else {
-			trace!(duration_ms = elapsed_ms, "overlay draw");
-		}
+		self.record_pending_duration(
+			duration,
+			|pending| &mut pending.overlay,
+			"overlay draw over frame budget",
+			"overlay draw over warning threshold",
+			"overlay draw",
+		);
 	}
 
 	pub(crate) fn record_canvas_draw(&self, total: Duration, static_build: Option<Duration>, cache_miss: bool) {
@@ -100,19 +79,7 @@ impl CanvasPerfSink {
 			PENDING_LIMIT,
 		);
 
-		let total_ms = duration_ms(total);
-		let static_build_ms = static_build.map(duration_ms);
-
-		if total_ms >= 16.7 {
-			warn!(total_ms, static_build_ms, cache_miss, "canvas draw over frame budget");
-		} else if total_ms >= 8.0 {
-			debug!(
-				total_ms,
-				static_build_ms, cache_miss, "canvas draw over warning threshold"
-			);
-		} else {
-			trace!(total_ms, static_build_ms, cache_miss, "canvas draw");
-		}
+		log_draw_duration(total, static_build, cache_miss);
 	}
 
 	pub(super) fn drain(&self) -> PendingSamples {
@@ -126,6 +93,49 @@ impl CanvasPerfSink {
 			overlay: mem::take(&mut pending.overlay),
 			draws: mem::take(&mut pending.draws),
 		}
+	}
+}
+
+impl CanvasPerfSink {
+	fn record_pending_duration(
+		&self, duration: Duration, slot: impl FnOnce(&mut PendingSamples) -> &mut VecDeque<Duration>,
+		over_budget: &'static str, over_warning: &'static str, normal: &'static str,
+	) {
+		let Ok(mut pending) = self.pending.lock() else {
+			return;
+		};
+
+		// Keep queueing and threshold logging coupled so the three simple canvas
+		// paths cannot drift in behavior as they evolve.
+		push_bounded(slot(&mut pending), duration, PENDING_LIMIT);
+		log_duration(duration, over_budget, over_warning, normal);
+	}
+}
+
+fn log_duration(duration: Duration, over_budget: &'static str, over_warning: &'static str, normal: &'static str) {
+	let elapsed_ms = duration_ms(duration);
+	if elapsed_ms >= 16.7 {
+		warn!(duration_ms = elapsed_ms, "{over_budget}");
+	} else if elapsed_ms >= 8.0 {
+		debug!(duration_ms = elapsed_ms, "{over_warning}");
+	} else {
+		trace!(duration_ms = elapsed_ms, "{normal}");
+	}
+}
+
+fn log_draw_duration(total: Duration, static_build: Option<Duration>, cache_miss: bool) {
+	let total_ms = duration_ms(total);
+	let static_build_ms = static_build.map(duration_ms);
+
+	if total_ms >= 16.7 {
+		warn!(total_ms, static_build_ms, cache_miss, "canvas draw over frame budget");
+	} else if total_ms >= 8.0 {
+		debug!(
+			total_ms,
+			static_build_ms, cache_miss, "canvas draw over warning threshold"
+		);
+	} else {
+		trace!(total_ms, static_build_ms, cache_miss, "canvas draw");
 	}
 }
 

@@ -1,5 +1,5 @@
 use {
-	super::{DocumentLayout, FontNameMap, LayoutCluster, LayoutRun, SceneConfig, line_byte_offsets},
+	super::{DocumentLayout, LayoutCluster, LayoutRun, SceneConfig, line_byte_offsets},
 	cosmic_text::{Buffer, FontSystem, fontdb},
 	std::{collections::BTreeSet, sync::Arc},
 };
@@ -21,7 +21,9 @@ pub(crate) struct DocumentLayoutTestSpec {
 }
 
 impl DocumentLayout {
-	pub(crate) fn build(text: &str, buffer: &Buffer, config: SceneConfig, font_names: FontNameMap) -> Self {
+	pub(crate) fn build(
+		text: &str, buffer: &Buffer, config: SceneConfig, font_names: &[(fontdb::ID, Arc<str>)],
+	) -> Self {
 		let text = Arc::<str>::from(text);
 		let line_byte_offsets = Arc::<[usize]>::from(line_byte_offsets(text.as_ref()));
 		let mut runs = Vec::new();
@@ -41,7 +43,7 @@ impl DocumentLayout {
 				run.line_top,
 				run.line_height,
 				run.glyphs,
-				&font_names,
+				font_names,
 			));
 			let cluster_end = clusters.len();
 			glyph_count += run.glyphs.len();
@@ -185,7 +187,7 @@ impl DocumentLayout {
 	pub(crate) fn build_for_test(font_system: &mut FontSystem, text: &str, config: SceneConfig) -> Self {
 		let buffer = build_buffer(font_system, text, config);
 		let font_names = resolve_font_names_from_buffer(font_system, &buffer);
-		Self::build(text, &buffer, config, font_names)
+		Self::build(text, &buffer, config, font_names.as_ref())
 	}
 
 	pub(crate) fn new_for_test(spec: DocumentLayoutTestSpec) -> Self {

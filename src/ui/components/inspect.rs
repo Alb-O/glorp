@@ -16,13 +16,13 @@ pub(crate) struct InspectTabProps {
 	pub(crate) interaction_details: Arc<str>,
 }
 
-pub(crate) fn view_inspect_tab(props: InspectTabProps) -> Element<'static, Message> {
+pub(crate) fn view_inspect_tab(props: &InspectTabProps) -> Element<'static, Message> {
 	panel_scrollable(
 		column![
 			text("Warnings").size(18),
 			view_warnings_panel(&props.warnings),
 			text("Hover and selection").size(18),
-			view_interaction_panel(props.interaction_details),
+			view_interaction_panel(&props.interaction_details),
 		]
 		.spacing(12),
 	)
@@ -65,7 +65,7 @@ fn view_warnings_panel(warnings: &[String]) -> Element<'static, Message> {
 		.into()
 }
 
-fn view_interaction_panel(interaction_details: Arc<str>) -> Element<'static, Message> {
+fn view_interaction_panel(interaction_details: &Arc<str>) -> Element<'static, Message> {
 	container(
 		panel_scrollable(
 			text(interaction_details.as_ref().to_owned())

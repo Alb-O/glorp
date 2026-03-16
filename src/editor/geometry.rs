@@ -60,10 +60,12 @@ pub(super) fn insert_cursor_block(buffer: &Buffer, font_size: f32, text: &str, b
 }
 
 pub(super) fn insert_selection_range(buffer: &Buffer, text: &str, byte: usize) -> Option<Range<usize>> {
-	let cursor = byte_to_cursor(text, byte);
+	// Insert-mode hit tracking needs both the line lookup and the byte offset;
+	// compute the offsets once and reuse them for both.
+	let line_offsets = line_byte_offsets(text);
+	let cursor = byte_to_cursor_with_offsets(text, &line_offsets, byte);
 	let line = buffer.lines.get(cursor.line)?;
 	let layout = line.layout_opt()?;
-	let line_offsets = line_byte_offsets(text);
 	let line_offset = *line_offsets.get(cursor.line)?;
 	let ends_hard_line = byte
 		.checked_add(1)
@@ -308,4 +310,19 @@ fn visual_lines_offset(line: usize, buffer: &Buffer) -> f32 {
 
 fn visual_line_len(line: &cosmic_text::BufferLine) -> f32 {
 	line.layout_opt().map_or(0.0, |layout| layout.len() as f32)
+}
+
+fn byte_to_cursor_with_offsets(text: &str, line_offsets: &[usize], byte: usize) -> cosmic_text::Cursor {
+	let mut clamped = byte.min(text.len());
+	while clamped > 0 && !text.is_char_boundary(clamped) {
+		clamped -= 1;
+	}
+
+	// `partition_point` keeps this in the same offset-space as the caller's
+	// reused line table instead of rebuilding line boundaries through `byte_to_cursor`.
+	let line = line_offsets
+		.partition_point(|offset| *offset <= clamped)
+		.saturating_sub(1);
+	let index = clamped - line_offsets[line];
+	cosmic_text::Cursor::new(line, index)
 }

@@ -164,17 +164,9 @@ impl PerfStore {
 	pub(super) fn flush_canvas_metrics(&mut self, sink: &CanvasPerfSink) {
 		let pending = sink.drain();
 
-		for duration in pending.updates {
-			self.record(MetricKind::CanvasUpdate, duration);
-		}
-
-		for duration in pending.underlay {
-			self.record(MetricKind::CanvasUnderlayDraw, duration);
-		}
-
-		for duration in pending.overlay {
-			self.record(MetricKind::CanvasOverlayDraw, duration);
-		}
+		self.record_pending_durations(MetricKind::CanvasUpdate, pending.updates);
+		self.record_pending_durations(MetricKind::CanvasUnderlayDraw, pending.underlay);
+		self.record_pending_durations(MetricKind::CanvasOverlayDraw, pending.overlay);
 
 		for sample in pending.draws {
 			self.record(MetricKind::CanvasDraw, sample.total);
@@ -193,6 +185,12 @@ impl PerfStore {
 
 	fn record(&mut self, kind: MetricKind, duration: Duration) {
 		self.metrics[kind.index()].record(duration);
+	}
+
+	fn record_pending_durations(&mut self, kind: MetricKind, durations: VecDeque<Duration>) {
+		for duration in durations {
+			self.record(kind, duration);
+		}
 	}
 }
 

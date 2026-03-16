@@ -161,10 +161,12 @@ impl DocumentSession {
 
 /// Rebuilds the full layout/editor presentation from the editor snapshot.
 fn build_presentation(editor: &EditorEngine, revision: u64) -> DocumentPresentation {
+	// Pull the shared layout first: it also backfills the editor-side cache for
+	// this revision, which keeps the text layer and metrics aligned to one build.
+	let layout = editor.shared_document_layout();
 	let text_layer = editor.text_layer_state();
 	let viewport_metrics = editor.viewport_metrics();
 	let editor_view = editor.view_state();
-	let layout = editor.shared_document_layout();
 
 	DocumentPresentation::new(revision, viewport_metrics, text_layer, layout, editor_view)
 }

@@ -100,7 +100,8 @@ impl EditorLayout {
 	}
 
 	pub(super) fn document_layout(&self, text: &str) -> DocumentLayout {
-		DocumentLayout::build(text, &self.buffer, self.config, self.font_names.borrow().clone())
+		let font_names = self.font_names.borrow();
+		DocumentLayout::build(text, &self.buffer, self.config, font_names.as_ref())
 	}
 
 	pub(super) fn cached_document_layout_arc(&self) -> Option<Arc<DocumentLayout>> {
