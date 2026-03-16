@@ -62,16 +62,14 @@ impl LayoutScene {
 	pub(crate) fn cluster_index_for_target(&self, target: CanvasTarget) -> Option<usize> {
 		match target {
 			CanvasTarget::Run(run_index) => self.nearest_cluster_in_run(run_index, 0.0),
-			CanvasTarget::Glyph { run_index, glyph_index } => self
-				.clusters()
-				.iter()
-				.enumerate()
-				.find(|(_, cluster)| {
-					cluster.run_index == run_index
-						&& glyph_index >= cluster.glyph_start
-						&& glyph_index < cluster.glyph_end
-				})
-				.map(|(index, _)| index),
+			CanvasTarget::Glyph { run_index, glyph_index } => {
+				let run = self.runs.get(run_index)?;
+				self.clusters()[run.cluster_range.clone()]
+					.iter()
+					.enumerate()
+					.find(|(_, cluster)| glyph_index >= cluster.glyph_start && glyph_index < cluster.glyph_end)
+					.map(|(offset, _)| run.cluster_range.start + offset)
+			}
 		}
 	}
 
@@ -127,7 +125,7 @@ fn build_scene_clusters(buffer: &Buffer, line_byte_offsets: &[usize]) -> Arc<[Cl
 pub(super) fn build_clusters(
 	run_index: usize, line_byte_offset: usize, line_top: f32, line_height: f32, glyphs: &[LayoutGlyph],
 ) -> Vec<ClusterInfo> {
-	let mut clusters = Vec::new();
+	let mut clusters = Vec::with_capacity(glyphs.len());
 	let mut current: Option<ClusterInfo> = None;
 
 	for (glyph_index, glyph) in glyphs.iter().enumerate() {

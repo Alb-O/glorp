@@ -241,7 +241,8 @@ pub(super) fn build_inspect_runs(inspect: &SceneInspectCache) -> Arc<[InspectRun
 
 fn lookup_font_name(font_names: &[(fontdb::ID, Arc<str>)], font_id: fontdb::ID) -> Arc<str> {
 	font_names
-		.iter()
-		.find(|(id, _)| *id == font_id)
+		.binary_search_by_key(&font_id, |(id, _)| *id)
+		.ok()
+		.and_then(|index| font_names.get(index))
 		.map_or_else(|| Arc::<str>::from("unknown-font"), |(_, name)| name.clone())
 }

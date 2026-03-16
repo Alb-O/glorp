@@ -543,3 +543,27 @@ fn double_click_selects_a_full_word() {
 		.expect("double click should produce a selection");
 	assert_eq!(editor.text().get(selection), Some("gamma"));
 }
+
+#[test]
+fn history_limit_keeps_latest_edits_available_for_undo() {
+	let (mut font_system, mut editor) = editor("x");
+
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+
+	for _ in 0..300 {
+		editor.apply(&mut font_system, edit(EditorEditIntent::InsertText("a".to_string())));
+	}
+
+	assert_eq!(editor.history_depths(), (256, 0));
+
+	for _ in 0..256 {
+		editor.apply(&mut font_system, history(EditorHistoryIntent::Undo));
+	}
+
+	assert_eq!(editor.history_depths(), (0, 256));
+	assert_eq!(editor.text().len(), 45);
+
+	let text_after_limit = editor.text().to_string();
+	editor.apply(&mut font_system, history(EditorHistoryIntent::Undo));
+	assert_eq!(editor.text(), text_after_limit);
+}

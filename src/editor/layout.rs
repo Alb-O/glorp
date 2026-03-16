@@ -144,15 +144,17 @@ impl BufferLayoutSnapshot {
 	pub(super) fn nearest_cluster_on_adjacent_run(
 		&self, run_index: usize, preferred_x: f32, direction: isize,
 	) -> Option<usize> {
-		let next_runs: Box<dyn Iterator<Item = usize>> = if direction < 0 {
-			Box::new((0..run_index).rev())
+		if direction < 0 {
+			for next_run in (0..run_index).rev() {
+				if let Some(target) = self.nearest_cluster_in_run(next_run, preferred_x) {
+					return Some(target);
+				}
+			}
 		} else {
-			Box::new((run_index.saturating_add(1))..self.runs.len())
-		};
-
-		for next_run in next_runs {
-			if let Some(target) = self.nearest_cluster_in_run(next_run, preferred_x) {
-				return Some(target);
+			for next_run in (run_index.saturating_add(1))..self.runs.len() {
+				if let Some(target) = self.nearest_cluster_in_run(next_run, preferred_x) {
+					return Some(target);
+				}
 			}
 		}
 
@@ -240,7 +242,7 @@ impl BufferLayoutSnapshot {
 fn build_buffer_clusters(
 	run_index: usize, line_byte_offset: usize, line_top: f32, line_height: f32, glyphs: &[LayoutGlyph],
 ) -> Vec<BufferClusterInfo> {
-	let mut clusters = Vec::new();
+	let mut clusters = Vec::with_capacity(glyphs.len());
 	let mut current: Option<BufferClusterInfo> = None;
 
 	for glyph in glyphs {

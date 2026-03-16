@@ -36,19 +36,20 @@ impl SceneRefreshReason {
 
 impl Playground {
 	pub(crate) fn subscription(&self) -> Subscription<Message> {
-		let mut subscriptions = Vec::new();
+		let perf = self.sidebar.active_tab == SidebarTab::Perf;
+		let resize = self.viewport.resize_coalescer.has_pending();
 
-		if self.sidebar.active_tab == SidebarTab::Perf {
-			subscriptions.push(Subscription::run(perf_tick_stream).map(|now| Message::Perf(PerfMessage::Tick(now))));
-		}
-
-		if self.viewport.resize_coalescer.has_pending() {
-			subscriptions.push(
+		match (perf, resize) {
+			(false, false) => Subscription::none(),
+			(true, false) => Subscription::run(perf_tick_stream).map(|now| Message::Perf(PerfMessage::Tick(now))),
+			(false, true) => {
+				Subscription::run(resize_tick_stream).map(|now| Message::Viewport(ViewportMessage::ResizeTick(now)))
+			}
+			(true, true) => Subscription::batch([
+				Subscription::run(perf_tick_stream).map(|now| Message::Perf(PerfMessage::Tick(now))),
 				Subscription::run(resize_tick_stream).map(|now| Message::Viewport(ViewportMessage::ResizeTick(now))),
-			);
+			]),
 		}
-
-		Subscription::batch(subscriptions)
 	}
 
 	pub(crate) fn update(&mut self, message: Message) -> Task<Message> {

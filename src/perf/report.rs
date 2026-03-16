@@ -4,6 +4,7 @@ use {
 		percentile_ms,
 	},
 	crate::{editor::EditorMode, scene::LayoutScene},
+	std::fmt::Write as _,
 };
 
 #[derive(Debug, Clone)]
@@ -94,15 +95,14 @@ impl PerfRecentActivity {
 			return format!("{:<14} {}", self.label, "no samples");
 		}
 
-		format!(
-			"{:<14} {}",
-			self.label,
-			self.recent_ms
-				.iter()
-				.map(|value| format!("{value:>5.2}"))
-				.collect::<Vec<_>>()
-				.join("  ")
-		)
+		let mut text = format!("{:<14} ", self.label);
+		for (index, value) in self.recent_ms.iter().enumerate() {
+			if index > 0 {
+				text.push_str("  ");
+			}
+			let _ = write!(text, "{value:>5.2}");
+		}
+		text
 	}
 }
 

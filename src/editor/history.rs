@@ -1,4 +1,7 @@
-use super::{EditorMode, EditorSelection, TextEdit};
+use {
+	super::{EditorMode, EditorSelection, TextEdit},
+	std::collections::VecDeque,
+};
 
 const HISTORY_LIMIT: usize = 256;
 
@@ -19,8 +22,8 @@ pub(super) struct HistoryEntry {
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct EditorHistory {
-	undo: Vec<HistoryEntry>,
-	redo: Vec<HistoryEntry>,
+	undo: VecDeque<HistoryEntry>,
+	redo: VecDeque<HistoryEntry>,
 }
 
 impl EditorHistory {
@@ -31,22 +34,22 @@ impl EditorHistory {
 
 	pub(super) fn record(&mut self, entry: HistoryEntry) {
 		if self.undo.len() == HISTORY_LIMIT {
-			let _ = self.undo.remove(0);
+			let _ = self.undo.pop_front();
 		}
 
-		self.undo.push(entry);
+		self.undo.push_back(entry);
 		self.redo.clear();
 	}
 
 	pub(super) fn undo(&mut self) -> Option<HistoryEntry> {
-		let entry = self.undo.pop()?;
-		self.redo.push(entry.clone());
+		let entry = self.undo.pop_back()?;
+		self.redo.push_back(entry.clone());
 		Some(entry)
 	}
 
 	pub(super) fn redo(&mut self) -> Option<HistoryEntry> {
-		let entry = self.redo.pop()?;
-		self.undo.push(entry.clone());
+		let entry = self.redo.pop_back()?;
+		self.undo.push_back(entry.clone());
 		Some(entry)
 	}
 

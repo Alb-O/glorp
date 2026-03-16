@@ -68,61 +68,50 @@ pub(super) fn insert_selection_range(buffer: &Buffer, text: &str, byte: usize) -
 	let ends_hard_line = byte
 		.checked_add(1)
 		.is_some_and(|next| line_offsets[1..].binary_search(&next).is_ok());
-	let mut clusters = Vec::new();
+	let byte_limit = byte.saturating_add(1);
+	let mut previous_cluster = None;
 
 	for visual_line in layout {
 		for glyph in &visual_line.glyphs {
 			let cluster = (line_offset + glyph.start)..(line_offset + glyph.end);
-			if clusters.last() != Some(&cluster) {
-				clusters.push(cluster);
+			if previous_cluster.as_ref() == Some(&cluster) {
+				continue;
 			}
+
+			if ends_hard_line {
+				if cluster.start >= byte_limit {
+					return previous_cluster;
+				}
+			} else if cluster.end > byte {
+				return Some(cluster);
+			}
+
+			previous_cluster = Some(cluster);
 		}
 	}
 
-	if clusters.is_empty() {
-		return None;
-	}
-
-	if ends_hard_line {
-		return clusters
-			.partition_point(|cluster| cluster.start < byte.saturating_add(1))
-			.checked_sub(1)
-			.and_then(|index| clusters.get(index).cloned());
-	}
-
-	let index = clusters.partition_point(|cluster| cluster.end <= byte);
-	clusters.get(index).cloned().or_else(|| {
-		index
-			.checked_sub(1)
-			.and_then(|previous| clusters.get(previous).cloned())
-	})
+	previous_cluster
 }
 
 pub(super) fn selection_rectangles(layout: &BufferLayoutSnapshot, range: &Range<usize>) -> Arc<[LayoutRect]> {
-	let selected = layout
+	let mut rectangles = Vec::new();
+	let mut selected = layout
 		.clusters()
 		.iter()
-		.filter(|cluster| cluster.byte_range.end > range.start && cluster.byte_range.start < range.end)
-		.collect::<Vec<_>>();
-	if selected.is_empty() {
+		.filter(|cluster| cluster.byte_range.end > range.start && cluster.byte_range.start < range.end);
+	let Some(mut span_start) = selected.next() else {
 		return Arc::from([]);
-	}
+	};
+	let mut span_end = span_start;
 
-	let mut rectangles = Vec::new();
-	let mut span_start = selected[0];
-	let mut span_end = selected[0];
-
-	for cluster in selected.into_iter().skip(1) {
-		let same_run = cluster.run_index == span_end.run_index;
-		let contiguous = cluster.byte_range.start <= span_end.byte_range.end;
-		if same_run && contiguous {
+	for cluster in selected {
+		if cluster.run_index == span_end.run_index && cluster.byte_range.start <= span_end.byte_range.end {
 			span_end = cluster;
-			continue;
+		} else {
+			rectangles.push(span_rectangle(span_start, span_end));
+			span_start = cluster;
+			span_end = cluster;
 		}
-
-		rectangles.push(span_rectangle(span_start, span_end));
-		span_start = cluster;
-		span_end = cluster;
 	}
 
 	rectangles.push(span_rectangle(span_start, span_end));
@@ -185,8 +174,7 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 
 			(visual_line, offset, block_width)
 		});
-	let y = (visual_lines_offset(cursor.line, buffer) + visual_line_count(layout, visual_line)) * line_height
-		- scroll.vertical;
+	let y = (visual_lines_offset(cursor.line, buffer) + visual_line_count(visual_line)) * line_height - scroll.vertical;
 
 	Some(InsertCursorGeometry {
 		x: offset,
@@ -214,10 +202,9 @@ fn visual_lines_offset(line: usize, buffer: &Buffer) -> f32 {
 }
 
 fn visual_line_len(line: &cosmic_text::BufferLine) -> f32 {
-	line.layout_opt()
-		.map_or(0.0, |layout| layout.iter().fold(0.0, |count, _| count + 1.0))
+	line.layout_opt().map_or(0.0, |layout| layout.len() as f32)
 }
 
-fn visual_line_count(layout: &[cosmic_text::LayoutLine], visual_line: usize) -> f32 {
-	layout.iter().take(visual_line).fold(0.0, |count, _| count + 1.0)
+fn visual_line_count(visual_line: usize) -> f32 {
+	visual_line as f32
 }
