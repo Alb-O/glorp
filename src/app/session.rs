@@ -82,7 +82,7 @@ impl SceneSession {
 	}
 
 	pub(super) fn rebuild(&mut self, config: SceneConfig) {
-		self.editor.sync_buffer_config(&mut self.font_system, config);
+		let _ = self.editor.sync_buffer_config(&mut self.font_system, config);
 		self.scene
 			.rebuild(&mut self.font_system, self.editor.text(), self.editor.buffer(), config);
 	}

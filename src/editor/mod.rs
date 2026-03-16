@@ -270,19 +270,23 @@ impl EditorEngine {
 		self.state.document.history_depths()
 	}
 
-	pub(crate) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, config: SceneConfig) {
+	pub(crate) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, config: SceneConfig) -> bool {
 		let Self { state, layout_model } = self;
 		if layout_model
 			.layout
 			.sync_buffer_config(font_system, state.document.text(), config)
 		{
 			self.refresh_view_state(None);
+			return true;
 		}
+
+		false
 	}
 
 	pub(crate) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) {
-		self.layout_model.layout.sync_buffer_width(font_system, width);
-		self.refresh_view_state(None);
+		if self.layout_model.layout.sync_buffer_width(font_system, width) {
+			self.refresh_view_state(None);
+		}
 	}
 
 	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {

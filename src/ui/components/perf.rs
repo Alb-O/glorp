@@ -27,23 +27,13 @@ pub(crate) fn view_perf_tab(props: PerfTabProps) -> Element<'static, Message> {
 				text("Frame pacing").size(18),
 				view_perf_panel(dashboard.frame_pacing.text()),
 				text("Hot paths").size(18),
-				view_perf_panel(
-					dashboard
-						.hot_paths
-						.into_iter()
-						.map(|summary| summary.text())
-						.collect::<Vec<_>>()
-						.join("\n"),
-				),
+				view_perf_panel(join_lines(
+					dashboard.hot_paths.into_iter().map(|summary| summary.text())
+				)),
 				text("Recent activity").size(18),
-				view_perf_panel(
-					dashboard
-						.recent_activity
-						.into_iter()
-						.map(|activity| activity.text())
-						.collect::<Vec<_>>()
-						.join("\n"),
-				),
+				view_perf_panel(join_lines(
+					dashboard.recent_activity.into_iter().map(|activity| activity.text())
+				)),
 			]
 			.spacing(12),
 		)
@@ -315,4 +305,17 @@ fn format_duration_label(ms: f32) -> String {
 	} else {
 		format!("{ms:>6.2} ms")
 	}
+}
+
+fn join_lines(lines: impl IntoIterator<Item = String>) -> String {
+	let mut text = String::new();
+
+	for line in lines {
+		if !text.is_empty() {
+			text.push('\n');
+		}
+		text.push_str(&line);
+	}
+
+	text
 }

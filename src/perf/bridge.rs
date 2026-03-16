@@ -2,6 +2,7 @@ use {
 	crate::telemetry::duration_ms,
 	std::{
 		collections::VecDeque,
+		mem,
 		sync::{Arc, Mutex},
 		time::{Duration, Instant},
 	},
@@ -120,10 +121,10 @@ impl CanvasPerfSink {
 		};
 
 		PendingSamples {
-			updates: pending.updates.drain(..).collect(),
-			underlay: pending.underlay.drain(..).collect(),
-			overlay: pending.overlay.drain(..).collect(),
-			draws: pending.draws.drain(..).collect(),
+			updates: mem::take(&mut pending.updates),
+			underlay: mem::take(&mut pending.underlay),
+			overlay: mem::take(&mut pending.overlay),
+			draws: mem::take(&mut pending.draws),
 		}
 	}
 }

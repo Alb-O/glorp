@@ -1,9 +1,9 @@
 use {
 	super::{
 		layout::{BufferClusterInfo, BufferLayoutSnapshot},
-		text::{byte_to_cursor, line_byte_offsets},
+		text::byte_to_cursor,
 	},
-	crate::overlay::LayoutRect,
+	crate::{overlay::LayoutRect, scene::line_byte_offsets},
 	cosmic_text::Buffer,
 	std::{ops::Range, sync::Arc},
 };

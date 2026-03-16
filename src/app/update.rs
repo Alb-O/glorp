@@ -78,27 +78,45 @@ impl Playground {
 		match message {
 			ControlsMessage::LoadPreset(preset) => self.handle_load_preset(preset),
 			ControlsMessage::FontSelected(font) => {
+				if self.controls.font == font {
+					return;
+				}
 				self.controls.font = font;
 				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
 			}
 			ControlsMessage::ShapingSelected(shaping) => {
+				if self.controls.shaping == shaping {
+					return;
+				}
 				self.controls.shaping = shaping;
 				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
 			}
 			ControlsMessage::WrappingSelected(wrapping) => {
+				if self.controls.wrapping == wrapping {
+					return;
+				}
 				self.controls.wrapping = wrapping;
 				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
 			}
 			ControlsMessage::FontSizeChanged(font_size) => {
+				if (self.controls.font_size - font_size).abs() < f32::EPSILON {
+					return;
+				}
 				self.controls.font_size = font_size;
 				self.controls.line_height = self.controls.line_height.max(self.controls.font_size);
 				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
 			}
 			ControlsMessage::LineHeightChanged(line_height) => {
+				if (self.controls.line_height - line_height).abs() < f32::EPSILON {
+					return;
+				}
 				self.controls.line_height = line_height;
 				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
 			}
 			ControlsMessage::ShowBaselinesChanged(show_baselines) => {
+				if self.controls.show_baselines == show_baselines {
+					return;
+				}
 				self.controls.show_baselines = show_baselines;
 				if show_baselines && self.scene_dirty {
 					self.rebuild_scene(SceneRefreshReason::ControlsChanged);
@@ -108,6 +126,9 @@ impl Playground {
 				}
 			}
 			ControlsMessage::ShowHitboxesChanged(show_hitboxes) => {
+				if self.controls.show_hitboxes == show_hitboxes {
+					return;
+				}
 				self.controls.show_hitboxes = show_hitboxes;
 				if show_hitboxes && self.scene_dirty {
 					self.rebuild_scene(SceneRefreshReason::ControlsChanged);
@@ -122,6 +143,9 @@ impl Playground {
 	fn handle_sidebar_message(&mut self, message: SidebarMessage) {
 		match message {
 			SidebarMessage::SelectTab(tab) => {
+				if self.sidebar.active_tab == tab {
+					return;
+				}
 				self.sidebar.set_active_tab(tab);
 				self.sidebar_cache.invalidate_inspect();
 				self.ensure_scene_current(SceneRefreshReason::DocumentEdited);

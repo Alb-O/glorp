@@ -64,13 +64,14 @@ impl EditorLayout {
 		true
 	}
 
-	pub(super) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) {
+	pub(super) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) -> bool {
 		if (self.config.max_width - width).abs() < 0.5 {
-			return;
+			return false;
 		}
 
 		self.resize_buffer(font_system, width);
 		self.config.max_width = width;
+		true
 	}
 
 	pub(super) fn reset(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) {

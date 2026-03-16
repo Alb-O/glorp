@@ -198,14 +198,14 @@ impl PerfStore {
 
 pub(super) fn average_ms(values: impl Iterator<Item = f32>) -> f32 {
 	let mut total = 0.0;
-	let mut count = 0.0;
+	let mut count = 0usize;
 
 	for value in values {
 		total += value;
-		count += 1.0;
+		count += 1;
 	}
 
-	if count > 0.0 { total / count } else { 0.0 }
+	if count == 0 { 0.0 } else { total / count as f32 }
 }
 
 pub(super) fn percentile_ms(values: &VecDeque<f32>, percentile_percent: usize) -> f32 {

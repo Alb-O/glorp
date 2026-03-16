@@ -5,7 +5,7 @@ use {
 	},
 	crate::{
 		editor::{EditorEditIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent},
-		types::{CanvasEvent, Message, SidebarMessage, SidebarTab, ViewportMessage},
+		types::{CanvasEvent, ControlsMessage, Message, SidebarMessage, SidebarTab, ViewportMessage},
 	},
 	iced::{Size, Vector},
 	std::time::Instant,
@@ -252,4 +252,30 @@ fn perf_sidebar_cache_reuses_model_until_metrics_change() {
 	let _ = playground.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
 	let _ = playground.test_view_sidebar();
 	assert_eq!(playground.sidebar_cache.perf_build_count(), 2);
+}
+
+#[test]
+fn repeated_no_op_inputs_do_not_churn_scene_state() {
+	let (mut playground, _) = Playground::new();
+	let revision_before = playground.viewport.scene_revision;
+	let scene_text_before = playground.session.scene().text.to_string();
+
+	let _ = playground.update(Message::Controls(ControlsMessage::FontSelected(
+		playground.controls.font,
+	)));
+	let _ = playground.update(Message::Controls(ControlsMessage::ShowHitboxesChanged(
+		playground.controls.show_hitboxes,
+	)));
+
+	let _ = playground.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+	let _ = playground.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
+		"!".to_string(),
+	))));
+	assert!(playground.scene_dirty);
+
+	let _ = playground.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Controls)));
+
+	assert_eq!(playground.viewport.scene_revision, revision_before);
+	assert!(playground.scene_dirty);
+	assert_eq!(playground.session.scene().text.as_ref(), scene_text_before);
 }

@@ -8,7 +8,7 @@ pub(crate) fn debug_snippet(text: &str) -> String {
 	}
 }
 
-pub(super) fn line_byte_offsets(text: &str) -> Vec<usize> {
+pub(crate) fn line_byte_offsets(text: &str) -> Vec<usize> {
 	let mut offsets = vec![0];
 
 	for (index, ch) in text.char_indices() {

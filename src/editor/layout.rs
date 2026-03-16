@@ -1,5 +1,5 @@
 use {
-	crate::editor::text::line_byte_offsets,
+	crate::scene::line_byte_offsets,
 	cosmic_text::{Buffer, Cursor, LayoutGlyph},
 	std::ops::Range,
 };

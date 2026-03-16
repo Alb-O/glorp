@@ -1,4 +1,4 @@
-use cosmic_text::Cursor;
+use {crate::scene::line_byte_offsets, cosmic_text::Cursor};
 
 pub(super) fn clamp_char_boundary(text: &str, byte: usize) -> usize {
 	if byte >= text.len() {
@@ -53,15 +53,4 @@ pub(super) fn byte_to_cursor(text: &str, byte: usize) -> Cursor {
 		.saturating_sub(1);
 	let index = clamped - line_offsets[line];
 	Cursor::new(line, index)
-}
-
-pub(super) fn line_byte_offsets(text: &str) -> Vec<usize> {
-	let mut offsets = vec![0];
-	for (index, ch) in text.char_indices() {
-		if ch == '\n' {
-			offsets.push(index + ch.len_utf8());
-		}
-	}
-
-	offsets
 }

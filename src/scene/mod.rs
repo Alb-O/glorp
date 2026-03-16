@@ -19,7 +19,7 @@ pub(crate) use self::build::LayoutSceneTestSpec;
 pub(crate) use self::{
 	data::{ClusterInfo, GlyphInfo, InspectRunInfo, RunInfo},
 	font::{build_buffer, make_font_system, scene_config},
-	text::debug_snippet,
+	text::{debug_snippet, line_byte_offsets},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
