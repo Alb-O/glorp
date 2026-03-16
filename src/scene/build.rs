@@ -58,17 +58,7 @@ impl DocumentLayout {
 			});
 		}
 
-		let mut byte_order = (0..clusters.len()).collect::<Vec<_>>();
-		// Navigation and cursor lookup are byte-based even when visual cluster
-		// order differs, so keep a separate byte-sorted index beside run order.
-		byte_order.sort_by(|a, b| {
-			clusters[*a]
-				.byte_range
-				.start
-				.cmp(&clusters[*b].byte_range.start)
-				.then_with(|| clusters[*a].byte_range.end.cmp(&clusters[*b].byte_range.end))
-				.then_with(|| clusters[*a].run_index.cmp(&clusters[*b].run_index))
-		});
+		let byte_order = build_byte_order(&clusters);
 
 		let warnings = if runs.is_empty() {
 			Arc::from(["No layout runs were produced. Check the font choice and text content.".to_string()])
@@ -175,6 +165,21 @@ fn lookup_font_name(font_names: &[(fontdb::ID, Arc<str>)], font_id: fontdb::ID) 
 		.map_or_else(|| Arc::<str>::from("unknown-font"), |(_, name)| name.clone())
 }
 
+fn build_byte_order(clusters: &[LayoutCluster]) -> Vec<usize> {
+	let mut byte_order = (0..clusters.len()).collect::<Vec<_>>();
+	// Navigation and cursor lookup are byte-based even when visual cluster
+	// order differs, so keep a separate byte-sorted index beside run order.
+	byte_order.sort_by(|a, b| {
+		clusters[*a]
+			.byte_range
+			.start
+			.cmp(&clusters[*b].byte_range.start)
+			.then_with(|| clusters[*a].byte_range.end.cmp(&clusters[*b].byte_range.end))
+			.then_with(|| clusters[*a].run_index.cmp(&clusters[*b].run_index))
+	});
+	byte_order
+}
+
 #[cfg(test)]
 impl DocumentLayout {
 	pub(crate) fn build_for_test(font_system: &mut FontSystem, text: &str, config: SceneConfig) -> Self {
@@ -195,15 +200,7 @@ impl DocumentLayout {
 			runs,
 			clusters,
 		} = spec;
-		let mut byte_order = (0..clusters.len()).collect::<Vec<_>>();
-		byte_order.sort_by(|a, b| {
-			clusters[*a]
-				.byte_range
-				.start
-				.cmp(&clusters[*b].byte_range.start)
-				.then_with(|| clusters[*a].byte_range.end.cmp(&clusters[*b].byte_range.end))
-				.then_with(|| clusters[*a].run_index.cmp(&clusters[*b].run_index))
-		});
+		let byte_order = build_byte_order(&clusters);
 
 		Self {
 			text: text.clone(),

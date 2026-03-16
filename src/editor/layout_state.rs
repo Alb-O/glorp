@@ -155,8 +155,7 @@ impl EditorLayout {
 		let started = Instant::now();
 		self.clear_snapshot();
 		if edit_changes_line_structure(text, edit) {
-			let mut next_text = text.to_string();
-			next_text.replace_range(edit.range.clone(), &edit.inserted);
+			let next_text = apply_text_edit(text, edit);
 			self.buffer = Arc::new(build_buffer(font_system, &next_text, self.config));
 			self.font_names
 				.replace(resolve_font_names_from_buffer(font_system, &self.buffer));
@@ -232,6 +231,17 @@ fn edit_changes_line_structure(text: &str, edit: &TextEdit) -> bool {
 	text.get(edit.range.clone())
 		.is_some_and(|removed| removed.contains('\n'))
 		|| edit.inserted.contains('\n')
+}
+
+fn apply_text_edit(text: &str, edit: &TextEdit) -> String {
+	let removed_len = edit.range.end.saturating_sub(edit.range.start);
+	// The structural-edit path already knows the byte ranges, so rebuilding the
+	// string directly is cheaper than cloning and calling `replace_range`.
+	let mut next_text = String::with_capacity(text.len() + edit.inserted.len().saturating_sub(removed_len));
+	next_text.push_str(&text[..edit.range.start]);
+	next_text.push_str(&edit.inserted);
+	next_text.push_str(&text[edit.range.end..]);
+	next_text
 }
 
 fn default_view_state() -> EditorViewState {

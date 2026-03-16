@@ -265,8 +265,8 @@ impl EditorApp {
 
 	fn perform_motion_sweep(&mut self) {
 		for _ in 0..HEADLESS_MOTION_SWEEP_REPEATS {
-			for step in 0..HEADLESS_MOTION_SEQUENCE.len() {
-				self.perform_motion_sweep_step(step);
+			for motion in HEADLESS_MOTION_SEQUENCE {
+				self.apply_headless_motion(motion);
 			}
 		}
 	}
@@ -362,10 +362,12 @@ impl EditorApp {
 	}
 
 	fn headless_observation(&self) -> usize {
-		let view = self.session.view_state();
+		let view = &self.session.presentation().editor;
 		let selection_end = view.selection.as_ref().map_or(0, |selection| selection.end);
 		let selection_head = view.selection_head.unwrap_or(0);
 
+		// This is only a cheap deterministic fingerprint for tests/bench scripts,
+		// not a durable serialization format.
 		fold_bytes_to_usize(
 			self.session
 				.text()

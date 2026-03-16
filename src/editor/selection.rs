@@ -66,15 +66,17 @@ impl EditorEngine {
 	}
 
 	fn word_range(&self, fallback: std::ops::Range<usize>) -> std::ops::Range<usize> {
-		let Some(slice) = self.text().get(fallback.clone()) else {
-			return fallback;
+		let start = fallback.start;
+		let end = fallback.end;
+		let Some(slice) = self.text().get(start..end) else {
+			return start..end;
 		};
 
 		if !slice.chars().any(is_word_char) {
-			return fallback;
+			return start..end;
 		}
 
-		let mut start = fallback.start;
+		let mut start = start;
 		while let Some((index, ch)) = previous_char(self.text(), start) {
 			if !is_word_char(ch) {
 				break;
@@ -82,7 +84,7 @@ impl EditorEngine {
 			start = index;
 		}
 
-		let mut end = fallback.end;
+		let mut end = end;
 		while let Some((next, ch)) = next_char(self.text(), end) {
 			if !is_word_char(ch) {
 				break;

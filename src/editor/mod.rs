@@ -527,7 +527,12 @@ impl EditorEngine {
 		&self, layout: &DocumentLayout, selection: Option<&EditorSelection>, insert_cursor: Option<LayoutRect>,
 		viewport_target: Option<LayoutRect>, tone: EditorOverlayTone,
 	) -> Arc<[OverlayPrimitive]> {
-		let mut overlays = Vec::new();
+		// Insert mode never needs more than the block highlight plus the thin
+		// caret; normal mode is selection-driven and can grow with wrapped spans.
+		let mut overlays = Vec::with_capacity(match self.mode() {
+			EditorMode::Insert => 2,
+			EditorMode::Normal => usize::from(viewport_target.is_some()),
+		});
 
 		if matches!(self.mode(), EditorMode::Insert) {
 			if let Some(insert_block) = viewport_target {
@@ -681,7 +686,8 @@ impl EditorEngine {
 			selection_head.and_then(|head| self.layout_model.layout.insert_cursor_rectangle(self.text(), head));
 		let viewport_target =
 			selection_head.and_then(|head| self.layout_model.layout.insert_cursor_block(self.text(), head));
-		let mut overlays = Vec::new();
+		let mut overlays =
+			Vec::with_capacity(usize::from(viewport_target.is_some()) + usize::from(insert_cursor.is_some()));
 
 		if let Some(insert_block) = viewport_target {
 			overlays.push(OverlayPrimitive::scene_rect(
@@ -724,7 +730,7 @@ impl EditorEngine {
 				)
 			},
 		);
-		let mut overlays = Vec::new();
+		let mut overlays = Vec::with_capacity(selection_rectangles.len() + usize::from(viewport_target.is_some()));
 
 		overlays.extend(selection_rectangles.iter().copied().map(|rect| {
 			OverlayPrimitive::scene_rect(rect, OverlayRectKind::EditorSelection(tone), OverlayLayer::UnderText)

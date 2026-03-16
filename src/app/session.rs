@@ -1,12 +1,15 @@
 use {
 	crate::{
-		editor::{EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorViewState, EditorViewportMetrics},
+		editor::{EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorViewportMetrics},
 		overlay::LayoutRect,
 		presentation::DocumentPresentation,
 		scene::{DocumentLayout, SceneConfig, make_font_system},
 	},
 	cosmic_text::FontSystem,
 };
+
+#[cfg(test)]
+use crate::editor::EditorViewState;
 
 /// App-facing summary of what changed after applying an editor intent.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -88,6 +91,7 @@ impl DocumentSession {
 	}
 
 	/// Returns a clone of the current editor view state.
+	#[cfg(test)]
 	pub(super) fn view_state(&self) -> EditorViewState {
 		self.presentation.editor.clone()
 	}

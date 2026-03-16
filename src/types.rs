@@ -71,17 +71,19 @@ pub(crate) enum SidebarTab {
 
 impl SidebarTab {
 	pub(crate) const ALL: [Self; 3] = [Self::Controls, Self::Inspect, Self::Perf];
+
+	pub(crate) const fn label(self) -> &'static str {
+		match self {
+			Self::Controls => "Controls",
+			Self::Inspect => "Inspect",
+			Self::Perf => "Perf",
+		}
+	}
 }
 
 impl Display for SidebarTab {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let label = match self {
-			Self::Controls => "Controls",
-			Self::Inspect => "Inspect",
-			Self::Perf => "Perf",
-		};
-
-		f.write_str(label)
+		f.write_str(self.label())
 	}
 }
 

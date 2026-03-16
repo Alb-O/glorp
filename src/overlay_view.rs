@@ -332,8 +332,8 @@ fn point_in_space(bounds: Rectangle, origin: Point, position: Point, space: Over
 fn draw_selection_underlay(
 	renderer: &mut iced::Renderer, bounds: Rectangle, origin: Point, overlays: &[OverlayPrimitive],
 ) {
-	let mut normal = Vec::new();
-	let mut insert = Vec::new();
+	let mut normal = Vec::with_capacity(overlays.len() / 2);
+	let mut insert = Vec::with_capacity(overlays.len() / 2);
 
 	for primitive in overlays
 		.iter()

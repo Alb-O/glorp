@@ -7,6 +7,21 @@ use {
 	std::{fmt::Write as _, sync::Arc},
 };
 
+const GRAPH_METRICS: [MetricKind; 12] = [
+	MetricKind::EditorWidthSync,
+	MetricKind::UiBuild,
+	MetricKind::UiDraw,
+	MetricKind::CanvasDraw,
+	MetricKind::CanvasStaticBuild,
+	MetricKind::CanvasUnderlayDraw,
+	MetricKind::CanvasOverlayDraw,
+	MetricKind::CanvasUpdate,
+	MetricKind::ResizeReflow,
+	MetricKind::EditorCommand,
+	MetricKind::SceneBuild,
+	MetricKind::EditorApply,
+];
+
 #[derive(Debug, Clone)]
 pub(crate) struct PerfGraphSeries {
 	pub(crate) title: &'static str,
@@ -170,17 +185,20 @@ pub(super) fn build_dashboard(
 		.map(|kind| metric_summary(store, kind))
 		.collect::<Vec<_>>();
 	let frame_pacing = frame_pacing_summary(store);
-	let mut recent_activity = vec![
-		recent_metric_activity(store, MetricKind::EditorWidthSync),
-		recent_metric_activity(store, MetricKind::ResizeReflow),
-		recent_metric_activity(store, MetricKind::UiBuild),
-		recent_metric_activity(store, MetricKind::UiDraw),
-		recent_metric_activity(store, MetricKind::CanvasUpdate),
-		recent_metric_activity(store, MetricKind::CanvasStaticBuild),
-		recent_metric_activity(store, MetricKind::CanvasUnderlayDraw),
-		recent_metric_activity(store, MetricKind::CanvasOverlayDraw),
-		recent_metric_activity(store, MetricKind::CanvasDraw),
-	];
+	let mut recent_activity = Vec::with_capacity(10);
+	for kind in [
+		MetricKind::EditorWidthSync,
+		MetricKind::ResizeReflow,
+		MetricKind::UiBuild,
+		MetricKind::UiDraw,
+		MetricKind::CanvasUpdate,
+		MetricKind::CanvasStaticBuild,
+		MetricKind::CanvasUnderlayDraw,
+		MetricKind::CanvasOverlayDraw,
+		MetricKind::CanvasDraw,
+	] {
+		recent_activity.push(recent_metric_activity(store, kind));
+	}
 	recent_activity.push(frame_pacing.recent_activity());
 
 	PerfDashboard {
@@ -247,37 +265,20 @@ fn frame_pacing_summary(store: &PerfStore) -> PerfFramePacingSummary {
 }
 
 fn graphs(store: &PerfStore, frame_pacing: &PerfFramePacingSummary) -> Vec<PerfGraphSeries> {
+	let frame_p95 = percentile_ms(&store.frames.intervals_ms, 95);
 	let mut graphs = vec![PerfGraphSeries {
 		title: "frame delta",
 		samples_ms: store.frames.intervals_ms.iter().copied().collect(),
-		ceiling_ms: graph_ceiling(
-			frame_pacing
-				.max_ms
-				.max(percentile_ms(&store.frames.intervals_ms, 95))
-				.max(SEVERE_FRAME_MS),
-			false,
-		),
+		ceiling_ms: graph_ceiling(frame_pacing.max_ms.max(frame_p95).max(SEVERE_FRAME_MS), false),
 		latest_ms: frame_pacing.last_ms,
 		avg_ms: frame_pacing.avg_ms,
-		p95_ms: percentile_ms(&store.frames.intervals_ms, 95),
+		p95_ms: frame_p95,
 		warning_ms: Some(FRAME_BUDGET_MS),
 		severe_ms: Some(SEVERE_FRAME_MS),
 	}];
+	graphs.reserve(GRAPH_METRICS.len());
 
-	for kind in [
-		MetricKind::EditorWidthSync,
-		MetricKind::UiBuild,
-		MetricKind::UiDraw,
-		MetricKind::CanvasDraw,
-		MetricKind::CanvasStaticBuild,
-		MetricKind::CanvasUnderlayDraw,
-		MetricKind::CanvasOverlayDraw,
-		MetricKind::CanvasUpdate,
-		MetricKind::ResizeReflow,
-		MetricKind::EditorCommand,
-		MetricKind::SceneBuild,
-		MetricKind::EditorApply,
-	] {
+	for kind in GRAPH_METRICS {
 		let summary = metric_summary(store, kind);
 		graphs.push(PerfGraphSeries {
 			title: kind.label(),
