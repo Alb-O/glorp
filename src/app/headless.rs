@@ -29,6 +29,7 @@ const HEADLESS_UNDO_REDO_STEPS: usize = 48;
 const HEADLESS_INSERT_POSITION_ROWS: usize = 8;
 const HEADLESS_DELETE_SEED_REPEAT: usize = 24;
 const HEADLESS_MOTION_SWEEP_REPEATS: usize = 48;
+const HEADLESS_RESIZE_DRAG_EVENTS: usize = 4;
 const HEADLESS_RESIZE_SETTLE_DELAY: Duration = Duration::from_millis(16);
 const HEADLESS_RESIZE_WIDTHS: [f32; 7] = [1600.0, 1240.0, 980.0, 780.0, 1120.0, 900.0, 1360.0];
 const HEADLESS_MOTION_SEQUENCE: [EditorMotion; 6] = [
@@ -208,6 +209,14 @@ impl Playground {
 		self.perf = PerfMonitor::default();
 	}
 
+	pub(crate) fn record_headless_ui_build(&mut self, duration: Duration) {
+		self.perf.record_ui_build(duration);
+	}
+
+	pub(crate) fn record_headless_ui_draw(&mut self, duration: Duration) {
+		self.perf.record_ui_draw(duration);
+	}
+
 	pub(crate) fn flush_perf_metrics(&mut self) {
 		self.perf.flush_canvas_metrics();
 	}
@@ -229,7 +238,7 @@ impl Playground {
 		self.sidebar.set_active_tab(SidebarTab::Controls);
 		self.session.reset_with_preset(text, self.scene_config());
 		self.sidebar.sync_after_scene_refresh();
-		self.viewport.mark_scene_applied(Instant::now());
+		self.viewport.mark_scene_applied();
 		self.viewport.finish_scene_refresh(self.session.scene(), true);
 	}
 
@@ -311,11 +320,19 @@ impl Playground {
 	}
 
 	fn perform_resize_reflow_step(&mut self, step: usize) {
-		let width = HEADLESS_RESIZE_WIDTHS[(step + 1) % HEADLESS_RESIZE_WIDTHS.len()];
-		let _ = self.update(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
-			width,
-			HEADLESS_VIEWPORT_SIZE.height,
-		))));
+		let width_count = HEADLESS_RESIZE_WIDTHS.len();
+		let start = HEADLESS_RESIZE_WIDTHS[step % width_count];
+		let target = HEADLESS_RESIZE_WIDTHS[(step + 1) % width_count];
+
+		for drag_step in 1..=HEADLESS_RESIZE_DRAG_EVENTS {
+			let progress = drag_step as f32 / HEADLESS_RESIZE_DRAG_EVENTS as f32;
+			let width = start + ((target - start) * progress);
+			let _ = self.update(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
+				width,
+				HEADLESS_VIEWPORT_SIZE.height,
+			))));
+		}
+
 		let _ = self.update(Message::Viewport(ViewportMessage::ResizeTick(
 			Instant::now() + HEADLESS_RESIZE_SETTLE_DELAY,
 		)));

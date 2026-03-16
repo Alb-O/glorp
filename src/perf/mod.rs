@@ -43,12 +43,24 @@ impl PerfMonitor {
 		self.store.record_editor_command(duration);
 	}
 
+	pub(crate) fn record_editor_width_sync(&mut self, duration: Duration) {
+		self.store.record_editor_width_sync(duration);
+	}
+
 	pub(crate) fn record_scene_build(&mut self, duration: Duration) {
 		self.store.record_scene_build(duration);
 	}
 
 	pub(crate) fn record_resize_reflow(&mut self, duration: Duration) {
 		self.store.record_resize_reflow(duration);
+	}
+
+	pub(crate) fn record_ui_build(&mut self, duration: Duration) {
+		self.store.record_ui_build(duration);
+	}
+
+	pub(crate) fn record_ui_draw(&mut self, duration: Duration) {
+		self.store.record_ui_draw(duration);
 	}
 
 	pub(crate) fn flush_canvas_metrics(&mut self) {

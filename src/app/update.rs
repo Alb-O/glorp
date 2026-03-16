@@ -153,8 +153,9 @@ impl Playground {
 	fn handle_viewport_message(&mut self, message: ViewportMessage) {
 		match message {
 			ViewportMessage::CanvasResized(size) => self.handle_canvas_viewport_resized(size),
-			ViewportMessage::ResizeTick(now) => {
-				if self.viewport.flush_resize(now).is_some() {
+			ViewportMessage::ResizeTick(_now) => {
+				if let Some(width) = self.viewport.flush_resize() {
+					self.sync_editor_width(width);
 					self.rebuild_scene_or_defer(SceneRefreshReason::ResizeReflow);
 				}
 			}
@@ -171,7 +172,7 @@ impl Playground {
 		let config = self.scene_config();
 		let started = Instant::now();
 		self.session.reset_with_preset(preset.text(), config);
-		self.viewport.mark_scene_applied(Instant::now());
+		self.viewport.mark_scene_applied();
 		self.scene_dirty = false;
 		let elapsed = started.elapsed();
 		self.finish_scene_refresh(SceneRefreshReason::PresetLoaded, elapsed);
@@ -184,29 +185,25 @@ impl Playground {
 	}
 
 	fn handle_canvas_viewport_resized(&mut self, size: Size) {
-		let now = Instant::now();
-		let (width_changed, refresh_ready) = self.viewport.observe_resize(size, now);
-
-		if width_changed {
-			self.session.sync_width(self.viewport.layout_width);
-		}
+		let width_changed = self.viewport.observe_resize(size);
 
 		self.viewport.clamp_scroll_to_metrics(self.session.viewport_metrics());
 
-		if width_changed || refresh_ready.is_some() {
+		if width_changed {
 			trace!(
 				canvas_width = size.width,
 				canvas_height = size.height,
 				layout_width = self.viewport.layout_width,
 				width_changed,
-				refresh_ready = refresh_ready.is_some(),
 				"canvas viewport resized"
 			);
 		}
+	}
 
-		if refresh_ready.is_some() {
-			self.rebuild_scene_or_defer(SceneRefreshReason::ResizeReflow);
-		}
+	fn sync_editor_width(&mut self, width: f32) {
+		let started = Instant::now();
+		self.session.sync_width(width);
+		self.perf.record_editor_width_sync(started.elapsed());
 	}
 
 	fn dispatch_editor_intent(&mut self, intent: EditorIntent, source: EditorDispatchSource) {
@@ -296,7 +293,7 @@ impl Playground {
 		let config = self.scene_config();
 		let started = Instant::now();
 		self.session.rebuild(config);
-		self.viewport.mark_scene_applied(Instant::now());
+		self.viewport.mark_scene_applied();
 		self.scene_dirty = false;
 		self.deferred_resize_reflow = false;
 		let elapsed = started.elapsed();

@@ -8,11 +8,25 @@ use {
 		types::{CanvasEvent, Message, SidebarMessage, SidebarTab, ViewportMessage},
 	},
 	iced::{Size, Vector},
-	std::time::{Duration, Instant},
+	std::time::Instant,
 };
 
 fn assert_approx_eq(left: f32, right: f32) {
 	assert!((left - right).abs() <= 0.001, "left={left} right={right}");
+}
+
+fn metric_samples(playground: &Playground, label: &str) -> u64 {
+	playground
+		.perf
+		.dashboard(
+			playground.session.scene(),
+			playground.session.mode(),
+			playground.session.text().len(),
+		)
+		.hot_paths
+		.iter()
+		.find(|summary| summary.label == label)
+		.map_or(0, |summary| summary.total_samples)
 }
 
 fn editor(intent: EditorIntent) -> Message {
@@ -25,14 +39,13 @@ fn resize(size: Size) -> Message {
 
 #[test]
 fn resize_coalescer_limits_burst_reflows_and_flushes_latest_width() {
-	let started = Instant::now();
 	let mut coalescer = ResizeCoalescer::new(600.0);
 
-	assert_eq!(coalescer.observe(700.0, started), Some(700.0));
-	assert_eq!(coalescer.observe(710.0, started + Duration::from_millis(4)), None);
-	assert_eq!(coalescer.observe(720.0, started + Duration::from_millis(8)), None);
+	coalescer.observe(700.0);
+	coalescer.observe(710.0);
+	coalescer.observe(720.0);
 	assert!(coalescer.has_pending());
-	assert_eq!(coalescer.flush(started + RESIZE_REFLOW_INTERVAL), Some(720.0));
+	assert_eq!(coalescer.flush(), Some(720.0));
 	assert!(!coalescer.has_pending());
 }
 
@@ -40,6 +53,9 @@ fn resize_coalescer_limits_burst_reflows_and_flushes_latest_width() {
 fn edits_preserve_visible_scroll_position() {
 	let (mut playground, _) = Playground::new();
 	let _ = playground.update(resize(Size::new(760.0, 280.0)));
+	let _ = playground.update(Message::Viewport(ViewportMessage::ResizeTick(
+		Instant::now() + RESIZE_REFLOW_INTERVAL,
+	)));
 
 	for _ in 0..5 {
 		let _ = playground.update(editor(EditorIntent::Motion(EditorMotion::Down)));
@@ -141,6 +157,23 @@ fn controls_tab_defers_resize_reflow_until_scene_ui_needs_it() {
 	assert!(!playground.deferred_resize_reflow);
 	assert!(playground.viewport.scene_revision > revision_before);
 	assert_approx_eq(playground.session.scene().max_width, playground.viewport.layout_width);
+}
+
+#[test]
+fn resize_bursts_only_sync_editor_width_on_coalesced_widths() {
+	let (mut playground, _) = Playground::new();
+
+	let _ = playground.update(resize(Size::new(980.0, 280.0)));
+	assert_eq!(metric_samples(&playground, "editor.width_sync"), 0);
+
+	let _ = playground.update(resize(Size::new(920.0, 280.0)));
+	let _ = playground.update(resize(Size::new(860.0, 280.0)));
+	assert_eq!(metric_samples(&playground, "editor.width_sync"), 0);
+
+	let _ = playground.update(Message::Viewport(ViewportMessage::ResizeTick(
+		Instant::now() + RESIZE_REFLOW_INTERVAL,
+	)));
+	assert_eq!(metric_samples(&playground, "editor.width_sync"), 1);
 }
 
 #[test]

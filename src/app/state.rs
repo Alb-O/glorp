@@ -8,7 +8,7 @@ use {
 		ui::default_sidebar_ratio,
 	},
 	iced::{Size, Vector, widget::pane_grid},
-	std::time::{Duration, Instant},
+	std::time::Duration,
 };
 
 pub(super) const RESIZE_REFLOW_INTERVAL: Duration = Duration::from_millis(16);
@@ -38,7 +38,6 @@ impl EditorDispatchSource {
 pub(super) struct ResizeCoalescer {
 	applied_width: f32,
 	pending_width: Option<f32>,
-	last_applied_at: Option<Instant>,
 }
 
 impl ResizeCoalescer {
@@ -46,28 +45,18 @@ impl ResizeCoalescer {
 		Self {
 			applied_width: width,
 			pending_width: None,
-			last_applied_at: None,
 		}
 	}
 
-	pub(super) fn observe(&mut self, width: f32, now: Instant) -> Option<f32> {
+	pub(super) fn observe(&mut self, width: f32) {
 		if (self.applied_width - width).abs() < 0.5 && self.pending_width.is_none() {
-			return None;
+			return;
 		}
 
 		self.pending_width = Some(width);
-
-		if self
-			.last_applied_at
-			.is_none_or(|last| now.duration_since(last) >= RESIZE_REFLOW_INTERVAL)
-		{
-			return self.flush(now);
-		}
-
-		None
 	}
 
-	pub(super) fn flush(&mut self, now: Instant) -> Option<f32> {
+	pub(super) fn flush(&mut self) -> Option<f32> {
 		let width = self.pending_width?;
 		self.pending_width = None;
 
@@ -76,7 +65,6 @@ impl ResizeCoalescer {
 		}
 
 		self.applied_width = width;
-		self.last_applied_at = Some(now);
 		Some(width)
 	}
 
@@ -84,9 +72,8 @@ impl ResizeCoalescer {
 		self.pending_width.is_some()
 	}
 
-	pub(super) fn mark_applied(&mut self, width: f32, now: Instant) {
+	pub(super) fn mark_applied(&mut self, width: f32) {
 		self.applied_width = width;
-		self.last_applied_at = Some(now);
 
 		if self.pending_width.is_some_and(|pending| (pending - width).abs() < 0.5) {
 			self.pending_width = None;
@@ -158,23 +145,24 @@ impl ViewportState {
 		}
 	}
 
-	pub(super) fn observe_resize(&mut self, size: Size, now: Instant) -> (bool, Option<f32>) {
+	pub(super) fn observe_resize(&mut self, size: Size) -> bool {
 		let viewport = scene_viewport_size(size);
 		let layout_width = viewport.width;
 		let width_changed = (self.layout_width - layout_width).abs() >= 0.5;
 
 		self.canvas_viewport = viewport;
 		self.layout_width = layout_width;
+		self.resize_coalescer.observe(layout_width);
 
-		(width_changed, self.resize_coalescer.observe(layout_width, now))
+		width_changed
 	}
 
-	pub(super) fn flush_resize(&mut self, now: Instant) -> Option<f32> {
-		self.resize_coalescer.flush(now)
+	pub(super) fn flush_resize(&mut self) -> Option<f32> {
+		self.resize_coalescer.flush()
 	}
 
-	pub(super) fn mark_scene_applied(&mut self, now: Instant) {
-		self.resize_coalescer.mark_applied(self.layout_width, now);
+	pub(super) fn mark_scene_applied(&mut self) {
+		self.resize_coalescer.mark_applied(self.layout_width);
 	}
 
 	pub(super) fn clamp_scroll(&mut self, scene: &LayoutScene) {

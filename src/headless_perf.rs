@@ -206,23 +206,33 @@ impl Harness {
 	}
 
 	fn draw_frame(&mut self) {
-		let mut user_interface = UserInterface::build(
-			self.playground.headless_view(),
-			self.viewport_logical,
-			std::mem::take(&mut self.cache),
-			&mut self.renderer,
-		);
+		let (cache, build_duration, draw_duration) = {
+			let build_started = std::time::Instant::now();
+			let mut user_interface = UserInterface::build(
+				self.playground.headless_view(),
+				self.viewport_logical,
+				std::mem::take(&mut self.cache),
+				&mut self.renderer,
+			);
+			let build_duration = build_started.elapsed();
 
-		user_interface.draw(
-			&mut self.renderer,
-			&self.theme,
-			&Style {
-				text_color: Color::WHITE,
-			},
-			mouse::Cursor::Unavailable,
-		);
+			let draw_started = std::time::Instant::now();
+			user_interface.draw(
+				&mut self.renderer,
+				&self.theme,
+				&Style {
+					text_color: Color::WHITE,
+				},
+				mouse::Cursor::Unavailable,
+			);
+			let draw_duration = draw_started.elapsed();
 
-		self.cache = user_interface.into_cache();
+			(user_interface.into_cache(), build_duration, draw_duration)
+		};
+
+		self.cache = cache;
+		self.playground.record_headless_ui_build(build_duration);
+		self.playground.record_headless_ui_draw(draw_duration);
 	}
 
 	fn capture_screenshot(&mut self) -> CaptureSummary {

@@ -16,8 +16,11 @@ pub(super) const METRIC_WARNING_MS: f32 = 8.0;
 pub(super) enum MetricKind {
 	EditorCommand,
 	EditorApply,
+	EditorWidthSync,
 	SceneBuild,
 	ResizeReflow,
+	UiBuild,
+	UiDraw,
 	CanvasUpdate,
 	CanvasStaticBuild,
 	CanvasUnderlayDraw,
@@ -26,11 +29,14 @@ pub(super) enum MetricKind {
 }
 
 impl MetricKind {
-	pub(super) const ALL: [Self; 9] = [
+	pub(super) const ALL: [Self; 12] = [
 		Self::EditorCommand,
 		Self::EditorApply,
+		Self::EditorWidthSync,
 		Self::SceneBuild,
 		Self::ResizeReflow,
+		Self::UiBuild,
+		Self::UiDraw,
 		Self::CanvasUpdate,
 		Self::CanvasStaticBuild,
 		Self::CanvasUnderlayDraw,
@@ -42,8 +48,11 @@ impl MetricKind {
 		match self {
 			Self::EditorCommand => "editor.command",
 			Self::EditorApply => "editor.apply",
+			Self::EditorWidthSync => "editor.width_sync",
 			Self::SceneBuild => "scene.build",
 			Self::ResizeReflow => "resize.reflow",
+			Self::UiBuild => "ui.build",
+			Self::UiDraw => "ui.draw",
 			Self::CanvasUpdate => "canvas.update",
 			Self::CanvasStaticBuild => "canvas.static",
 			Self::CanvasUnderlayDraw => "canvas.underlay",
@@ -56,13 +65,16 @@ impl MetricKind {
 		match self {
 			Self::EditorCommand => 0,
 			Self::EditorApply => 1,
-			Self::SceneBuild => 2,
-			Self::ResizeReflow => 3,
-			Self::CanvasUpdate => 4,
-			Self::CanvasStaticBuild => 5,
-			Self::CanvasUnderlayDraw => 6,
-			Self::CanvasOverlayDraw => 7,
-			Self::CanvasDraw => 8,
+			Self::EditorWidthSync => 2,
+			Self::SceneBuild => 3,
+			Self::ResizeReflow => 4,
+			Self::UiBuild => 5,
+			Self::UiDraw => 6,
+			Self::CanvasUpdate => 7,
+			Self::CanvasStaticBuild => 8,
+			Self::CanvasUnderlayDraw => 9,
+			Self::CanvasOverlayDraw => 10,
+			Self::CanvasDraw => 11,
 		}
 	}
 }
@@ -129,12 +141,24 @@ impl PerfStore {
 		self.record(MetricKind::EditorCommand, duration);
 	}
 
+	pub(super) fn record_editor_width_sync(&mut self, duration: Duration) {
+		self.record(MetricKind::EditorWidthSync, duration);
+	}
+
 	pub(super) fn record_scene_build(&mut self, duration: Duration) {
 		self.record(MetricKind::SceneBuild, duration);
 	}
 
 	pub(super) fn record_resize_reflow(&mut self, duration: Duration) {
 		self.record(MetricKind::ResizeReflow, duration);
+	}
+
+	pub(super) fn record_ui_build(&mut self, duration: Duration) {
+		self.record(MetricKind::UiBuild, duration);
+	}
+
+	pub(super) fn record_ui_draw(&mut self, duration: Duration) {
+		self.record(MetricKind::UiDraw, duration);
 	}
 
 	pub(super) fn flush_canvas_metrics(&mut self, sink: &CanvasPerfSink) {

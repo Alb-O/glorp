@@ -171,7 +171,10 @@ pub(super) fn build_dashboard(
 		.collect::<Vec<_>>();
 	let frame_pacing = frame_pacing_summary(store);
 	let mut recent_activity = vec![
+		recent_metric_activity(store, MetricKind::EditorWidthSync),
 		recent_metric_activity(store, MetricKind::ResizeReflow),
+		recent_metric_activity(store, MetricKind::UiBuild),
+		recent_metric_activity(store, MetricKind::UiDraw),
 		recent_metric_activity(store, MetricKind::CanvasUpdate),
 		recent_metric_activity(store, MetricKind::CanvasStaticBuild),
 		recent_metric_activity(store, MetricKind::CanvasUnderlayDraw),
@@ -263,6 +266,9 @@ fn graphs(store: &PerfStore) -> Vec<PerfGraphSeries> {
 	}];
 
 	for kind in [
+		MetricKind::EditorWidthSync,
+		MetricKind::UiBuild,
+		MetricKind::UiDraw,
 		MetricKind::CanvasDraw,
 		MetricKind::CanvasStaticBuild,
 		MetricKind::CanvasUnderlayDraw,
@@ -358,7 +364,7 @@ mod tests {
 		let dashboard = build_dashboard(&store, &scene(), EditorMode::Normal, 7);
 
 		assert!(!dashboard.graphs.is_empty());
-		assert_eq!(dashboard.recent_activity.len(), 7);
+		assert_eq!(dashboard.recent_activity.len(), 10);
 		assert_eq!(dashboard.overview.editor_bytes, 7);
 	}
 
