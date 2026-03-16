@@ -18,11 +18,6 @@ pub(crate) struct PerfMonitor {
 	sink: Sink,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct PerfSnapshot {
-	store: PerfStore,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct PerfSnapshotKey {
 	metric_totals: [u64; store::MetricKind::ALL.len()],
@@ -36,10 +31,8 @@ impl PerfMonitor {
 		self.sink.clone()
 	}
 
-	pub(crate) fn snapshot(&self) -> PerfSnapshot {
-		PerfSnapshot {
-			store: self.store.clone(),
-		}
+	pub(crate) fn key(&self) -> PerfSnapshotKey {
+		perf_key(&self.store)
 	}
 
 	pub(crate) fn record_editor_apply(&mut self, duration: Duration) {
@@ -67,17 +60,11 @@ impl PerfMonitor {
 	}
 }
 
-impl PerfSnapshot {
-	pub(crate) fn dashboard(&self, scene: &LayoutScene, editor_mode: EditorMode, editor_bytes: usize) -> PerfDashboard {
-		build_dashboard(&self.store, scene, editor_mode, editor_bytes)
-	}
-
-	pub(crate) fn key(&self) -> PerfSnapshotKey {
-		PerfSnapshotKey {
-			metric_totals: store::MetricKind::ALL.map(|kind| self.store.metrics[kind.index()].total_samples),
-			total_draws: self.store.frames.total_draws,
-			cache_hits: self.store.cache.hits,
-			cache_misses: self.store.cache.misses,
-		}
+fn perf_key(store: &PerfStore) -> PerfSnapshotKey {
+	PerfSnapshotKey {
+		metric_totals: store::MetricKind::ALL.map(|kind| store.metrics[kind.index()].total_samples),
+		total_draws: store.frames.total_draws,
+		cache_hits: store.cache.hits,
+		cache_misses: store.cache.misses,
 	}
 }

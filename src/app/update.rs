@@ -107,6 +107,7 @@ impl Playground {
 					self.rebuild_scene(SceneRefreshReason::ControlsChanged);
 				} else {
 					self.viewport.scene_revision += 1;
+					self.sidebar_cache.invalidate_scene_derived();
 				}
 			}
 			ControlsMessage::ShowHitboxesChanged(show_hitboxes) => {
@@ -115,6 +116,7 @@ impl Playground {
 					self.rebuild_scene(SceneRefreshReason::ControlsChanged);
 				} else {
 					self.viewport.scene_revision += 1;
+					self.sidebar_cache.invalidate_scene_derived();
 				}
 			}
 		}
@@ -124,6 +126,7 @@ impl Playground {
 		match message {
 			SidebarMessage::SelectTab(tab) => {
 				self.sidebar.set_active_tab(tab);
+				self.sidebar_cache.invalidate_inspect();
 				self.ensure_scene_current(SceneRefreshReason::DocumentEdited);
 			}
 		}
@@ -133,6 +136,7 @@ impl Playground {
 		match message {
 			CanvasEvent::Hovered(target) => {
 				self.sidebar.set_hovered_target(target);
+				self.sidebar_cache.invalidate_inspect();
 			}
 			CanvasEvent::FocusChanged(focused) => {
 				self.viewport.canvas_focused = focused;
@@ -144,6 +148,7 @@ impl Playground {
 			CanvasEvent::PointerSelectionStarted { target, intent } => {
 				self.viewport.canvas_focused = true;
 				self.sidebar.set_selected_target(target);
+				self.sidebar_cache.invalidate_inspect();
 				self.dispatch_editor_intent(EditorIntent::Pointer(intent), EditorDispatchSource::PointerPress);
 			}
 		}
@@ -269,6 +274,15 @@ impl Playground {
 	fn handle_editor_outcome(&mut self, outcome: &EditorOutcome, source: EditorDispatchSource) {
 		if outcome.document_changed() {
 			self.controls.preset = SamplePreset::Custom;
+			self.sidebar_cache.invalidate_perf();
+		}
+
+		if outcome.view_changed || outcome.selection_changed || outcome.mode_changed {
+			self.sidebar_cache.invalidate_inspect();
+		}
+
+		if outcome.mode_changed {
+			self.sidebar_cache.invalidate_perf();
 		}
 
 		if outcome.requires_scene_rebuild() {
@@ -321,6 +335,7 @@ impl Playground {
 		self.sidebar.sync_after_scene_refresh();
 		self.viewport
 			.finish_scene_refresh(self.session.scene(), reason.resets_scroll());
+		self.sidebar_cache.invalidate_scene_derived();
 		self.perf.record_scene_build(duration);
 
 		if reason.records_resize_reflow() {

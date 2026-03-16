@@ -190,3 +190,33 @@ fn canvas_generated_editor_intents_flow_through_session() {
 			.is_some_and(|selection| selection.end > selection.start)
 	);
 }
+
+#[test]
+fn inspect_sidebar_cache_reuses_model_until_inputs_change() {
+	let (mut playground, _) = Playground::new();
+	let _ = playground.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+
+	let _ = playground.test_view_sidebar();
+	let _ = playground.test_view_sidebar();
+	assert_eq!(playground.sidebar_cache.inspect_build_count(), 1);
+
+	let _ = playground.update(Message::Canvas(CanvasEvent::Hovered(Some(
+		crate::types::CanvasTarget::Run(0),
+	))));
+	let _ = playground.test_view_sidebar();
+	assert_eq!(playground.sidebar_cache.inspect_build_count(), 2);
+}
+
+#[test]
+fn perf_sidebar_cache_reuses_model_until_metrics_change() {
+	let (mut playground, _) = Playground::new();
+	let _ = playground.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Perf)));
+
+	let _ = playground.test_view_sidebar();
+	let _ = playground.test_view_sidebar();
+	assert_eq!(playground.sidebar_cache.perf_build_count(), 1);
+
+	let _ = playground.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+	let _ = playground.test_view_sidebar();
+	assert_eq!(playground.sidebar_cache.perf_build_count(), 2);
+}

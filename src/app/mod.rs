@@ -2,6 +2,7 @@ mod headless;
 #[cfg(test)]
 mod headless_tests;
 mod session;
+mod sidebar_cache;
 mod state;
 #[cfg(test)]
 mod tests;
@@ -11,6 +12,7 @@ mod view;
 use {
 	self::{
 		session::SceneSession,
+		sidebar_cache::SidebarCache,
 		state::{ControlsState, ShellState, SidebarState, ViewportState},
 	},
 	crate::{perf::PerfMonitor, scene::SceneConfig, types::Message},
@@ -26,6 +28,7 @@ pub struct Playground {
 	viewport: ViewportState,
 	shell: ShellState,
 	perf: PerfMonitor,
+	sidebar_cache: SidebarCache,
 }
 
 impl Playground {
@@ -44,6 +47,7 @@ impl Playground {
 				viewport,
 				shell: ShellState::new(),
 				perf: PerfMonitor::default(),
+				sidebar_cache: SidebarCache::default(),
 			},
 			Task::none(),
 		)
