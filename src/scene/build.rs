@@ -6,7 +6,10 @@ use {
 		text::line_byte_offsets,
 	},
 	cosmic_text::{Buffer, FontSystem},
-	std::sync::{Arc, OnceLock},
+	std::{
+		collections::BTreeSet,
+		sync::{Arc, OnceLock},
+	},
 };
 
 #[cfg(test)]
@@ -71,7 +74,7 @@ impl LayoutScene {
 	fn from_buffer(font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig) -> Self {
 		let mut runs = Vec::new();
 		let mut warnings = Vec::new();
-		let mut font_ids = Vec::new();
+		let mut font_ids = BTreeSet::new();
 		let mut measured_width: f32 = 0.0;
 		let mut measured_height: f32 = 0.0;
 		let mut glyph_count = 0usize;
@@ -98,9 +101,6 @@ impl LayoutScene {
 				glyph_count: run.glyphs.len(),
 			});
 		}
-
-		font_ids.sort_unstable();
-		font_ids.dedup();
 
 		let font_names = font_ids
 			.into_iter()

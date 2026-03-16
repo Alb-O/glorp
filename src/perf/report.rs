@@ -200,8 +200,8 @@ pub(super) fn build_dashboard(
 		},
 		hot_paths,
 		recent_activity,
+		graphs: graphs(store, &frame_pacing),
 		frame_pacing,
-		graphs: graphs(store),
 	}
 }
 
@@ -246,8 +246,7 @@ fn frame_pacing_summary(store: &PerfStore) -> PerfFramePacingSummary {
 	}
 }
 
-fn graphs(store: &PerfStore) -> Vec<PerfGraphSeries> {
-	let frame_pacing = frame_pacing_summary(store);
+fn graphs(store: &PerfStore, frame_pacing: &PerfFramePacingSummary) -> Vec<PerfGraphSeries> {
 	let mut graphs = vec![PerfGraphSeries {
 		title: "frame delta",
 		samples_ms: store.frames.intervals_ms.iter().copied().collect(),

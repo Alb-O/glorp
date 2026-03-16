@@ -8,11 +8,12 @@ use {
 		Color, Element, Font, Length, Pixels, Point, Rectangle, Size, Theme,
 		widget::{canvas, column, container, row, text},
 	},
+	std::sync::Arc,
 };
 
 /// Props for the performance inspection tab.
 pub(crate) struct PerfTabProps {
-	pub(crate) dashboard: PerfDashboard,
+	pub(crate) dashboard: Arc<PerfDashboard>,
 }
 
 pub(crate) fn view_perf_tab(props: PerfTabProps) -> Element<'static, Message> {
@@ -23,16 +24,14 @@ pub(crate) fn view_perf_tab(props: PerfTabProps) -> Element<'static, Message> {
 				text("Overview").size(18),
 				view_perf_panel(dashboard.overview.text()),
 				text("Live graphs").size(18),
-				view_graph_grid(dashboard.graphs),
+				view_graph_grid(&dashboard.graphs),
 				text("Frame pacing").size(18),
 				view_perf_panel(dashboard.frame_pacing.text()),
 				text("Hot paths").size(18),
-				view_perf_panel(join_lines(
-					dashboard.hot_paths.into_iter().map(|summary| summary.text())
-				)),
+				view_perf_panel(join_lines(dashboard.hot_paths.iter().map(|summary| summary.text()))),
 				text("Recent activity").size(18),
 				view_perf_panel(join_lines(
-					dashboard.recent_activity.into_iter().map(|activity| activity.text())
+					dashboard.recent_activity.iter().map(|activity| activity.text())
 				)),
 			]
 			.spacing(12),
@@ -51,8 +50,8 @@ fn view_perf_panel(content: String) -> Element<'static, Message> {
 		.into()
 }
 
-fn view_graph_grid(graphs: Vec<PerfGraphSeries>) -> Element<'static, Message> {
-	column(graphs.into_iter().map(view_graph_panel))
+fn view_graph_grid(graphs: &[PerfGraphSeries]) -> Element<'static, Message> {
+	column(graphs.iter().cloned().map(view_graph_panel))
 		.spacing(12)
 		.width(Length::Fill)
 		.into()

@@ -120,7 +120,7 @@ impl SidebarCache {
 		let model = PerfSidebarModel {
 			key,
 			data: Arc::new(PerfSidebarData {
-				dashboard: perf.dashboard(scene, editor_mode, editor_bytes),
+				dashboard: Arc::new(perf.dashboard(scene, editor_mode, editor_bytes)),
 			}),
 		};
 		self.perf_dirty.set(false);

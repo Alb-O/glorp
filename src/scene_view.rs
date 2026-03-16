@@ -145,10 +145,8 @@ impl From<StaticSceneLayer> for Element<'_, Message> {
 }
 
 fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
-	let inspect_runs = layer.show_hitboxes.then(|| layer.scene.inspect_runs());
-
-	for (run_index, run) in layer.scene.runs.iter().enumerate() {
-		if layer.show_baselines {
+	if layer.show_baselines {
+		for run in layer.scene.runs.iter() {
 			let top_line = canvas::Path::line(
 				Point::new(0.0, run.line_top),
 				Point::new(layer.layout_width, run.line_top),
@@ -171,23 +169,19 @@ fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 					.with_color(iced::Color::from_rgba(0.4, 1.0, 0.6, 0.45)),
 			);
 		}
+	}
 
-		let Some(glyphs) = inspect_runs
-			.as_ref()
-			.and_then(|runs| runs.get(run_index))
-			.map(|run| &run.glyphs)
-		else {
-			continue;
-		};
-
-		for glyph in glyphs {
-			frame.stroke_rectangle(
-				Point::new(glyph.x, glyph.y),
-				Size::new(glyph.width.max(0.5), glyph.height.max(0.5)),
-				canvas::Stroke::default()
-					.with_width(1.0)
-					.with_color(iced::Color::from_rgba(1.0, 0.3, 0.3, 0.6)),
-			);
+	if let Some(inspect_runs) = layer.show_hitboxes.then(|| layer.scene.inspect_runs()) {
+		for run in inspect_runs {
+			for glyph in &run.glyphs {
+				frame.stroke_rectangle(
+					Point::new(glyph.x, glyph.y),
+					Size::new(glyph.width.max(0.5), glyph.height.max(0.5)),
+					canvas::Stroke::default()
+						.with_width(1.0)
+						.with_color(iced::Color::from_rgba(1.0, 0.3, 0.3, 0.6)),
+				);
+			}
 		}
 	}
 }

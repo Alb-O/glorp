@@ -26,7 +26,7 @@ pub(super) struct InspectSidebarData {
 
 #[derive(Debug, Clone)]
 pub(super) struct PerfSidebarData {
-	pub(super) dashboard: PerfDashboard,
+	pub(super) dashboard: Arc<PerfDashboard>,
 }
 
 #[derive(Debug, Clone)]
