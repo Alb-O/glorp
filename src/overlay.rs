@@ -35,7 +35,7 @@ impl From<crate::editor::EditorMode> for EditorOverlayTone {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OverlayRectKind {
-	EditorSelection(EditorOverlayTone),
+	EditorSelection,
 	EditorActive(EditorOverlayTone),
 	EditorInsertBlock(EditorOverlayTone),
 	EditorCaret(EditorOverlayTone),
@@ -70,9 +70,5 @@ impl OverlayPrimitive {
 			space: OverlaySpace::Scene,
 			layer,
 		}
-	}
-
-	pub(crate) fn layer(&self) -> OverlayLayer {
-		self.layer
 	}
 }

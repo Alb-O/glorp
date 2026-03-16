@@ -4,13 +4,17 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
-pub(super) struct Document {
+pub(super) struct DocumentState {
 	text: String,
+	history: EditorHistory,
 }
 
-impl Document {
+impl DocumentState {
 	pub(super) fn new(text: impl Into<String>) -> Self {
-		Self { text: text.into() }
+		Self {
+			text: text.into(),
+			history: EditorHistory::default(),
+		}
 	}
 
 	pub(super) fn text(&self) -> &str {
@@ -27,6 +31,7 @@ impl Document {
 
 	pub(super) fn reset(&mut self, text: impl Into<String>) {
 		self.text = text.into();
+		self.history.clear();
 	}
 
 	pub(super) fn apply_edit(&mut self, edit: &TextEdit) -> TextEdit {
@@ -38,46 +43,12 @@ impl Document {
 
 		self.text.replace_range(edit.range.clone(), &edit.inserted);
 
+		// History wants the inverse edit in post-apply coordinates so undo can
+		// replay it directly against the updated document.
 		TextEdit {
 			range: edit.range.start..(edit.range.start + edit.inserted.len()),
 			inserted: removed,
 		}
-	}
-}
-
-#[derive(Debug, Clone)]
-pub(super) struct DocumentState {
-	document: Document,
-	history: EditorHistory,
-}
-
-impl DocumentState {
-	pub(super) fn new(text: impl Into<String>) -> Self {
-		Self {
-			document: Document::new(text),
-			history: EditorHistory::default(),
-		}
-	}
-
-	pub(super) fn text(&self) -> &str {
-		self.document.text()
-	}
-
-	pub(super) fn len(&self) -> usize {
-		self.document.len()
-	}
-
-	pub(super) fn is_empty(&self) -> bool {
-		self.document.is_empty()
-	}
-
-	pub(super) fn reset(&mut self, text: impl Into<String>) {
-		self.document.reset(text);
-		self.history.clear();
-	}
-
-	pub(super) fn apply_edit(&mut self, edit: &TextEdit) -> TextEdit {
-		self.document.apply_edit(edit)
 	}
 
 	pub(super) fn record_history(&mut self, entry: HistoryEntry) {

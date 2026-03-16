@@ -21,10 +21,15 @@ pub(crate) fn view_perf_tab(dashboard: &PerfDashboard) -> Element<'static, Messa
 				text("Frame pacing").size(18),
 				view_perf_panel(dashboard.frame_pacing.text()),
 				text("Hot paths").size(18),
-				view_perf_panel(join_lines(dashboard.hot_paths.iter().map(|summary| summary.text()))),
+				view_perf_panel(join_lines(
+					dashboard.hot_paths.iter().map(crate::perf::PerfMetricSummary::text)
+				)),
 				text("Recent activity").size(18),
 				view_perf_panel(join_lines(
-					dashboard.recent_activity.iter().map(|activity| activity.text())
+					dashboard
+						.recent_activity
+						.iter()
+						.map(crate::perf::PerfRecentActivity::text)
 				)),
 			]
 			.spacing(12),

@@ -231,9 +231,9 @@ impl Widget<Message, Theme, iced::Renderer> for EditorUnderlayLayer {
 			.editor
 			.overlays
 			.iter()
-			.filter(|primitive| primitive.layer() == OverlayLayer::UnderText)
+			.filter(|primitive| primitive.layer == OverlayLayer::UnderText)
 		{
-			if matches!(primitive.kind, OverlayRectKind::EditorSelection(_)) {
+			if matches!(primitive.kind, OverlayRectKind::EditorSelection) {
 				continue;
 			}
 
@@ -351,33 +351,28 @@ fn point_in_space(bounds: Rectangle, origin: Point, position: Point, space: Over
 fn draw_selection_underlay(
 	renderer: &mut iced::Renderer, bounds: Rectangle, origin: Point, overlays: &[OverlayPrimitive],
 ) {
-	let mut normal = Vec::with_capacity(overlays.len() / 2);
-	let mut insert = Vec::with_capacity(overlays.len() / 2);
+	let mut rectangles = Vec::with_capacity(overlays.len() / 2);
 
 	for primitive in overlays
 		.iter()
-		.filter(|primitive| primitive.layer() == OverlayLayer::UnderText)
+		.filter(|primitive| primitive.layer == OverlayLayer::UnderText)
 	{
-		let OverlayRectKind::EditorSelection(tone) = primitive.kind else {
+		// Selection fill/outline is rendered as one merged shape so adjacent
+		// rects do not double-stroke shared edges.
+		let OverlayRectKind::EditorSelection = primitive.kind else {
 			continue;
 		};
 
 		let rect = rect_bounds(bounds, origin, primitive.rect, primitive.space);
-		let rect = LayoutRect {
+		rectangles.push(LayoutRect {
 			x: rect.x,
 			y: rect.y,
 			width: rect.width.max(1.0),
 			height: rect.height.max(1.0),
-		};
-
-		match tone {
-			EditorOverlayTone::Normal => normal.push(rect),
-			EditorOverlayTone::Insert => insert.push(rect),
-		}
+		});
 	}
 
-	draw_selection_group(renderer, &normal, selection_palette(EditorOverlayTone::Normal));
-	draw_selection_group(renderer, &insert, selection_palette(EditorOverlayTone::Insert));
+	draw_selection_group(renderer, &rectangles, selection_palette(EditorOverlayTone::Normal));
 }
 
 fn draw_selection_group(renderer: &mut iced::Renderer, rectangles: &[LayoutRect], palette: SelectionPalette) {
@@ -627,7 +622,7 @@ fn merge_segments<T: Copy>(segments: Vec<T>, can_merge: impl Fn(&T, &T) -> bool,
 
 fn rect_style(kind: OverlayRectKind) -> RectStyle {
 	match kind {
-		OverlayRectKind::EditorSelection(_) => RectStyle {
+		OverlayRectKind::EditorSelection => RectStyle {
 			fill: Some(Color::from_rgba(0.28, 0.74, 1.0, 0.18)),
 			stroke: Some((Color::from_rgba(0.6, 0.9, 1.0, 0.66), 1.0)),
 		},

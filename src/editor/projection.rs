@@ -3,7 +3,6 @@ use {
 		EditorEngine, EditorMode, EditorSelection, EditorTextLayerState, EditorViewState, EditorViewportMetrics,
 		TextEdit,
 		geometry::{cluster_rectangle, insert_selection_range, normal_selection_geometry, selection_rectangles},
-		layout_state::EditorLayout,
 	},
 	crate::{
 		overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
@@ -16,29 +15,16 @@ use {
 	tracing::{debug, trace},
 };
 
-#[derive(Debug, Clone)]
-pub(super) struct EditorProjection {
-	pub(super) layout: EditorLayout,
-}
-
-impl EditorProjection {
-	pub(super) fn new(font_system: &mut FontSystem, text: &str, config: SceneConfig) -> Self {
-		Self {
-			layout: EditorLayout::new(font_system, text, config),
-		}
-	}
-}
-
 impl EditorEngine {
 	pub(crate) fn buffer(&self) -> Arc<Buffer> {
-		self.projection.layout.buffer()
+		// `EditorEngine` owns layout outright now, so hot-path reads no longer
+		// bounce through an extra projection wrapper just to reach the buffer.
+		self.layout.buffer()
 	}
 
 	pub(crate) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, config: SceneConfig) -> bool {
-		let Self { core, projection } = self;
-		let changed = projection
-			.layout
-			.sync_buffer_config(font_system, core.document.text(), config);
+		let Self { core, layout } = self;
+		let changed = layout.sync_buffer_config(font_system, core.document.text(), config);
 		if changed {
 			self.refresh_view_state(None);
 		}
@@ -46,7 +32,7 @@ impl EditorEngine {
 	}
 
 	pub(crate) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) -> bool {
-		let changed = self.projection.layout.sync_buffer_width(font_system, width);
+		let changed = self.layout.sync_buffer_width(font_system, width);
 		if changed {
 			self.refresh_view_state_after_width_sync();
 		}
@@ -54,37 +40,37 @@ impl EditorEngine {
 	}
 
 	pub(crate) fn view_state(&self) -> EditorViewState {
-		self.projection.layout.view_state()
+		self.layout.view_state()
 	}
 
 	pub(crate) fn shared_document_layout(&self) -> Arc<DocumentLayout> {
-		if let Some(layout) = self.projection.layout.cached_document_layout_arc() {
+		if let Some(layout) = self.layout.cached_document_layout_arc() {
 			return layout;
 		}
 
 		// Seed the retained snapshot on first demand so later presentation reads
 		// observe one derived layout instead of rebuilding independently.
 		let layout = Arc::new(self.document_layout());
-		self.projection.layout.set_document_layout(layout.clone());
+		self.layout.set_document_layout(layout.clone());
 		layout
 	}
 
 	pub(crate) fn viewport_metrics(&self) -> EditorViewportMetrics {
-		self.projection.layout.viewport_metrics()
+		self.layout.viewport_metrics()
 	}
 
 	pub(crate) fn text_layer_state(&self) -> EditorTextLayerState {
-		self.projection.layout.text_layer_state()
+		self.layout.text_layer_state()
 	}
 
 	#[cfg(test)]
 	pub(crate) fn buffer_text(&self) -> String {
-		self.projection.layout.buffer_text()
+		self.layout.buffer_text()
 	}
 
 	pub(super) fn document_layout(&self) -> DocumentLayout {
 		let started = Instant::now();
-		let document_layout = self.projection.layout.document_layout(self.text());
+		let document_layout = self.layout.document_layout(self.text());
 		let elapsed_ms = duration_ms(started.elapsed());
 		if elapsed_ms >= 8.0 {
 			debug!(
@@ -106,7 +92,7 @@ impl EditorEngine {
 
 	fn active_viewport_target(&self, layout: &DocumentLayout) -> Option<LayoutRect> {
 		if matches!(self.mode(), EditorMode::Insert) {
-			self.projection.layout.insert_cursor_block(self.text(), self.caret())
+			self.layout.insert_cursor_block(self.text(), self.caret())
 		} else {
 			self.active_selection(layout).map(cluster_rectangle)
 		}
@@ -120,7 +106,7 @@ impl EditorEngine {
 		let (selection, selection_head) = self.selection_state();
 		let tone = EditorOverlayTone::from(self.mode());
 		let insert_cursor = if matches!(self.mode(), EditorMode::Insert) {
-			selection_head.and_then(|head| self.projection.layout.insert_cursor_rectangle(self.text(), head))
+			selection_head.and_then(|head| self.layout.insert_cursor_rectangle(self.text(), head))
 		} else {
 			None
 		};
@@ -129,7 +115,7 @@ impl EditorEngine {
 		let overlays = self.build_overlays(layout_ref, selection.as_ref(), insert_cursor, viewport_target, tone);
 		let overlay_elapsed = overlay_started.elapsed();
 		self.set_view_state(selection.as_ref(), overlays, viewport_target);
-		self.projection.layout.set_document_layout(layout);
+		self.layout.set_document_layout(layout);
 		let total_ms = duration_ms(started.elapsed());
 		if total_ms >= 8.0 {
 			debug!(
@@ -173,7 +159,7 @@ impl EditorEngine {
 	}
 
 	pub(super) fn buffer_hit(&self, point: Point) -> Option<cosmic_text::Cursor> {
-		self.projection.layout.hit(point)
+		self.layout.hit(point)
 	}
 
 	pub(super) fn apply_document_edit(
@@ -193,10 +179,8 @@ impl EditorEngine {
 
 	fn apply_buffer_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
 		let started = Instant::now();
-		let Self { core, projection } = self;
-		projection
-			.layout
-			.apply_incremental_edit(font_system, core.document.text(), edit);
+		let Self { core, layout } = self;
+		layout.apply_incremental_edit(font_system, core.document.text(), edit);
 		let total_ms = duration_ms(started.elapsed());
 		if total_ms >= 8.0 {
 			debug!(
@@ -221,10 +205,8 @@ impl EditorEngine {
 
 	fn rebuild_buffer(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
 		let started = Instant::now();
-		let Self { core, projection } = self;
-		projection
-			.layout
-			.rebuild_buffer(font_system, core.document.text(), edit);
+		let Self { core, layout } = self;
+		layout.rebuild_buffer(font_system, core.document.text(), edit);
 		let total_ms = duration_ms(started.elapsed());
 		if total_ms >= 8.0 {
 			debug!(
@@ -258,10 +240,8 @@ impl EditorEngine {
 	pub(super) fn refresh_insert_view_state_fast(&mut self) {
 		let (selection, selection_head) = self.selection_state();
 		let tone = EditorOverlayTone::from(self.mode());
-		let insert_cursor =
-			selection_head.and_then(|head| self.projection.layout.insert_cursor_rectangle(self.text(), head));
-		let viewport_target =
-			selection_head.and_then(|head| self.projection.layout.insert_cursor_block(self.text(), head));
+		let insert_cursor = selection_head.and_then(|head| self.layout.insert_cursor_rectangle(self.text(), head));
+		let viewport_target = selection_head.and_then(|head| self.layout.insert_cursor_block(self.text(), head));
 		let overlays = Self::insert_overlays(tone, insert_cursor, viewport_target);
 		self.set_view_state(selection.as_ref(), overlays, viewport_target);
 	}
@@ -295,7 +275,7 @@ impl EditorEngine {
 		viewport_target: Option<LayoutRect>,
 	) {
 		let selection_head = selection.map(EditorSelection::head);
-		self.projection.layout.set_view_state(EditorViewState {
+		self.layout.set_view_state(EditorViewState {
 			mode: self.mode(),
 			selection: selection.map(EditorSelection::range_cloned),
 			selection_head,
@@ -335,9 +315,11 @@ impl EditorEngine {
 	) -> Arc<[OverlayPrimitive]> {
 		let mut overlays = Vec::with_capacity(selection_rectangles.len() + usize::from(viewport_target.is_some()));
 
-		overlays.extend(selection_rectangles.iter().copied().map(|rect| {
-			OverlayPrimitive::scene_rect(rect, OverlayRectKind::EditorSelection(tone), OverlayLayer::UnderText)
-		}));
+		overlays.extend(
+			selection_rectangles.iter().copied().map(|rect| {
+				OverlayPrimitive::scene_rect(rect, OverlayRectKind::EditorSelection, OverlayLayer::UnderText)
+			}),
+		);
 
 		if let Some(active) = viewport_target {
 			overlays.push(OverlayPrimitive::scene_rect(

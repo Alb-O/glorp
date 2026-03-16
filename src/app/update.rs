@@ -256,10 +256,10 @@ impl EditorApp {
 		let command_started = Instant::now();
 		let apply_started = Instant::now();
 		let outcome = self.session.apply_editor_intent(intent);
-		let document_changed = outcome.document_changed;
-		let view_changed = outcome.view_changed;
-		let selection_changed = outcome.selection_changed;
-		let mode_changed = outcome.mode_changed;
+		let document_changed = outcome.document_changed();
+		let view_changed = outcome.view_changed();
+		let selection_changed = outcome.selection_changed();
+		let mode_changed = outcome.mode_changed();
 		let apply_elapsed = apply_started.elapsed();
 		self.perf.record_editor_apply(apply_elapsed);
 		self.handle_document_update(&outcome, source);
@@ -306,21 +306,21 @@ impl EditorApp {
 	}
 
 	fn handle_document_update(&mut self, outcome: &DocumentUpdate, source: EditorDispatchSource) {
-		if outcome.document_changed {
+		if outcome.document_changed() {
 			self.controls.preset = SamplePreset::Custom;
 			self.finish_session_refresh(SceneRefreshReason::DocumentEdited);
 			self.sidebar_cache.invalidate_perf();
 		}
 
-		if outcome.view_changed || outcome.selection_changed || outcome.mode_changed {
+		if outcome.view_changed() || outcome.selection_changed() || outcome.mode_changed() {
 			self.sidebar_cache.invalidate_inspect();
 		}
 
-		if outcome.mode_changed {
+		if outcome.mode_changed() {
 			self.sidebar_cache.invalidate_perf();
 		}
 
-		if source.reveals_viewport() && outcome.view_changed {
+		if source.reveals_viewport() && outcome.view_changed() {
 			self.viewport
 				.reveal_target_with_metrics(outcome.viewport_target, self.session.viewport_metrics());
 		}

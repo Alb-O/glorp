@@ -15,7 +15,7 @@ mod text;
 mod tests;
 
 use {
-	self::{core::EditorCore, projection::EditorProjection, reducer::apply_intent},
+	self::{core::EditorCore, layout_state::EditorLayout, reducer::apply_intent},
 	crate::{
 		overlay::{LayoutRect, OverlayPrimitive, OverlayRectKind},
 		scene::{DocumentLayout, SceneConfig},
@@ -177,7 +177,7 @@ pub(crate) struct EditorTextLayerState {
 #[derive(Debug, Clone)]
 pub(crate) struct EditorEngine {
 	core: EditorCore,
-	projection: EditorProjection,
+	layout: EditorLayout,
 }
 
 impl EditorOutcome {
@@ -213,7 +213,7 @@ impl EditorEngine {
 		let text = text.into();
 		let mut editor = Self {
 			core: EditorCore::new(text.clone()),
-			projection: EditorProjection::new(font_system, &text, config),
+			layout: EditorLayout::new(font_system, &text, config),
 		};
 		editor.reset_normal_selection();
 		editor.refresh_view_state(None);
@@ -264,7 +264,7 @@ impl EditorEngine {
 		}
 		EditorOutcome::from_apply_result(
 			&previous_view,
-			self.projection.layout.view_state_ref(),
+			self.layout.view_state_ref(),
 			ApplyResult {
 				text_edit,
 				layout: None,

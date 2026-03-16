@@ -13,16 +13,51 @@ use {
 use crate::editor::EditorViewState;
 
 /// App-facing summary of what changed after applying an editor intent.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct DocumentChanges {
+	bits: u8,
+}
+
+impl DocumentChanges {
+	const DOCUMENT_CHANGED: u8 = 1 << 0;
+	const VIEW_CHANGED: u8 = 1 << 1;
+	const SELECTION_CHANGED: u8 = 1 << 2;
+	const MODE_CHANGED: u8 = 1 << 3;
+
+	const fn with(self, flag: u8, enabled: bool) -> Self {
+		// Keep the app-facing change summary compact without re-introducing a
+		// wider enum matrix for mostly-independent editor deltas.
+		Self {
+			bits: self.bits | if enabled { flag } else { 0 },
+		}
+	}
+
+	pub(crate) const fn changed(self) -> bool {
+		self.bits != 0
+	}
+
+	pub(crate) const fn document_changed(self) -> bool {
+		self.bits & Self::DOCUMENT_CHANGED != 0
+	}
+
+	pub(crate) const fn view_changed(self) -> bool {
+		self.bits & Self::VIEW_CHANGED != 0
+	}
+
+	pub(crate) const fn selection_changed(self) -> bool {
+		self.bits & Self::SELECTION_CHANGED != 0
+	}
+
+	pub(crate) const fn mode_changed(self) -> bool {
+		self.bits & Self::MODE_CHANGED != 0
+	}
+}
+
+/// App-facing summary of what changed after applying an editor intent.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct DocumentUpdate {
-	/// True when the document text changed.
-	pub(crate) document_changed: bool,
-	/// True when visible editor presentation changed.
-	pub(crate) view_changed: bool,
-	/// True when the logical selection changed.
-	pub(crate) selection_changed: bool,
-	/// True when the editor mode changed.
-	pub(crate) mode_changed: bool,
+	/// The compact change set for this update.
+	pub(crate) changes: DocumentChanges,
 	/// The latest viewport reveal target for the updated editor state.
 	pub(crate) viewport_target: Option<LayoutRect>,
 }
@@ -30,17 +65,34 @@ pub(crate) struct DocumentUpdate {
 impl DocumentUpdate {
 	/// Returns whether any app-visible editor state changed.
 	pub(crate) fn changed(&self) -> bool {
-		self.document_changed || self.view_changed || self.selection_changed || self.mode_changed
+		self.changes.changed()
+	}
+
+	pub(crate) fn document_changed(&self) -> bool {
+		self.changes.document_changed()
+	}
+
+	pub(crate) fn view_changed(&self) -> bool {
+		self.changes.view_changed()
+	}
+
+	pub(crate) fn selection_changed(&self) -> bool {
+		self.changes.selection_changed()
+	}
+
+	pub(crate) fn mode_changed(&self) -> bool {
+		self.changes.mode_changed()
 	}
 }
 
 impl From<EditorOutcome> for DocumentUpdate {
 	fn from(outcome: EditorOutcome) -> Self {
 		Self {
-			document_changed: outcome.document_changed(),
-			view_changed: outcome.view_changed,
-			selection_changed: outcome.selection_changed,
-			mode_changed: outcome.mode_changed,
+			changes: DocumentChanges::default()
+				.with(DocumentChanges::DOCUMENT_CHANGED, outcome.document_changed())
+				.with(DocumentChanges::VIEW_CHANGED, outcome.view_changed)
+				.with(DocumentChanges::SELECTION_CHANGED, outcome.selection_changed)
+				.with(DocumentChanges::MODE_CHANGED, outcome.mode_changed),
 			viewport_target: outcome.viewport_target,
 		}
 	}
@@ -144,7 +196,7 @@ impl DocumentSession {
 			self.refresh_editor_presentation();
 		}
 
-		if update.document_changed {
+		if update.document_changed() {
 			self.invalidate_derived_scene();
 		}
 

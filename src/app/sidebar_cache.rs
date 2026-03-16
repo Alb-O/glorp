@@ -2,7 +2,7 @@ use {
 	super::sidebar_data::InspectSidebarData,
 	crate::{
 		editor::{EditorMode, EditorViewState},
-		overlay::{EditorOverlayTone, OverlayRectKind},
+		overlay::OverlayRectKind,
 		perf::{PerfDashboard, PerfMonitor, PerfSnapshotKey},
 		presentation::{DerivedScenePresentation, EditorPresentation},
 		scene::{DocumentLayout, debug_snippet},
@@ -193,7 +193,7 @@ fn interaction_details(
 }
 
 fn editor_selection_details(text: &str, editor: &EditorViewState, undo_depth: usize, redo_depth: usize) -> String {
-	let selection_rects = editor.overlay_count(OverlayRectKind::EditorSelection(EditorOverlayTone::from(editor.mode)));
+	let selection_rects = editor.overlay_count(OverlayRectKind::EditorSelection);
 
 	match (editor.mode, editor.selection.as_ref()) {
 		(EditorMode::Normal, None) => format!("  mode: {}\n  selection: none", editor.mode),

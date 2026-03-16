@@ -166,7 +166,7 @@ impl EditorEngine {
 	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
 		let text = text.into();
 		self.core.reset(&text);
-		self.projection.layout.reset(font_system, &text, config);
+		self.layout.reset(font_system, &text, config);
 		self.reset_normal_selection();
 		self.refresh_view_state(None);
 	}

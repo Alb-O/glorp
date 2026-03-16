@@ -1,10 +1,5 @@
 use {
-	super::{
-		EditorApp,
-		sidebar_cache::InspectSidebarArgs,
-		sidebar_data::{ControlsSidebarData, SidebarBodyData},
-		state::ShellPane,
-	},
+	super::{EditorApp, sidebar_cache::InspectSidebarArgs, sidebar_data::SidebarBodyData, state::ShellPane},
 	crate::{
 		types::{Message, ShellMessage, SidebarTab},
 		ui::{
@@ -99,7 +94,7 @@ impl EditorApp {
 
 	fn sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
 		match self.sidebar.active_tab {
-			SidebarTab::Controls => SidebarBodyData::Controls(ControlsSidebarData {
+			SidebarTab::Controls => SidebarBodyData::Controls(ControlsTabProps {
 				preset: self.controls.preset,
 				font: self.controls.font,
 				shaping: self.controls.shaping,
@@ -164,16 +159,7 @@ impl EditorApp {
 
 fn render_sidebar_body(body: SidebarBodyData) -> Element<'static, Message> {
 	match body {
-		SidebarBodyData::Controls(data) => view_controls_tab(ControlsTabProps {
-			preset: data.preset,
-			font: data.font,
-			shaping: data.shaping,
-			wrapping: data.wrapping,
-			font_size: data.font_size,
-			line_height: data.line_height,
-			show_baselines: data.show_baselines,
-			show_hitboxes: data.show_hitboxes,
-		}),
+		SidebarBodyData::Controls(data) => view_controls_tab(data),
 		SidebarBodyData::Inspect(data) => {
 			let key = Arc::as_ptr(&data);
 			lazy(key, move |_| {

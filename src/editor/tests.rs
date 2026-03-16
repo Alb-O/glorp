@@ -336,7 +336,7 @@ fn insert_mode_caret_moves_to_the_trailing_edge_at_line_end() {
 		)
 		.expect("line-end insert should retain the last cluster");
 
-	assert!(rects(&view, OverlayRectKind::EditorSelection(EditorOverlayTone::Insert)).is_empty());
+	assert!(rects(&view, OverlayRectKind::EditorSelection).is_empty());
 	assert!(block.width > caret.width);
 	assert!(caret.x > active.x);
 	assert!(caret.x >= active.x + active.width - caret.width);
@@ -368,7 +368,7 @@ fn insert_mode_caret_stays_on_the_previous_row_before_a_newline() {
 	assert_approx_eq(active.x, caret.x);
 	assert_approx_eq(active.y, caret.y);
 	assert!(active.width > caret.width);
-	assert!(rects(&view, OverlayRectKind::EditorSelection(EditorOverlayTone::Insert)).is_empty());
+	assert!(rects(&view, OverlayRectKind::EditorSelection).is_empty());
 	assert_approx_eq(caret.y, previous.y);
 	assert!(caret.x > previous.x);
 	assert!(caret.x >= previous.x + previous.width - caret.width);
@@ -401,17 +401,11 @@ fn live_selection_rectangles_track_wrapped_width_changes() {
 		editor.apply(&mut font_system, motion(EditorMotion::Right));
 	}
 
-	let before = first_rect(
-		&editor.view_state(),
-		OverlayRectKind::EditorSelection(EditorOverlayTone::Normal),
-	);
+	let before = first_rect(&editor.view_state(), OverlayRectKind::EditorSelection);
 
 	editor.sync_buffer_width(&mut font_system, 110.0);
 
-	let after = first_rect(
-		&editor.view_state(),
-		OverlayRectKind::EditorSelection(EditorOverlayTone::Normal),
-	);
+	let after = first_rect(&editor.view_state(), OverlayRectKind::EditorSelection);
 
 	assert!(
 		after.y > before.y || ((after.y - before.y).abs() <= 0.001 && after.x < before.x),
@@ -462,10 +456,7 @@ fn drag_selection_spans_multiple_wrapped_rectangles() {
 	let (mut font_system, mut editor) = editor(text);
 	editor.sync_buffer_width(&mut font_system, 130.0);
 
-	let start = first_rect(
-		&editor.view_state(),
-		OverlayRectKind::EditorSelection(EditorOverlayTone::Normal),
-	);
+	let start = first_rect(&editor.view_state(), OverlayRectKind::EditorSelection);
 
 	editor.apply(
 		&mut font_system,
@@ -481,7 +472,7 @@ fn drag_selection_spans_multiple_wrapped_rectangles() {
 	editor.apply(&mut font_system, pointer(EditorPointerIntent::End));
 
 	let view = editor.view_state();
-	assert!(rects(&view, OverlayRectKind::EditorSelection(EditorOverlayTone::Normal)).len() >= 2);
+	assert!(rects(&view, OverlayRectKind::EditorSelection).len() >= 2);
 	assert!(
 		view.selection
 			.as_ref()
@@ -553,10 +544,7 @@ fn double_click_selects_a_full_word() {
 		editor.apply(&mut font_system, motion(EditorMotion::Right));
 	}
 
-	let rect = first_rect(
-		&editor.view_state(),
-		OverlayRectKind::EditorSelection(EditorOverlayTone::Normal),
-	);
+	let rect = first_rect(&editor.view_state(), OverlayRectKind::EditorSelection);
 
 	editor.apply(
 		&mut font_system,

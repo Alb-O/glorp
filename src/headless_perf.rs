@@ -37,7 +37,7 @@ pub(crate) fn run_from_env() -> Option<ExitCode> {
 	let config = match parse_args(&args) {
 		Ok(Some(config)) => config,
 		Ok(None) => return None,
-		Err(message) => return report_error(&message),
+		Err(message) => return Some(report_error(&message)),
 	};
 
 	crate::init_tracing();
@@ -47,7 +47,7 @@ pub(crate) fn run_from_env() -> Option<ExitCode> {
 			println!("{report}");
 			Some(ExitCode::SUCCESS)
 		}
-		Err(message) => report_error(&message),
+		Err(message) => Some(report_error(&message)),
 	}
 }
 
@@ -131,9 +131,9 @@ fn usage() -> String {
 	format!("Usage: glorp [--perf-scenario <{scenarios}>] [--warmup <frames>] [--samples <frames>]")
 }
 
-fn report_error(message: &str) -> Option<ExitCode> {
+fn report_error(message: &str) -> ExitCode {
 	eprintln!("{message}");
-	Some(ExitCode::FAILURE)
+	ExitCode::FAILURE
 }
 
 fn run(config: PerfCliConfig) -> Result<String, String> {
