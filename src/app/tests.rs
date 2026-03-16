@@ -115,6 +115,31 @@ fn controls_tab_defers_scene_rebuild_until_inspect_needs_it() {
 }
 
 #[test]
+fn controls_tab_defers_resize_reflow_until_scene_ui_needs_it() {
+	let (mut playground, _) = Playground::new();
+	let revision_before = playground.viewport.scene_revision;
+	let scene_width_before = playground.session.scene().max_width;
+
+	let _ = playground.update(resize(Size::new(980.0, 280.0)));
+	let _ = playground.update(Message::Viewport(ViewportMessage::ResizeTick(
+		Instant::now() + RESIZE_REFLOW_INTERVAL,
+	)));
+
+	assert!(playground.scene_dirty);
+	assert!(playground.deferred_resize_reflow);
+	assert_eq!(playground.viewport.scene_revision, revision_before);
+	assert_ne!(playground.viewport.layout_width, scene_width_before);
+	assert_eq!(playground.session.scene().max_width, scene_width_before);
+
+	let _ = playground.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+
+	assert!(!playground.scene_dirty);
+	assert!(!playground.deferred_resize_reflow);
+	assert!(playground.viewport.scene_revision > revision_before);
+	assert_eq!(playground.session.scene().max_width, playground.viewport.layout_width);
+}
+
+#[test]
 fn leaving_inspect_clears_hover_and_selection() {
 	let (mut playground, _) = Playground::new();
 

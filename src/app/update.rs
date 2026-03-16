@@ -151,7 +151,7 @@ impl Playground {
 			ViewportMessage::CanvasResized(size) => self.handle_canvas_viewport_resized(size),
 			ViewportMessage::ResizeTick(now) => {
 				if self.viewport.flush_resize(now).is_some() {
-					self.rebuild_scene(SceneRefreshReason::ResizeReflow);
+					self.rebuild_scene_or_defer(SceneRefreshReason::ResizeReflow);
 				}
 			}
 		}
@@ -201,7 +201,7 @@ impl Playground {
 		}
 
 		if refresh_ready.is_some() {
-			self.rebuild_scene(SceneRefreshReason::ResizeReflow);
+			self.rebuild_scene_or_defer(SceneRefreshReason::ResizeReflow);
 		}
 	}
 
@@ -269,11 +269,7 @@ impl Playground {
 		}
 
 		if outcome.requires_scene_rebuild {
-			if self.requires_immediate_scene_refresh() {
-				self.rebuild_scene(SceneRefreshReason::DocumentEdited);
-			} else {
-				self.scene_dirty = true;
-			}
+			self.rebuild_scene_or_defer(SceneRefreshReason::DocumentEdited);
 		}
 
 		if source.reveals_viewport() && outcome.view_changed {
@@ -289,6 +285,7 @@ impl Playground {
 		self.session.rebuild(config);
 		self.viewport.mark_scene_applied(Instant::now());
 		self.scene_dirty = false;
+		self.deferred_resize_reflow = false;
 		let elapsed = started.elapsed();
 		self.finish_scene_refresh(reason, elapsed);
 
@@ -330,7 +327,25 @@ impl Playground {
 
 	fn ensure_scene_current(&mut self, reason: SceneRefreshReason) {
 		if self.scene_dirty && self.requires_immediate_scene_refresh() {
-			self.rebuild_scene(reason);
+			self.rebuild_scene(self.pending_scene_refresh_reason(reason));
+		}
+	}
+
+	fn rebuild_scene_or_defer(&mut self, reason: SceneRefreshReason) {
+		if self.requires_immediate_scene_refresh() {
+			self.rebuild_scene(self.pending_scene_refresh_reason(reason));
+			return;
+		}
+
+		self.scene_dirty = true;
+		self.deferred_resize_reflow |= matches!(reason, SceneRefreshReason::ResizeReflow);
+	}
+
+	fn pending_scene_refresh_reason(&self, fallback: SceneRefreshReason) -> SceneRefreshReason {
+		if self.deferred_resize_reflow {
+			SceneRefreshReason::ResizeReflow
+		} else {
+			fallback
 		}
 	}
 

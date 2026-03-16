@@ -20,6 +20,7 @@ use {
 pub struct Playground {
 	session: SceneSession,
 	scene_dirty: bool,
+	deferred_resize_reflow: bool,
 	controls: ControlsState,
 	sidebar: SidebarState,
 	viewport: ViewportState,
@@ -37,6 +38,7 @@ impl Playground {
 			Self {
 				session,
 				scene_dirty: false,
+				deferred_resize_reflow: false,
 				controls,
 				sidebar: SidebarState::new(),
 				viewport,

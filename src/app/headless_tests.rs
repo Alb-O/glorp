@@ -145,7 +145,17 @@ fn resize_reflow_script_scenario_changes_layout_width_and_revisions() {
 	let _ = playground.run_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
 
 	assert_ne!(playground.viewport.layout_width, width_before);
+	assert_eq!(playground.viewport.scene_revision, revision_before);
+	assert!(playground.scene_dirty);
+	assert!(playground.deferred_resize_reflow);
+
+	let _ = playground.update(crate::types::Message::Sidebar(crate::types::SidebarMessage::SelectTab(
+		crate::types::SidebarTab::Inspect,
+	)));
+
 	assert!(playground.viewport.scene_revision > revision_before);
+	assert!(!playground.scene_dirty);
+	assert!(!playground.deferred_resize_reflow);
 }
 
 #[test]

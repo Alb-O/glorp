@@ -4,6 +4,7 @@ use {
 		overlay::{OverlayLayer, OverlayPrimitive, OverlayRectKind},
 		types::{CanvasTarget, FontChoice, RenderMode, ShapingChoice, WrapChoice},
 	},
+	std::sync::Arc,
 };
 
 #[test]
@@ -141,4 +142,49 @@ fn inspect_overlays_fall_back_to_clusters_without_lazy_runs() {
 			..
 		}
 	));
+}
+
+#[test]
+fn target_details_reuse_cached_strings() {
+	let config = scene_config(
+		FontChoice::SansSerif,
+		ShapingChoice::Advanced,
+		WrapChoice::Word,
+		RenderMode::CanvasOnly,
+		22.0,
+		30.0,
+		320.0,
+	);
+	let mut font_system = make_font_system();
+	let scene = LayoutScene::build(
+		&mut font_system,
+		"alpha beta".to_string(),
+		config.font_choice,
+		config.shaping,
+		config.wrapping,
+		config.font_size,
+		config.line_height,
+		config.max_width,
+		config.render_mode,
+	);
+
+	let run_a = scene
+		.target_details(Some(CanvasTarget::Run(0)))
+		.expect("run details should exist");
+	let run_b = scene
+		.target_details(Some(CanvasTarget::Run(0)))
+		.expect("run details should stay cached");
+	assert!(Arc::ptr_eq(&run_a, &run_b));
+
+	let glyph_target = CanvasTarget::Glyph {
+		run_index: 0,
+		glyph_index: 0,
+	};
+	let glyph_a = scene
+		.target_details(Some(glyph_target))
+		.expect("glyph details should exist");
+	let glyph_b = scene
+		.target_details(Some(glyph_target))
+		.expect("glyph details should stay cached");
+	assert!(Arc::ptr_eq(&glyph_a, &glyph_b));
 }

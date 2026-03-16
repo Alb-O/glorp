@@ -208,7 +208,7 @@ fn interaction_details(
 		"{}",
 		scene
 			.target_details(hovered_target)
-			.unwrap_or_else(|| "  none".to_string())
+			.unwrap_or_else(|| Arc::<str>::from("  none"))
 	);
 	let _ = writeln!(details);
 	let _ = writeln!(details, "selection");
@@ -217,7 +217,7 @@ fn interaction_details(
 		"{}",
 		scene
 			.target_details(selected_target)
-			.unwrap_or_else(|| "  none".to_string())
+			.unwrap_or_else(|| Arc::<str>::from("  none"))
 	);
 	details
 }

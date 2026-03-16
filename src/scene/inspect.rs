@@ -17,6 +17,8 @@ pub(super) struct SceneInspectCache {
 	pub(super) line_byte_offsets: Arc<[usize]>,
 	pub(super) font_names: Arc<[(fontdb::ID, Arc<str>)]>,
 	pub(super) runs: OnceLock<Arc<[InspectRunInfo]>>,
+	pub(super) run_details: OnceLock<Arc<[Arc<str>]>>,
+	pub(super) glyph_details: OnceLock<Arc<[Arc<[Arc<str>]>]>>,
 }
 
 impl LayoutScene {
@@ -40,41 +42,21 @@ impl LayoutScene {
 		self.inspect_runs().get(run_index)?.glyphs.get(glyph_index)
 	}
 
-	pub(crate) fn target_details(&self, target: Option<CanvasTarget>) -> Option<String> {
+	pub(crate) fn target_details(&self, target: Option<CanvasTarget>) -> Option<Arc<str>> {
 		match target? {
-			CanvasTarget::Run(run_index) => {
-				let run = self.runs.get(run_index)?;
-				Some(format!(
-					"  kind: run\n  run index: {run_index}\n  source line: {}\n  rtl: {}\n  top: {:.1}\n  baseline: {:.1}\n  height: {:.1}\n  width: {:.1}\n  glyphs: {}",
-					run.line_index,
-					run.rtl,
-					run.line_top,
-					run.baseline,
-					run.line_height,
-					run.line_width,
-					run.glyph_count,
-				))
-			}
-			CanvasTarget::Glyph { run_index, glyph_index } => {
-				let run = self.inspect_runs().get(run_index)?;
-				let glyph = run.glyphs.get(glyph_index)?;
-				Some(format!(
-					"  kind: glyph\n  run index: {run_index}\n  glyph index: {glyph_index}\n  source line: {}\n  cluster: {}\n  bytes: {:?}\n  font: {}\n  glyph id: {}\n  x/y: {:.1}, {:.1}\n  w/h: {:.1}, {:.1}\n  size: {:.1}\n  x/y offset: {:.3}, {:.3}\n  outline: {}",
-					run.line_index,
-					self.debug_snippet(&glyph.cluster_range),
-					glyph.cluster_range,
-					glyph.font_name,
-					glyph.glyph_id,
-					glyph.x,
-					glyph.y,
-					glyph.width,
-					glyph.height,
-					glyph.font_size,
-					glyph.x_offset,
-					glyph.y_offset,
-					glyph.outline.is_some(),
-				))
-			}
+			CanvasTarget::Run(run_index) => self
+				.inspect
+				.run_details
+				.get_or_init(|| build_run_details(&self.runs))
+				.get(run_index)
+				.cloned(),
+			CanvasTarget::Glyph { run_index, glyph_index } => self
+				.inspect
+				.glyph_details
+				.get_or_init(|| build_glyph_details(self))
+				.get(run_index)
+				.and_then(|run| run.get(glyph_index))
+				.cloned(),
 		}
 	}
 
@@ -192,6 +174,56 @@ impl LayoutScene {
 				}),
 		}
 	}
+}
+
+fn build_run_details(runs: &[super::RunInfo]) -> Arc<[Arc<str>]> {
+	runs.iter()
+		.enumerate()
+		.map(|(run_index, run)| {
+			Arc::<str>::from(format!(
+				"  kind: run\n  run index: {run_index}\n  source line: {}\n  rtl: {}\n  top: {:.1}\n  baseline: {:.1}\n  height: {:.1}\n  width: {:.1}\n  glyphs: {}",
+				run.line_index,
+				run.rtl,
+				run.line_top,
+				run.baseline,
+				run.line_height,
+				run.line_width,
+				run.glyph_count,
+			))
+		})
+		.collect()
+}
+
+fn build_glyph_details(scene: &LayoutScene) -> Arc<[Arc<[Arc<str>]>]> {
+	scene
+		.inspect_runs()
+		.iter()
+		.enumerate()
+		.map(|(run_index, run)| {
+			run.glyphs
+				.iter()
+				.enumerate()
+				.map(|(glyph_index, glyph)| {
+					Arc::<str>::from(format!(
+						"  kind: glyph\n  run index: {run_index}\n  glyph index: {glyph_index}\n  source line: {}\n  cluster: {}\n  bytes: {:?}\n  font: {}\n  glyph id: {}\n  x/y: {:.1}, {:.1}\n  w/h: {:.1}, {:.1}\n  size: {:.1}\n  x/y offset: {:.3}, {:.3}\n  outline: {}",
+						run.line_index,
+						scene.debug_snippet(&glyph.cluster_range),
+						glyph.cluster_range,
+						glyph.font_name,
+						glyph.glyph_id,
+						glyph.x,
+						glyph.y,
+						glyph.width,
+						glyph.height,
+						glyph.font_size,
+						glyph.x_offset,
+						glyph.y_offset,
+						glyph.outline.is_some(),
+					))
+				})
+				.collect::<Arc<[Arc<str>]>>()
+		})
+		.collect()
 }
 
 pub(super) fn build_inspect_runs(inspect: &SceneInspectCache) -> Arc<[InspectRunInfo]> {

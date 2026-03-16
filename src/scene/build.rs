@@ -134,6 +134,8 @@ impl LayoutScene {
 			line_byte_offsets,
 			font_names: font_names.into(),
 			runs: OnceLock::new(),
+			run_details: OnceLock::new(),
+			glyph_details: OnceLock::new(),
 		});
 
 		if let Some(eager_runs) = eager_inspect_runs {
@@ -187,6 +189,8 @@ impl LayoutScene {
 				line_byte_offsets: Arc::from(line_byte_offsets(text.as_ref())),
 				font_names: Vec::new().into(),
 				runs: OnceLock::new(),
+				run_details: OnceLock::new(),
+				glyph_details: OnceLock::new(),
 			}),
 		}
 	}
