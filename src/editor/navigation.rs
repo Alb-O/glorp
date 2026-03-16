@@ -20,7 +20,10 @@ impl EditorEngine {
 				}
 			}
 			EditorMode::Insert => {
-				self.set_insert_head(layout, previous_char_boundary(self.text(), self.caret()).unwrap_or(0));
+				self.set_insert_head(
+					layout,
+					previous_char_boundary(self.text(), self.caret()).unwrap_or_default(),
+				);
 				self.set_preferred_x(None);
 			}
 		}
@@ -41,7 +44,7 @@ impl EditorEngine {
 			EditorMode::Insert => {
 				self.set_insert_head(
 					layout,
-					next_char_boundary(self.text(), self.caret()).unwrap_or(self.text().len()),
+					next_char_boundary(self.text(), self.caret()).unwrap_or_else(|| self.text().len()),
 				);
 				self.set_preferred_x(None);
 			}
@@ -106,11 +109,11 @@ impl EditorEngine {
 				let target = if to_start {
 					layout
 						.first_cluster_in_run(caret.run_index)
-						.map_or(self.caret(), |index| layout.clusters()[index].byte_range.start)
+						.map_or_else(|| self.caret(), |index| layout.clusters()[index].byte_range.start)
 				} else {
 					layout
 						.last_cluster_in_run(caret.run_index)
-						.map_or(self.caret(), |index| layout.clusters()[index].byte_range.end)
+						.map_or_else(|| self.caret(), |index| layout.clusters()[index].byte_range.end)
 				};
 
 				self.set_insert_head(layout, target);
@@ -130,7 +133,7 @@ impl EditorEngine {
 		self.set_mode(EditorMode::Normal);
 		// Normal mode uses the same visible selection that insert mode showed, so
 		// Esc does not shift the cursor left as a separate reconciliation step.
-		let selection = EditorEngine::insert_selection(&layout, self.caret());
+		let selection = Self::insert_selection(&layout, self.caret());
 		self.set_selection(selection);
 		self.set_preferred_x(None);
 		self.clear_pointer_anchor();

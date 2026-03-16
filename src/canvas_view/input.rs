@@ -36,17 +36,13 @@ pub(super) fn decode_event(
 				target: cursor_target,
 			},
 		))),
-		canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
-			Some(DecodedEvent::canvas(if let Some(position) = cursor_local {
-				CanvasIntent::PointerPressed {
-					position,
-					target: cursor_target,
-					at: Instant::now(),
-				}
-			} else {
-				CanvasIntent::Blur
-			}))
-		}
+		canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => Some(DecodedEvent::canvas(
+			cursor_local.map_or(CanvasIntent::Blur, |position| CanvasIntent::PointerPressed {
+				position,
+				target: cursor_target,
+				at: Instant::now(),
+			}),
+		)),
 		canvas::Event::Mouse(mouse::Event::ButtonReleased(mouse::Button::Left)) => {
 			Some(DecodedEvent::canvas(CanvasIntent::PointerReleased))
 		}

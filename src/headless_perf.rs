@@ -384,38 +384,34 @@ fn append_frame_pacing(json: &mut String, dashboard: &PerfDashboard) {
 
 fn append_hot_paths(json: &mut String, dashboard: &PerfDashboard) {
 	json.push_str("  \"hot_paths\": [\n");
-	json.push_str(
-		&dashboard
-			.hot_paths
-			.iter()
-			.map(|summary| {
-				format!(
-					"    {{\"label\": {}, \"last_ms\": {}, \"avg_ms\": {}, \"p95_ms\": {}, \"max_ms\": {}, \"total_samples\": {}, \"over_warning\": {}, \"over_budget\": {}}}",
-					json_string(summary.label),
-					json_float(f64::from(summary.last_ms)),
-					json_float(f64::from(summary.avg_ms)),
-					json_float(f64::from(summary.p95_ms)),
-					json_float(f64::from(summary.max_ms)),
-					summary.total_samples,
-					summary.over_warning,
-					summary.over_budget,
-				)
-			})
-			.collect::<Vec<_>>()
-			.join(",\n"),
-	);
+	for (index, summary) in dashboard.hot_paths.iter().enumerate() {
+		let prefix = if index == 0 { "" } else { ",\n" };
+		let _ = write!(
+			json,
+			"{prefix}    {{\"label\": {}, \"last_ms\": {}, \"avg_ms\": {}, \"p95_ms\": {}, \"max_ms\": {}, \"total_samples\": {}, \"over_warning\": {}, \"over_budget\": {}}}",
+			json_string(summary.label),
+			json_float(f64::from(summary.last_ms)),
+			json_float(f64::from(summary.avg_ms)),
+			json_float(f64::from(summary.p95_ms)),
+			json_float(f64::from(summary.max_ms)),
+			summary.total_samples,
+			summary.over_warning,
+			summary.over_budget,
+		);
+	}
 	json.push_str("\n  ]\n");
 }
 
 fn json_numbers(values: &[f32]) -> String {
-	format!(
-		"[{}]",
-		values
-			.iter()
-			.map(|value| json_float(f64::from(*value)))
-			.collect::<Vec<_>>()
-			.join(", ")
-	)
+	let mut json = String::from("[");
+	for (index, value) in values.iter().enumerate() {
+		if index > 0 {
+			json.push_str(", ");
+		}
+		json.push_str(&json_float(f64::from(*value)));
+	}
+	json.push(']');
+	json
 }
 
 fn json_float(value: f64) -> String {
@@ -423,19 +419,20 @@ fn json_float(value: f64) -> String {
 }
 
 fn json_string(value: &str) -> String {
-	let escaped = value
-		.chars()
-		.flat_map(|ch| match ch {
-			'\\' => "\\\\".chars().collect::<Vec<_>>(),
-			'"' => "\\\"".chars().collect(),
-			'\n' => "\\n".chars().collect(),
-			'\r' => "\\r".chars().collect(),
-			'\t' => "\\t".chars().collect(),
-			_ => [ch].into_iter().collect(),
-		})
-		.collect::<String>();
-
-	format!("\"{escaped}\"")
+	let mut json = String::with_capacity(value.len() + 2);
+	json.push('"');
+	for ch in value.chars() {
+		match ch {
+			'\\' => json.push_str("\\\\"),
+			'"' => json.push_str("\\\""),
+			'\n' => json.push_str("\\n"),
+			'\r' => json.push_str("\\r"),
+			'\t' => json.push_str("\\t"),
+			_ => json.extend(ch.escape_default()),
+		}
+	}
+	json.push('"');
+	json
 }
 
 #[cfg(test)]

@@ -76,7 +76,7 @@ impl EditorEngine {
 				let before = self.history_snapshot();
 				let range = previous..self.caret();
 				let text_edit = TextEdit {
-					range: range.clone(),
+					range,
 					inserted: String::new(),
 				};
 				let inverse = self.apply_document_edit(font_system, &text_edit);

@@ -33,7 +33,7 @@ fn view_warnings_panel(warnings: &[String]) -> Element<'static, Message> {
 	let warnings_text = if warnings.is_empty() {
 		"No warnings".to_string()
 	} else {
-		warnings.iter().map(String::as_str).collect::<Vec<_>>().join("\n")
+		warnings.join("\n")
 	};
 	let has_warnings = !warnings.is_empty();
 

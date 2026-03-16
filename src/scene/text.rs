@@ -1,4 +1,4 @@
-pub(super) fn debug_snippet(text: &str) -> String {
+pub(crate) fn debug_snippet(text: &str) -> String {
 	let escaped: String = text.chars().flat_map(char::escape_default).collect();
 
 	if escaped.is_empty() {

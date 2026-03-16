@@ -1,5 +1,5 @@
 use {
-	super::{GlyphInfo, InspectRunInfo, LayoutScene, OutlinePath, PathCommand, PathPoint, text::debug_snippet},
+	super::{GlyphInfo, InspectRunInfo, LayoutScene, OutlinePath, PathCommand, PathPoint, debug_snippet},
 	crate::{
 		overlay::{LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
 		types::CanvasTarget,
@@ -64,7 +64,7 @@ impl LayoutScene {
 
 	fn debug_snippet(&self, range: &Range<usize>) -> String {
 		self.text
-			.get(range.clone())
+			.get(range.start..range.end)
 			.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
 	}
 

@@ -136,14 +136,16 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 				None
 			}
 		})
-		.unwrap_or((
-			layout.len().saturating_sub(1),
-			layout.last().map_or(0.0, |line| line.w),
-			layout
+		.unwrap_or_else(|| {
+			let visual_line = layout.len().saturating_sub(1);
+			let offset = layout.last().map_or(0.0, |line| line.w);
+			let block_width = layout
 				.last()
 				.and_then(|line| line.glyphs.last())
-				.map_or(default_width, |glyph| glyph.w.max(2.0)),
-		));
+				.map_or(default_width, |glyph| glyph.w.max(2.0));
+
+			(visual_line, offset, block_width)
+		});
 	let y = (visual_lines_offset(cursor.line, buffer) + visual_line_count(layout, visual_line)) * line_height
 		- scroll.vertical;
 

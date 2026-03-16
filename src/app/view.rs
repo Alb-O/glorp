@@ -4,7 +4,7 @@ use {
 		editor::{EditorMode, EditorViewState},
 		overlay::{EditorOverlayTone, OverlayRectKind},
 		perf::PerfSnapshotKey,
-		scene::LayoutScene,
+		scene::{LayoutScene, debug_snippet},
 		types::{Message, ShellMessage, SidebarTab},
 		ui::{
 			CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps,
@@ -259,15 +259,6 @@ fn editor_selection_details(text: &str, editor: &EditorViewState, undo_depth: us
 }
 
 fn preview_range(text: &str, range: &Range<usize>) -> String {
-	text.get(range.clone())
+	text.get(range.start..range.end)
 		.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
-}
-
-fn debug_snippet(text: &str) -> String {
-	let escaped = text.chars().flat_map(char::escape_default).collect::<String>();
-	if escaped.is_empty() {
-		"<empty>".to_string()
-	} else {
-		format!("\"{escaped}\"")
-	}
 }
