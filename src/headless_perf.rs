@@ -139,25 +139,20 @@ fn run(config: PerfCliConfig) -> Result<String, String> {
 	let mut harness = Harness::new(config.scenario)?;
 
 	for _ in 0..config.warmup_frames {
-		let _ = harness.render_frame();
+		harness.render_frame();
 	}
 
 	harness.reset_perf_monitor();
 
-	let screenshot_bytes = (0..config.sample_frames)
-		.map(|step| {
-			harness.step(step);
-			harness.render_frame()
-		})
-		.collect::<Vec<_>>();
+	for step in 0..config.sample_frames {
+		harness.step(step);
+		harness.render_frame();
+	}
+
+	let capture = harness.capture_screenshot();
 	let dashboard = harness.dashboard();
 
-	Ok(build_report_json(
-		config,
-		&harness.renderer_name,
-		screenshot_summary(&screenshot_bytes),
-		&dashboard,
-	))
+	Ok(build_report_json(config, &harness.renderer_name, capture, &dashboard))
 }
 
 struct Harness {
@@ -205,7 +200,12 @@ impl Harness {
 		self.playground.run_headless_perf_step(self.scenario, step);
 	}
 
-	fn render_frame(&mut self) -> usize {
+	fn render_frame(&mut self) {
+		self.draw_frame();
+		self.playground.flush_perf_metrics();
+	}
+
+	fn draw_frame(&mut self) {
 		let mut user_interface = UserInterface::build(
 			self.playground.headless_view(),
 			self.viewport_logical,
@@ -223,13 +223,19 @@ impl Harness {
 		);
 
 		self.cache = user_interface.into_cache();
+	}
 
+	fn capture_screenshot(&mut self) -> CaptureSummary {
+		let started = std::time::Instant::now();
 		let bytes = self
 			.renderer
 			.screenshot(self.viewport_physical, VIEWPORT_SCALE_FACTOR, Color::BLACK)
 			.len();
-		self.playground.flush_perf_metrics();
-		bytes
+		CaptureSummary {
+			mode: "final-only",
+			bytes,
+			capture_ms: started.elapsed().as_secs_f64() * 1000.0,
+		}
 	}
 
 	fn reset_perf_monitor(&mut self) {
@@ -242,45 +248,19 @@ impl Harness {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct ScreenshotSummary {
-	last: usize,
-	avg: f64,
-	p95: usize,
-	max: usize,
-}
-
-fn screenshot_summary(samples: &[usize]) -> ScreenshotSummary {
-	let mut sorted = samples.to_vec();
-	sorted.sort_unstable();
-
-	let last = samples.last().copied().unwrap_or_default();
-	let avg = if samples.is_empty() {
-		0.0
-	} else {
-		let total = samples
-			.iter()
-			.map(|sample| f64::from(u32::try_from(*sample).expect("screenshot byte counts fit in u32")))
-			.sum::<f64>();
-		total / samples.iter().fold(0.0, |count, _| count + 1.0)
-	};
-	let p95_index = sorted
-		.len()
-		.checked_sub(1)
-		.map(|last_index| (last_index * 95 + 50) / 100)
-		.unwrap_or_default();
-	let p95 = sorted.get(p95_index).copied().unwrap_or_default();
-	let max = sorted.last().copied().unwrap_or_default();
-
-	ScreenshotSummary { last, avg, p95, max }
+struct CaptureSummary {
+	mode: &'static str,
+	bytes: usize,
+	capture_ms: f64,
 }
 
 fn build_report_json(
-	config: PerfCliConfig, renderer_name: &str, screenshots: ScreenshotSummary, dashboard: &PerfDashboard,
+	config: PerfCliConfig, renderer_name: &str, capture: CaptureSummary, dashboard: &PerfDashboard,
 ) -> String {
 	let mut json = String::new();
 	json.push_str("{\n");
 	append_report_header(&mut json, config, renderer_name);
-	append_screenshots(&mut json, screenshots);
+	append_capture(&mut json, capture);
 	append_overview(&mut json, dashboard);
 	append_frame_pacing(&mut json, dashboard);
 	append_hot_paths(&mut json, dashboard);
@@ -307,12 +287,11 @@ fn append_report_header(json: &mut String, config: PerfCliConfig, renderer_name:
 	json.push_str("  },\n");
 }
 
-fn append_screenshots(json: &mut String, screenshots: ScreenshotSummary) {
-	json.push_str("  \"screenshots\": {\n");
-	let _ = writeln!(json, "    \"last_bytes\": {},", screenshots.last);
-	let _ = writeln!(json, "    \"avg_bytes\": {},", json_float(screenshots.avg));
-	let _ = writeln!(json, "    \"p95_bytes\": {},", screenshots.p95);
-	let _ = writeln!(json, "    \"max_bytes\": {}", screenshots.max);
+fn append_capture(json: &mut String, capture: CaptureSummary) {
+	json.push_str("  \"capture\": {\n");
+	let _ = writeln!(json, "    \"mode\": {},", json_string(capture.mode));
+	let _ = writeln!(json, "    \"bytes\": {},", capture.bytes);
+	let _ = writeln!(json, "    \"capture_ms\": {}", json_float(capture.capture_ms));
 	json.push_str("  },\n");
 }
 

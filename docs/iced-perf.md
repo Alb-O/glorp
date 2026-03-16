@@ -157,10 +157,13 @@ The JSON should include:
 - driver kind
 - build profile
 - warmup/sample counts
+- a single final capture/readback summary kept outside sampled frame timing
 - avg / p95 / max by metric
 - frame pacing summary
 - cache hit/miss summary
 - environment notes like window size and backend when available
+
+The headless harness now captures one final screenshot after sampling instead of readback-syncing every sampled frame. That keeps the reported frame pacing closer to app and renderer work instead of measuring screenshot overhead.
 
 That means the runtime mode can now answer:
 
