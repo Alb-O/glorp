@@ -77,6 +77,24 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 		})
 	}
 
+	fn diff(&self, tree: &mut Tree) {
+		let state = tree.state.downcast_mut::<StaticSceneState>();
+
+		// Replacing the cache object here is intentional.
+		//
+		// `canvas::Cache::clear()` keeps the previous geometry around so the next
+		// build can reuse its storage. That is normally beneficial, but after an
+		// outline-heavy scene revision it means later text-only revisions can keep
+		// dragging the larger mesh allocation through resize. Recreating the cache
+		// on scene revision boundaries drops that stale outline-era geometry
+		// completely instead of recycling it.
+		if state.cached_scene_revision.get() != Some(self.scene_revision) {
+			state.cache = canvas::Cache::default();
+			state.cached_scene_revision.set(None);
+			state.cached_scene_size.set(None);
+		}
+	}
+
 	fn size(&self) -> Size<Length> {
 		Size::new(self.width, self.height)
 	}
@@ -106,10 +124,6 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 		let revision_changed = state.cached_scene_revision.get() != Some(self.scene_revision);
 		let size_changed = state.cached_scene_size.get() != Some(scene_size_key);
 		let cache_miss = revision_changed || size_changed;
-
-		if revision_changed {
-			state.cache.clear();
-		}
 
 		let mut static_build = None;
 		let geometry = state.cache.draw_with_bounds(renderer, scene_bounds, |frame| {

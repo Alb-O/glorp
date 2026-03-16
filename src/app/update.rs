@@ -371,6 +371,7 @@ impl Playground {
 		self.sidebar.active_tab != SidebarTab::Controls
 			|| self.controls.show_baselines
 			|| self.controls.show_hitboxes
+			|| self.session.scene().draw_outlines
 			|| self.controls.render_mode.draw_outlines()
 	}
 }
