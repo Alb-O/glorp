@@ -225,7 +225,7 @@ fn overlay_primitives(bounds: Rectangle, overlay: &SceneOverlayLayer) -> Vec<Ove
 			"runs={} glyphs={} clusters={} fonts={} width={:.1} height={:.1}",
 			overlay.scene.runs.len(),
 			overlay.scene.glyph_count,
-			overlay.scene.clusters().len(),
+			overlay.scene.cluster_count,
 			overlay.scene.font_count,
 			overlay.scene.measured_width,
 			overlay.scene.measured_height,

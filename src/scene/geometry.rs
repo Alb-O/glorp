@@ -1,8 +1,9 @@
 use {
 	super::{ClusterInfo, LayoutScene},
 	crate::types::CanvasTarget,
-	cosmic_text::LayoutGlyph,
+	cosmic_text::{Buffer, LayoutGlyph},
 	iced::Point,
+	std::sync::Arc,
 };
 
 impl LayoutScene {
@@ -16,7 +17,7 @@ impl LayoutScene {
 				}
 			}
 		} else {
-			for cluster in self.clusters.iter() {
+			for cluster in self.clusters() {
 				if contains_point(
 					local,
 					cluster.x,
@@ -48,18 +49,21 @@ impl LayoutScene {
 	}
 
 	pub(crate) fn clusters(&self) -> &[ClusterInfo] {
-		&self.clusters
+		self.inspect
+			.clusters
+			.get_or_init(|| build_scene_clusters(&self.inspect.buffer, &self.inspect.line_byte_offsets))
+			.as_ref()
 	}
 
 	pub(crate) fn cluster(&self, index: usize) -> Option<&ClusterInfo> {
-		self.clusters.get(index)
+		self.clusters().get(index)
 	}
 
 	pub(crate) fn cluster_index_for_target(&self, target: CanvasTarget) -> Option<usize> {
 		match target {
 			CanvasTarget::Run(run_index) => self.nearest_cluster_in_run(run_index, 0.0),
 			CanvasTarget::Glyph { run_index, glyph_index } => self
-				.clusters
+				.clusters()
 				.iter()
 				.enumerate()
 				.find(|(_, cluster)| {
@@ -77,7 +81,7 @@ impl LayoutScene {
 			return None;
 		}
 
-		self.clusters[run.cluster_range.clone()]
+		self.clusters()[run.cluster_range.clone()]
 			.iter()
 			.enumerate()
 			.min_by(|(_, a), (_, b)| {
@@ -87,6 +91,37 @@ impl LayoutScene {
 			})
 			.map(|(offset, _)| run.cluster_range.start + offset)
 	}
+}
+
+pub(super) fn count_clusters(glyphs: &[LayoutGlyph]) -> usize {
+	let mut count = 0usize;
+	let mut current = None;
+
+	for glyph in glyphs {
+		let next = (glyph.start, glyph.end);
+		if current != Some(next) {
+			count += 1;
+			current = Some(next);
+		}
+	}
+
+	count
+}
+
+fn build_scene_clusters(buffer: &Buffer, line_byte_offsets: &[usize]) -> Arc<[ClusterInfo]> {
+	buffer
+		.layout_runs()
+		.enumerate()
+		.flat_map(|(run_index, run)| {
+			build_clusters(
+				run_index,
+				line_byte_offsets[run.line_i],
+				run.line_top,
+				run.line_height,
+				run.glyphs,
+			)
+		})
+		.collect()
 }
 
 pub(super) fn build_clusters(

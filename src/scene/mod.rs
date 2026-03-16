@@ -52,9 +52,9 @@ pub(crate) struct LayoutScene {
 	pub(crate) measured_width: f32,
 	pub(crate) measured_height: f32,
 	pub(crate) glyph_count: usize,
+	pub(crate) cluster_count: usize,
 	pub(crate) font_count: usize,
 	pub(crate) runs: Arc<[RunInfo]>,
-	pub(crate) clusters: Arc<[ClusterInfo]>,
 	pub(crate) warnings: Arc<[String]>,
 	inspect: Arc<SceneInspectCache>,
 }

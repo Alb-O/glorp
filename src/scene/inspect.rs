@@ -1,10 +1,10 @@
 use {
-	super::{GlyphInfo, InspectRunInfo, LayoutScene, debug_snippet},
+	super::{ClusterInfo, GlyphInfo, InspectRunInfo, LayoutScene, debug_snippet},
 	crate::{
 		overlay::{LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
 		types::CanvasTarget,
 	},
-	cosmic_text::{Buffer, FontSystem, fontdb},
+	cosmic_text::{Buffer, fontdb},
 	std::{
 		ops::Range,
 		sync::{Arc, OnceLock},
@@ -18,6 +18,7 @@ pub(super) struct SceneInspectCache {
 	pub(super) buffer: Arc<Buffer>,
 	pub(super) line_byte_offsets: Arc<[usize]>,
 	pub(super) font_names: Arc<[(fontdb::ID, Arc<str>)]>,
+	pub(super) clusters: OnceLock<Arc<[ClusterInfo]>>,
 	pub(super) runs: OnceLock<Arc<[InspectRunInfo]>>,
 	pub(super) run_details: OnceLock<Arc<[Arc<str>]>>,
 	pub(super) glyph_details: OnceLock<InspectGlyphDetails>,
@@ -236,22 +237,6 @@ pub(super) fn build_inspect_runs(inspect: &SceneInspectCache) -> Arc<[InspectRun
 			}
 		})
 		.collect()
-}
-
-pub(super) fn font_name(
-	font_system: &FontSystem, font_names: &mut Vec<(fontdb::ID, Arc<str>)>, font_id: fontdb::ID,
-) -> Arc<str> {
-	if let Some((_, name)) = font_names.iter().find(|(id, _)| *id == font_id) {
-		return name.clone();
-	}
-
-	let name: Arc<str> = font_system
-		.db()
-		.face(font_id)
-		.map_or_else(|| "unknown-font", |face| face.post_script_name.as_str())
-		.into();
-	font_names.push((font_id, name.clone()));
-	name
 }
 
 fn lookup_font_name(font_names: &[(fontdb::ID, Arc<str>)], font_id: fontdb::ID) -> Arc<str> {

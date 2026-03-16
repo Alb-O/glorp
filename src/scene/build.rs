@@ -2,9 +2,7 @@
 use cosmic_text::Metrics;
 use {
 	super::{
-		LayoutScene, LayoutSceneModel, RunInfo, SceneConfig,
-		geometry::build_clusters,
-		inspect::{SceneInspectCache, font_name},
+		LayoutScene, LayoutSceneModel, RunInfo, SceneConfig, geometry::count_clusters, inspect::SceneInspectCache,
 		text::line_byte_offsets,
 	},
 	cosmic_text::{Buffer, FontSystem},
@@ -73,30 +71,24 @@ impl LayoutScene {
 	fn from_buffer(font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig) -> Self {
 		let mut runs = Vec::new();
 		let mut warnings = Vec::new();
-		let mut font_names = Vec::new();
+		let mut font_ids = Vec::new();
 		let mut measured_width: f32 = 0.0;
 		let mut measured_height: f32 = 0.0;
 		let mut glyph_count = 0usize;
-		let mut clusters = Vec::new();
+		let mut cluster_count = 0usize;
 		let line_byte_offsets = Arc::<[usize]>::from(line_byte_offsets(text));
 
 		for run in buffer.layout_runs() {
-			let line_byte_offset = line_byte_offsets[run.line_i];
 			measured_width = measured_width.max(run.line_w);
 			measured_height = measured_height.max(run.line_top + run.line_height);
 			glyph_count += run.glyphs.len();
-			let cluster_start = clusters.len();
-			clusters.extend(build_clusters(
-				runs.len(),
-				line_byte_offset,
-				run.line_top,
-				run.line_height,
-				run.glyphs,
-			));
-			let cluster_end = clusters.len();
+			let cluster_start = cluster_count;
+			cluster_count += count_clusters(run.glyphs);
 
 			for glyph in run.glyphs {
-				let _ = font_name(font_system, &mut font_names, glyph.font_id);
+				if !font_ids.contains(&glyph.font_id) {
+					font_ids.push(glyph.font_id);
+				}
 			}
 
 			runs.push(RunInfo {
@@ -106,10 +98,21 @@ impl LayoutScene {
 				line_top: run.line_top,
 				line_height: run.line_height,
 				line_width: run.line_w,
-				cluster_range: cluster_start..cluster_end,
+				cluster_range: cluster_start..cluster_count,
 				glyph_count: run.glyphs.len(),
 			});
 		}
+
+		let font_names = font_ids
+			.into_iter()
+			.map(|font_id| {
+				let name = font_system
+					.db()
+					.face(font_id)
+					.map_or_else(|| "unknown-font", |face| face.post_script_name.as_str());
+				(font_id, Arc::<str>::from(name))
+			})
+			.collect::<Arc<[_]>>();
 
 		if runs.is_empty() {
 			warnings.push("No layout runs were produced. Check the font choice and text content.".to_string());
@@ -118,7 +121,8 @@ impl LayoutScene {
 		let inspect = Arc::new(SceneInspectCache {
 			buffer,
 			line_byte_offsets,
-			font_names: font_names.into(),
+			font_names,
+			clusters: OnceLock::new(),
 			runs: OnceLock::new(),
 			run_details: OnceLock::new(),
 			glyph_details: OnceLock::new(),
@@ -131,9 +135,9 @@ impl LayoutScene {
 			measured_width,
 			measured_height,
 			glyph_count,
+			cluster_count,
 			font_count: inspect.font_names.len(),
 			runs: runs.into(),
-			clusters: clusters.into(),
 			warnings: warnings.into(),
 			inspect,
 		}
@@ -164,9 +168,9 @@ impl LayoutScene {
 			measured_width,
 			measured_height,
 			glyph_count,
+			cluster_count: clusters.len(),
 			font_count,
 			runs: runs.into(),
-			clusters: clusters.into(),
 			warnings: Vec::new().into(),
 			inspect: Arc::new(SceneInspectCache {
 				buffer: Arc::new(Buffer::new_empty(Metrics::new(
@@ -175,6 +179,11 @@ impl LayoutScene {
 				))),
 				line_byte_offsets: Arc::from(line_byte_offsets(text.as_ref())),
 				font_names: Vec::new().into(),
+				clusters: {
+					let lock = OnceLock::new();
+					let _ = lock.set(clusters.into());
+					lock
+				},
 				runs: OnceLock::new(),
 				run_details: OnceLock::new(),
 				glyph_details: OnceLock::new(),

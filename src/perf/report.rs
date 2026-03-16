@@ -188,7 +188,7 @@ pub(super) fn build_dashboard(
 			line_count: scene.text.lines().count().max(1),
 			run_count: scene.runs.len(),
 			glyph_count: scene.glyph_count,
-			cluster_count: scene.clusters().len(),
+			cluster_count: scene.cluster_count,
 			font_count: scene.font_count,
 			warning_count: scene.warnings.len(),
 			scene_width: scene.measured_width,
