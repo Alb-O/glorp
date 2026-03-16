@@ -11,7 +11,6 @@ use {
 };
 
 /// Props for the performance inspection tab.
-#[derive(Debug, Clone)]
 pub(crate) struct PerfTabProps {
 	pub(crate) dashboard: PerfDashboard,
 }

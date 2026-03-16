@@ -2,13 +2,15 @@ use {
 	super::{
 		Playground,
 		sidebar_cache::{InspectSidebarModel, PerfSidebarModel},
+		sidebar_data::{ControlsSidebarData, SidebarBodyData},
 		state::ShellPane,
 	},
 	crate::{
 		types::{Message, ShellMessage, SidebarTab},
 		ui::{
-			CanvasDecorations, CanvasPaneProps, ControlsTabProps, SidebarProps, is_stacked_shell, view_canvas_pane,
-			view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar, view_stacked_shell,
+			CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps,
+			is_stacked_shell, view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar,
+			view_stacked_shell,
 		},
 	},
 	iced::{
@@ -56,13 +58,14 @@ impl Playground {
 
 	fn view_sidebar(&self, stacked: bool) -> Element<'_, Message> {
 		let (undo_depth, redo_depth) = self.session.history_depths();
+		let body = render_sidebar_body(self.sidebar_body_data(undo_depth, redo_depth));
 		view_sidebar(SidebarProps {
 			active_tab: self.sidebar.active_tab,
 			editor_mode: self.session.mode(),
 			editor_bytes: self.session.text().len(),
 			undo_depth,
 			redo_depth,
-			body: self.view_sidebar_body(undo_depth, redo_depth),
+			body,
 			stacked,
 		})
 	}
@@ -102,9 +105,9 @@ impl Playground {
 		})
 	}
 
-	fn view_sidebar_body(&self, undo_depth: usize, redo_depth: usize) -> Element<'static, Message> {
+	fn sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
 		match self.sidebar.active_tab {
-			SidebarTab::Controls => view_controls_tab(ControlsTabProps {
+			SidebarTab::Controls => SidebarBodyData::Controls(ControlsSidebarData {
 				preset: self.controls.preset,
 				font: self.controls.font,
 				shaping: self.controls.shaping,
@@ -115,12 +118,12 @@ impl Playground {
 				show_baselines: self.controls.show_baselines,
 				show_hitboxes: self.controls.show_hitboxes,
 			}),
-			SidebarTab::Inspect => self.view_inspect_sidebar(undo_depth, redo_depth),
-			SidebarTab::Perf => self.view_perf_sidebar(),
+			SidebarTab::Inspect => self.inspect_sidebar_body_data(undo_depth, redo_depth),
+			SidebarTab::Perf => self.perf_sidebar_body_data(),
 		}
 	}
 
-	fn view_inspect_sidebar(&self, undo_depth: usize, redo_depth: usize) -> Element<'static, Message> {
+	fn inspect_sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
 		let editor = self.session.view_state();
 		let model = self.sidebar_cache.inspect_model(
 			self.viewport.scene_revision,
@@ -132,14 +135,11 @@ impl Playground {
 			redo_depth,
 		);
 
-		lazy(model.key, move |_| {
-			let InspectSidebarModel { props, .. } = model.clone();
-			view_inspect_tab((*props).clone())
-		})
-		.into()
+		let InspectSidebarModel { data, .. } = model;
+		SidebarBodyData::Inspect(data)
 	}
 
-	fn view_perf_sidebar(&self) -> Element<'static, Message> {
+	fn perf_sidebar_body_data(&self) -> SidebarBodyData {
 		let editor_mode = self.session.mode();
 		let editor_bytes = self.session.text().len();
 		let model = self.sidebar_cache.perf_model(
@@ -150,10 +150,42 @@ impl Playground {
 			editor_bytes,
 		);
 
-		lazy(model.key, move |_| {
-			let PerfSidebarModel { props, .. } = model.clone();
-			view_perf_tab((*props).clone())
-		})
-		.into()
+		let PerfSidebarModel { data, .. } = model;
+		SidebarBodyData::Perf(data)
+	}
+}
+
+fn render_sidebar_body(body: SidebarBodyData) -> Element<'static, Message> {
+	match body {
+		SidebarBodyData::Controls(data) => view_controls_tab(ControlsTabProps {
+			preset: data.preset,
+			font: data.font,
+			shaping: data.shaping,
+			wrapping: data.wrapping,
+			render_mode: data.render_mode,
+			font_size: data.font_size,
+			line_height: data.line_height,
+			show_baselines: data.show_baselines,
+			show_hitboxes: data.show_hitboxes,
+		}),
+		SidebarBodyData::Inspect(data) => {
+			let key = Arc::as_ptr(&data);
+			lazy(key, move |_| {
+				view_inspect_tab(InspectTabProps {
+					warnings: data.warnings.clone(),
+					interaction_details: data.interaction_details.clone(),
+				})
+			})
+			.into()
+		}
+		SidebarBodyData::Perf(data) => {
+			let key = Arc::as_ptr(&data);
+			lazy(key, move |_| {
+				view_perf_tab(PerfTabProps {
+					dashboard: data.dashboard.clone(),
+				})
+			})
+			.into()
+		}
 	}
 }

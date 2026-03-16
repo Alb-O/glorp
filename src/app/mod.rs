@@ -3,6 +3,7 @@ mod headless;
 mod headless_tests;
 mod session;
 mod sidebar_cache;
+mod sidebar_data;
 mod state;
 #[cfg(test)]
 mod tests;

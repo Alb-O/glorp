@@ -1,11 +1,11 @@
 use {
+	super::sidebar_data::{InspectSidebarData, PerfSidebarData},
 	crate::{
 		editor::{EditorMode, EditorViewState},
 		overlay::{EditorOverlayTone, OverlayRectKind},
 		perf::{PerfMonitor, PerfSnapshotKey},
 		scene::{LayoutScene, debug_snippet},
 		types::CanvasTarget,
-		ui::{InspectTabProps, PerfTabProps},
 	},
 	std::{
 		cell::{Cell, RefCell},
@@ -39,13 +39,13 @@ pub(super) struct PerfSidebarKey {
 #[derive(Debug, Clone)]
 pub(super) struct InspectSidebarModel {
 	pub(super) key: InspectSidebarKey,
-	pub(super) props: Arc<InspectTabProps>,
+	pub(super) data: Arc<InspectSidebarData>,
 }
 
 #[derive(Debug, Clone)]
 pub(super) struct PerfSidebarModel {
 	pub(super) key: PerfSidebarKey,
-	pub(super) props: Arc<PerfTabProps>,
+	pub(super) data: Arc<PerfSidebarData>,
 }
 
 #[derive(Default)]
@@ -102,7 +102,7 @@ impl SidebarCache {
 
 		let model = InspectSidebarModel {
 			key,
-			props: Arc::new(InspectTabProps {
+			data: Arc::new(InspectSidebarData {
 				warnings: scene.warnings.clone(),
 				interaction_details: interaction_details(
 					scene,
@@ -142,7 +142,7 @@ impl SidebarCache {
 
 		let model = PerfSidebarModel {
 			key,
-			props: Arc::new(PerfTabProps {
+			data: Arc::new(PerfSidebarData {
 				dashboard: perf.dashboard(scene, editor_mode, editor_bytes),
 			}),
 		};

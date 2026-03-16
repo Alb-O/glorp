@@ -11,7 +11,6 @@ use {
 };
 
 /// Props for the inspect tab.
-#[derive(Debug, Clone)]
 pub(crate) struct InspectTabProps {
 	pub(crate) warnings: Arc<[String]>,
 	pub(crate) interaction_details: String,
