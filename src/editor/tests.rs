@@ -11,6 +11,10 @@ use {
 	iced::Point,
 };
 
+fn assert_approx_eq(left: f32, right: f32) {
+	assert!((left - right).abs() <= 0.001, "left={left} right={right}");
+}
+
 fn editor(text: &str) -> (cosmic_text::FontSystem, EditorEngine) {
 	let mut font_system = make_font_system();
 	let config = scene_config(
@@ -232,7 +236,7 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 	assert!(
 		editor
 			.apply(&mut font_system, edit(EditorEditIntent::DeleteSelection))
-			.document_changed
+			.document_changed()
 	);
 	assert_eq!(editor.text(), "🙂\n");
 	assert_eq!(editor.buffer_text(), "🙂\n");
@@ -272,11 +276,11 @@ fn motion_intents_report_view_without_document_change() {
 
 	let outcome = editor.apply(&mut font_system, motion(EditorMotion::Right));
 
-	assert!(!outcome.document_changed);
+	assert!(!outcome.document_changed());
 	assert!(outcome.view_changed);
 	assert!(outcome.selection_changed);
 	assert!(!outcome.mode_changed);
-	assert!(!outcome.requires_scene_rebuild);
+	assert!(!outcome.requires_scene_rebuild());
 	assert_eq!(outcome.text_edit, None);
 }
 
@@ -287,11 +291,11 @@ fn text_edit_intents_report_document_and_view_outcome() {
 	let _ = editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
 	let outcome = editor.apply(&mut font_system, edit(EditorEditIntent::InsertText("!".to_string())));
 
-	assert!(outcome.document_changed);
+	assert!(outcome.document_changed());
 	assert!(outcome.view_changed);
 	assert!(outcome.selection_changed);
 	assert!(!outcome.mode_changed);
-	assert!(outcome.requires_scene_rebuild);
+	assert!(outcome.requires_scene_rebuild());
 	assert_eq!(
 		outcome.text_edit,
 		Some(TextEdit {
@@ -309,7 +313,7 @@ fn mode_transition_sets_mode_changed_and_viewport_target() {
 
 	assert!(outcome.mode_changed);
 	assert!(outcome.view_changed);
-	assert!(!outcome.document_changed);
+	assert!(!outcome.document_changed());
 	assert!(outcome.viewport_target.is_some());
 }
 
@@ -325,9 +329,9 @@ fn insert_mode_exposes_a_caret_rectangle() {
 		.viewport_target
 		.expect("insert mode should expose an active cluster");
 
-	assert_eq!(caret.y, active.y);
+	assert_approx_eq(caret.y, active.y);
 	assert!(caret.height >= active.height);
-	assert_eq!(caret.x, active.x);
+	assert_approx_eq(caret.x, active.x);
 }
 
 #[test]
@@ -380,11 +384,11 @@ fn insert_mode_caret_stays_on_the_previous_row_before_a_newline() {
 
 	assert_eq!(view.selection_head, Some(2));
 	assert_eq!(view.selection, Some(1..2));
-	assert_eq!(active.x, caret.x);
-	assert_eq!(active.y, caret.y);
+	assert_approx_eq(active.x, caret.x);
+	assert_approx_eq(active.y, caret.y);
 	assert!(active.width > caret.width);
 	assert!(rects(&view, OverlayRectKind::EditorSelection(EditorOverlayTone::Insert)).is_empty());
-	assert_eq!(caret.y, previous.y);
+	assert_approx_eq(caret.y, previous.y);
 	assert!(caret.x > previous.x);
 	assert!(caret.x >= previous.x + previous.width - caret.width);
 }
@@ -398,7 +402,7 @@ fn pointer_miss_does_not_jump_to_first_cluster() {
 
 	editor.apply(
 		&mut font_system,
-		pointer(EditorPointerIntent::BeginSelection {
+		pointer(EditorPointerIntent::Begin {
 			position: Point::new(900.0, 900.0),
 			select_word: false,
 		}),
@@ -429,7 +433,7 @@ fn live_selection_rectangles_track_wrapped_width_changes() {
 	);
 
 	assert!(
-		after.y > before.y || (after.y == before.y && after.x < before.x),
+		after.y > before.y || ((after.y - before.y).abs() <= 0.001 && after.x < before.x),
 		"expected wrapped selection to move after width shrink, before={before:?} after={after:?}"
 	);
 }
@@ -447,16 +451,16 @@ fn drag_selection_spans_multiple_wrapped_rectangles() {
 
 	editor.apply(
 		&mut font_system,
-		pointer(EditorPointerIntent::BeginSelection {
+		pointer(EditorPointerIntent::Begin {
 			position: Point::new(start.x + 2.0, start.y + 2.0),
 			select_word: false,
 		}),
 	);
 	editor.apply(
 		&mut font_system,
-		pointer(EditorPointerIntent::DragSelection(Point::new(90.0, 120.0))),
+		pointer(EditorPointerIntent::Drag(Point::new(90.0, 120.0))),
 	);
-	editor.apply(&mut font_system, pointer(EditorPointerIntent::EndSelection));
+	editor.apply(&mut font_system, pointer(EditorPointerIntent::End));
 
 	let view = editor.view_state();
 	assert!(rects(&view, OverlayRectKind::EditorSelection(EditorOverlayTone::Normal)).len() >= 2);
@@ -538,7 +542,7 @@ fn double_click_selects_a_full_word() {
 
 	editor.apply(
 		&mut font_system,
-		pointer(EditorPointerIntent::BeginSelection {
+		pointer(EditorPointerIntent::Begin {
 			position: Point::new(rect.x + 2.0, rect.y + 2.0),
 			select_word: true,
 		}),

@@ -20,13 +20,18 @@ use {
 const STACK_LAYOUT_BREAKPOINT: f32 = 1120.0;
 const MIN_CANVAS_WIDTH: f32 = 620.0;
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct CanvasDecorations {
+	pub(crate) show_baselines: bool,
+	pub(crate) show_hitboxes: bool,
+}
+
 /// Props for the canvas pane.
 pub(crate) struct CanvasPaneProps {
 	pub(crate) scene: LayoutScene,
 	pub(crate) text_layer: EditorTextLayerState,
 	pub(crate) layout_width: f32,
-	pub(crate) show_baselines: bool,
-	pub(crate) show_hitboxes: bool,
+	pub(crate) decorations: CanvasDecorations,
 	pub(crate) inspect_overlays: std::sync::Arc<[OverlayPrimitive]>,
 	pub(crate) editor: EditorViewState,
 	pub(crate) focused: bool,
@@ -78,8 +83,8 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	let static_scene = StaticSceneLayer::new(
 		props.scene.clone(),
 		props.layout_width,
-		props.show_baselines,
-		props.show_hitboxes,
+		props.decorations.show_baselines,
+		props.decorations.show_hitboxes,
 		props.scene_revision,
 		props.scroll,
 		props.perf.clone(),

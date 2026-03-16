@@ -23,6 +23,7 @@ criterion_main!(benches);
 const VIEWPORT_SCALE_FACTOR: f32 = 1.0;
 const VIEWPORT_PHYSICAL_WIDTH: u32 = 1600;
 const VIEWPORT_PHYSICAL_HEIGHT: u32 = 1000;
+const VIEWPORT_LOGICAL_SIZE: Size = Size::new(1600.0, 1000.0);
 
 fn configured_criterion() -> Criterion {
 	glorp::init_tracing();
@@ -93,10 +94,7 @@ impl Harness {
 		.unwrap_or_else(|| panic!("failed to create headless iced renderer for backend {backend:?}"));
 		let renderer_name = renderer.name();
 		let viewport_physical = Size::new(VIEWPORT_PHYSICAL_WIDTH, VIEWPORT_PHYSICAL_HEIGHT);
-		let viewport_logical = Size::new(
-			VIEWPORT_PHYSICAL_WIDTH as f32 / VIEWPORT_SCALE_FACTOR,
-			VIEWPORT_PHYSICAL_HEIGHT as f32 / VIEWPORT_SCALE_FACTOR,
-		);
+		let viewport_logical = VIEWPORT_LOGICAL_SIZE;
 		let playground = Playground::headless();
 
 		let mut harness = Self {

@@ -110,9 +110,9 @@ pub(crate) enum EditorIntent {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum EditorPointerIntent {
-	BeginSelection { position: Point, select_word: bool },
-	DragSelection(Point),
-	EndSelection,
+	Begin { position: Point, select_word: bool },
+	Drag(Point),
+	End,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,11 +154,9 @@ pub(crate) struct TextEdit {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct EditorOutcome {
-	pub(crate) document_changed: bool,
 	pub(crate) view_changed: bool,
 	pub(crate) selection_changed: bool,
 	pub(crate) mode_changed: bool,
-	pub(crate) requires_scene_rebuild: bool,
 	pub(crate) viewport_target: Option<LayoutRect>,
 	pub(crate) text_edit: Option<TextEdit>,
 }
@@ -208,17 +206,22 @@ pub(crate) struct EditorEngine {
 
 impl EditorOutcome {
 	fn from_apply_result(previous_view: &EditorViewState, next_view: &EditorViewState, result: ApplyResult) -> Self {
-		let document_changed = result.text_edit.is_some();
 		Self {
-			document_changed,
 			view_changed: previous_view != next_view,
 			selection_changed: previous_view.selection != next_view.selection
 				|| previous_view.selection_head != next_view.selection_head,
 			mode_changed: previous_view.mode != next_view.mode,
-			requires_scene_rebuild: document_changed,
 			viewport_target: next_view.viewport_target,
 			text_edit: result.text_edit,
 		}
+	}
+
+	pub(crate) fn document_changed(&self) -> bool {
+		self.text_edit.is_some()
+	}
+
+	pub(crate) fn requires_scene_rebuild(&self) -> bool {
+		self.document_changed()
 	}
 }
 
@@ -415,9 +418,7 @@ impl EditorEngine {
 	}
 
 	fn active_selection_index(&self, layout: &BufferLayoutSnapshot) -> Option<usize> {
-		if self.selection().is_none() {
-			return None;
-		}
+		self.selection()?;
 
 		layout
 			.cluster_at_or_after(self.caret())
@@ -639,7 +640,7 @@ impl EditorEngine {
 		}
 	}
 
-	fn insert_selection(&self, layout: &BufferLayoutSnapshot, head: usize) -> Option<EditorSelection> {
+	fn insert_selection(layout: &BufferLayoutSnapshot, head: usize) -> Option<EditorSelection> {
 		layout
 			.cluster_at_insert_head(head)
 			.and_then(|index| layout.cluster(index))
@@ -647,6 +648,6 @@ impl EditorEngine {
 	}
 
 	fn set_insert_head(&mut self, layout: &BufferLayoutSnapshot, head: usize) {
-		self.state.session.enter_insert(self.insert_selection(layout, head));
+		self.state.session.enter_insert(Self::insert_selection(layout, head));
 	}
 }

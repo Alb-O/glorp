@@ -178,7 +178,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 	}
 }
 
-impl<'a> From<SceneTextLayer> for Element<'a, Message> {
+impl From<SceneTextLayer> for Element<'_, Message> {
 	fn from(widget: SceneTextLayer) -> Self {
 		Element::new(widget)
 	}

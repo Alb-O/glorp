@@ -22,7 +22,7 @@ pub(crate) struct SidebarProps<'a> {
 	pub(crate) stacked: bool,
 }
 
-pub(crate) fn view_sidebar<'a>(props: SidebarProps<'a>) -> Element<'a, Message> {
+pub(crate) fn view_sidebar(props: SidebarProps<'_>) -> Element<'_, Message> {
 	container(
 		column![
 			text("Glyph Playground").size(28),

@@ -28,9 +28,9 @@ pub(crate) mod tokens;
 
 pub(crate) use {
 	components::{
-		CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps, default_sidebar_ratio,
-		is_stacked_shell, view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar,
-		view_stacked_shell,
+		CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps,
+		default_sidebar_ratio, is_stacked_shell, view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab,
+		view_sidebar, view_stacked_shell,
 	},
 	tokens::{
 		CONTROL_RADIUS, PICK_LIST_PADDING, control_row, panel_scrollable, panel_style, rounded_checkbox_style,

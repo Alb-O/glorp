@@ -29,14 +29,13 @@ pub(super) fn decode_event(
 		canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) if cursor.is_over(bounds) => {
 			Some(DecodedEvent::canvas(CanvasIntent::WheelScrolled(scroll_delta(*delta))))
 		}
-		canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => Some(DecodedEvent::canvas(
-			cursor_local
-				.map(|position| CanvasIntent::CursorMoved {
-					position,
-					target: cursor_target,
-				})
-				.unwrap_or(CanvasIntent::CursorLeft),
-		)),
+		canvas::Event::Mouse(mouse::Event::CursorMoved { .. }) => Some(DecodedEvent::canvas(cursor_local.map_or(
+			CanvasIntent::CursorLeft,
+			|position| CanvasIntent::CursorMoved {
+				position,
+				target: cursor_target,
+			},
+		))),
 		canvas::Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => {
 			Some(DecodedEvent::canvas(if let Some(position) = cursor_local {
 				CanvasIntent::PointerPressed {

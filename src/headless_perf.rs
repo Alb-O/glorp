@@ -7,7 +7,7 @@ use {
 	},
 	iced_runtime::{UserInterface, user_interface},
 	pollster::block_on,
-	std::{env, process::ExitCode},
+	std::{env, fmt::Write as _, process::ExitCode},
 };
 
 const DEFAULT_WARMUP_FRAMES: usize = 30;
@@ -15,6 +15,7 @@ const DEFAULT_SAMPLE_FRAMES: usize = 180;
 const VIEWPORT_SCALE_FACTOR: f32 = 1.0;
 const VIEWPORT_PHYSICAL_WIDTH: u32 = 1600;
 const VIEWPORT_PHYSICAL_HEIGHT: u32 = 1000;
+const VIEWPORT_LOGICAL_SIZE: Size = Size::new(1600.0, 1000.0);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PerfCliConfig {
@@ -181,10 +182,7 @@ impl Harness {
 		.ok_or_else(|| "failed to create headless renderer".to_string())?;
 		let renderer_name = renderer.name();
 		let viewport_physical = Size::new(VIEWPORT_PHYSICAL_WIDTH, VIEWPORT_PHYSICAL_HEIGHT);
-		let viewport_logical = Size::new(
-			VIEWPORT_PHYSICAL_WIDTH as f32 / VIEWPORT_SCALE_FACTOR,
-			VIEWPORT_PHYSICAL_HEIGHT as f32 / VIEWPORT_SCALE_FACTOR,
-		);
+		let viewport_logical = VIEWPORT_LOGICAL_SIZE;
 		let playground = Playground::headless();
 
 		let mut harness = Self {
@@ -244,7 +242,7 @@ impl Harness {
 #[derive(Debug, Clone, Copy)]
 struct ScreenshotSummary {
 	last: usize,
-	avg: f32,
+	avg: f64,
 	p95: usize,
 	max: usize,
 }
@@ -257,12 +255,16 @@ fn screenshot_summary(samples: &[usize]) -> ScreenshotSummary {
 	let avg = if samples.is_empty() {
 		0.0
 	} else {
-		samples.iter().copied().sum::<usize>() as f32 / samples.len() as f32
+		let total = samples
+			.iter()
+			.map(|sample| f64::from(u32::try_from(*sample).expect("screenshot byte counts fit in u32")))
+			.sum::<f64>();
+		total / samples.iter().fold(0.0, |count, _| count + 1.0)
 	};
 	let p95_index = sorted
 		.len()
 		.checked_sub(1)
-		.map(|last_index| ((last_index as f32) * 0.95).round() as usize)
+		.map(|last_index| (last_index * 95 + 50) / 100)
 		.unwrap_or_default();
 	let p95 = sorted.get(p95_index).copied().unwrap_or_default();
 	let max = sorted.last().copied().unwrap_or_default();
@@ -275,95 +277,112 @@ fn build_report_json(
 ) -> String {
 	let mut json = String::new();
 	json.push_str("{\n");
-	json.push_str(&format!("  \"scenario\": {},\n", json_string(config.scenario.label())));
-	json.push_str(&format!("  \"driver\": {},\n", json_string(config.scenario.driver())));
-	json.push_str(&format!("  \"renderer\": {},\n", json_string(renderer_name)));
-	json.push_str(&format!(
-		"  \"build_profile\": {},\n",
+	append_report_header(&mut json, config, renderer_name);
+	append_screenshots(&mut json, screenshots);
+	append_overview(&mut json, dashboard);
+	append_frame_pacing(&mut json, dashboard);
+	append_hot_paths(&mut json, dashboard);
+	json.push_str("}\n");
+	json
+}
+
+fn append_report_header(json: &mut String, config: PerfCliConfig, renderer_name: &str) {
+	let _ = writeln!(json, "  \"scenario\": {},", json_string(config.scenario.label()));
+	let _ = writeln!(json, "  \"driver\": {},", json_string(config.scenario.driver()));
+	let _ = writeln!(json, "  \"renderer\": {},", json_string(renderer_name));
+	let _ = writeln!(
+		json,
+		"  \"build_profile\": {},",
 		json_string(if cfg!(debug_assertions) { "debug" } else { "release" })
-	));
+	);
 	json.push_str("  \"viewport\": {\n");
-	json.push_str(&format!("    \"width\": {VIEWPORT_PHYSICAL_WIDTH},\n"));
-	json.push_str(&format!("    \"height\": {VIEWPORT_PHYSICAL_HEIGHT}\n"));
+	let _ = writeln!(json, "    \"width\": {VIEWPORT_PHYSICAL_WIDTH},");
+	let _ = writeln!(json, "    \"height\": {VIEWPORT_PHYSICAL_HEIGHT}");
 	json.push_str("  },\n");
 	json.push_str("  \"sampling\": {\n");
-	json.push_str(&format!("    \"warmup_frames\": {},\n", config.warmup_frames));
-	json.push_str(&format!("    \"sample_frames\": {}\n", config.sample_frames));
+	let _ = writeln!(json, "    \"warmup_frames\": {},", config.warmup_frames);
+	let _ = writeln!(json, "    \"sample_frames\": {}", config.sample_frames);
 	json.push_str("  },\n");
+}
+
+fn append_screenshots(json: &mut String, screenshots: ScreenshotSummary) {
 	json.push_str("  \"screenshots\": {\n");
-	json.push_str(&format!("    \"last_bytes\": {},\n", screenshots.last));
-	json.push_str(&format!("    \"avg_bytes\": {},\n", json_f32(screenshots.avg)));
-	json.push_str(&format!("    \"p95_bytes\": {},\n", screenshots.p95));
-	json.push_str(&format!("    \"max_bytes\": {}\n", screenshots.max));
+	let _ = writeln!(json, "    \"last_bytes\": {},", screenshots.last);
+	let _ = writeln!(json, "    \"avg_bytes\": {},", json_float(screenshots.avg));
+	let _ = writeln!(json, "    \"p95_bytes\": {},", screenshots.p95);
+	let _ = writeln!(json, "    \"max_bytes\": {}", screenshots.max);
 	json.push_str("  },\n");
+}
+
+fn append_overview(json: &mut String, dashboard: &PerfDashboard) {
 	json.push_str("  \"overview\": {\n");
-	json.push_str(&format!(
-		"    \"editor_mode\": {},\n",
+	let _ = writeln!(
+		json,
+		"    \"editor_mode\": {},",
 		json_string(&dashboard.overview.editor_mode.to_string())
-	));
-	json.push_str(&format!("    \"editor_bytes\": {},\n", dashboard.overview.editor_bytes));
-	json.push_str(&format!("    \"editor_chars\": {},\n", dashboard.overview.editor_chars));
-	json.push_str(&format!("    \"line_count\": {},\n", dashboard.overview.line_count));
-	json.push_str(&format!("    \"run_count\": {},\n", dashboard.overview.run_count));
-	json.push_str(&format!("    \"glyph_count\": {},\n", dashboard.overview.glyph_count));
-	json.push_str(&format!(
-		"    \"cluster_count\": {},\n",
-		dashboard.overview.cluster_count
-	));
-	json.push_str(&format!("    \"font_count\": {},\n", dashboard.overview.font_count));
-	json.push_str(&format!(
-		"    \"warning_count\": {},\n",
-		dashboard.overview.warning_count
-	));
-	json.push_str(&format!(
-		"    \"scene_width\": {},\n",
-		json_f32(dashboard.overview.scene_width)
-	));
-	json.push_str(&format!(
-		"    \"scene_height\": {},\n",
-		json_f32(dashboard.overview.scene_height)
-	));
-	json.push_str(&format!(
-		"    \"layout_width\": {}\n",
-		json_f32(dashboard.overview.layout_width)
-	));
+	);
+	let _ = writeln!(json, "    \"editor_bytes\": {},", dashboard.overview.editor_bytes);
+	let _ = writeln!(json, "    \"editor_chars\": {},", dashboard.overview.editor_chars);
+	let _ = writeln!(json, "    \"line_count\": {},", dashboard.overview.line_count);
+	let _ = writeln!(json, "    \"run_count\": {},", dashboard.overview.run_count);
+	let _ = writeln!(json, "    \"glyph_count\": {},", dashboard.overview.glyph_count);
+	let _ = writeln!(json, "    \"cluster_count\": {},", dashboard.overview.cluster_count);
+	let _ = writeln!(json, "    \"font_count\": {},", dashboard.overview.font_count);
+	let _ = writeln!(json, "    \"warning_count\": {},", dashboard.overview.warning_count);
+	let _ = writeln!(
+		json,
+		"    \"scene_width\": {},",
+		json_float(f64::from(dashboard.overview.scene_width))
+	);
+	let _ = writeln!(
+		json,
+		"    \"scene_height\": {},",
+		json_float(f64::from(dashboard.overview.scene_height))
+	);
+	let _ = writeln!(
+		json,
+		"    \"layout_width\": {}",
+		json_float(f64::from(dashboard.overview.layout_width))
+	);
 	json.push_str("  },\n");
+}
+
+fn append_frame_pacing(json: &mut String, dashboard: &PerfDashboard) {
 	json.push_str("  \"frame_pacing\": {\n");
-	json.push_str(&format!("    \"fps\": {},\n", json_f32(dashboard.frame_pacing.fps)));
-	json.push_str(&format!(
-		"    \"last_ms\": {},\n",
-		json_f32(dashboard.frame_pacing.last_ms)
-	));
-	json.push_str(&format!(
-		"    \"avg_ms\": {},\n",
-		json_f32(dashboard.frame_pacing.avg_ms)
-	));
-	json.push_str(&format!(
-		"    \"max_ms\": {},\n",
-		json_f32(dashboard.frame_pacing.max_ms)
-	));
-	json.push_str(&format!(
-		"    \"total_draws\": {},\n",
-		dashboard.frame_pacing.total_draws
-	));
-	json.push_str(&format!(
-		"    \"over_budget\": {},\n",
-		dashboard.frame_pacing.over_budget
-	));
-	json.push_str(&format!(
-		"    \"severe_jank\": {},\n",
-		dashboard.frame_pacing.severe_jank
-	));
-	json.push_str(&format!("    \"cache_hits\": {},\n", dashboard.frame_pacing.cache_hits));
-	json.push_str(&format!(
-		"    \"cache_misses\": {},\n",
-		dashboard.frame_pacing.cache_misses
-	));
-	json.push_str(&format!(
-		"    \"recent_ms\": {}\n",
+	let _ = writeln!(
+		json,
+		"    \"fps\": {},",
+		json_float(f64::from(dashboard.frame_pacing.fps))
+	);
+	let _ = writeln!(
+		json,
+		"    \"last_ms\": {},",
+		json_float(f64::from(dashboard.frame_pacing.last_ms))
+	);
+	let _ = writeln!(
+		json,
+		"    \"avg_ms\": {},",
+		json_float(f64::from(dashboard.frame_pacing.avg_ms))
+	);
+	let _ = writeln!(
+		json,
+		"    \"max_ms\": {},",
+		json_float(f64::from(dashboard.frame_pacing.max_ms))
+	);
+	let _ = writeln!(json, "    \"total_draws\": {},", dashboard.frame_pacing.total_draws);
+	let _ = writeln!(json, "    \"over_budget\": {},", dashboard.frame_pacing.over_budget);
+	let _ = writeln!(json, "    \"severe_jank\": {},", dashboard.frame_pacing.severe_jank);
+	let _ = writeln!(json, "    \"cache_hits\": {},", dashboard.frame_pacing.cache_hits);
+	let _ = writeln!(json, "    \"cache_misses\": {},", dashboard.frame_pacing.cache_misses);
+	let _ = writeln!(
+		json,
+		"    \"recent_ms\": {}",
 		json_numbers(&dashboard.frame_pacing.recent_ms)
-	));
+	);
 	json.push_str("  },\n");
+}
+
+fn append_hot_paths(json: &mut String, dashboard: &PerfDashboard) {
 	json.push_str("  \"hot_paths\": [\n");
 	json.push_str(
 		&dashboard
@@ -373,10 +392,10 @@ fn build_report_json(
 				format!(
 					"    {{\"label\": {}, \"last_ms\": {}, \"avg_ms\": {}, \"p95_ms\": {}, \"max_ms\": {}, \"total_samples\": {}, \"over_warning\": {}, \"over_budget\": {}}}",
 					json_string(summary.label),
-					json_f32(summary.last_ms),
-					json_f32(summary.avg_ms),
-					json_f32(summary.p95_ms),
-					json_f32(summary.max_ms),
+					json_float(f64::from(summary.last_ms)),
+					json_float(f64::from(summary.avg_ms)),
+					json_float(f64::from(summary.p95_ms)),
+					json_float(f64::from(summary.max_ms)),
 					summary.total_samples,
 					summary.over_warning,
 					summary.over_budget,
@@ -386,8 +405,6 @@ fn build_report_json(
 			.join(",\n"),
 	);
 	json.push_str("\n  ]\n");
-	json.push('}');
-	json
 }
 
 fn json_numbers(values: &[f32]) -> String {
@@ -395,13 +412,13 @@ fn json_numbers(values: &[f32]) -> String {
 		"[{}]",
 		values
 			.iter()
-			.map(|value| json_f32(*value))
+			.map(|value| json_float(f64::from(*value)))
 			.collect::<Vec<_>>()
 			.join(", ")
 	)
 }
 
-fn json_f32(value: f32) -> String {
+fn json_float(value: f64) -> String {
 	format!("{value:.3}")
 }
 

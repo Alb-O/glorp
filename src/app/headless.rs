@@ -55,6 +55,7 @@ const HEADLESS_BENCH_LINE_SEEDS: [&str; 6] = [
 	"Rust fn main() { println!(\"bench scene rebuild\"); }",
 	"bidi mix -> abc אבג 123 and ligatures office official",
 ];
+const ASCII_LOWERCASE: &[u8; 26] = b"abcdefghijklmnopqrstuvwxyz";
 
 impl Playground {
 	pub fn configure_headless_scenario(&mut self, scenario: HeadlessScenario) {
@@ -150,7 +151,7 @@ impl Playground {
 			}
 			HeadlessScriptScenario::IncrementalTyping => {
 				for step in 0..HEADLESS_INCREMENTAL_TYPING_STEPS {
-					let next = char::from(b'a' + (step % 26) as u8);
+					let next = char::from(ASCII_LOWERCASE[step % ASCII_LOWERCASE.len()]);
 					self.apply_headless_insert(next.to_string());
 				}
 			}
@@ -263,17 +264,15 @@ impl Playground {
 		for (start, end) in HEADLESS_POINTER_SWEEP_POINTS {
 			let _ = self.update(Message::Canvas(CanvasEvent::PointerSelectionStarted {
 				target: Some(CanvasTarget::Run(0)),
-				intent: EditorPointerIntent::BeginSelection {
+				intent: EditorPointerIntent::Begin {
 					position: Point::new(start.0, start.1),
 					select_word: false,
 				},
 			}));
-			let _ = self.update(Message::Editor(EditorIntent::Pointer(
-				EditorPointerIntent::DragSelection(Point::new(end.0, end.1)),
-			)));
-			let _ = self.update(Message::Editor(EditorIntent::Pointer(
-				EditorPointerIntent::EndSelection,
-			)));
+			let _ = self.update(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
+				Point::new(end.0, end.1),
+			))));
+			let _ = self.update(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::End)));
 		}
 	}
 
@@ -291,7 +290,7 @@ impl Playground {
 	}
 
 	fn perform_incremental_typing_step(&mut self, step: usize) {
-		let next = char::from(b'a' + (step % 26) as u8);
+		let next = char::from(ASCII_LOWERCASE[step % ASCII_LOWERCASE.len()]);
 		self.apply_headless_insert(next.to_string());
 	}
 
@@ -327,21 +326,19 @@ impl Playground {
 			0 => {
 				let _ = self.update(Message::Canvas(CanvasEvent::PointerSelectionStarted {
 					target: Some(CanvasTarget::Run(1)),
-					intent: EditorPointerIntent::BeginSelection {
+					intent: EditorPointerIntent::Begin {
 						position: Point::new(start.0, start.1),
 						select_word: false,
 					},
 				}));
 			}
 			1 => {
-				let _ = self.update(Message::Editor(EditorIntent::Pointer(
-					EditorPointerIntent::DragSelection(Point::new(end.0, end.1)),
-				)));
+				let _ = self.update(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
+					Point::new(end.0, end.1),
+				))));
 			}
 			_ => {
-				let _ = self.update(Message::Editor(EditorIntent::Pointer(
-					EditorPointerIntent::EndSelection,
-				)));
+				let _ = self.update(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::End)));
 			}
 		}
 	}
@@ -350,16 +347,29 @@ impl Playground {
 		let view = self.session.view_state();
 		let selection_end = view.selection.as_ref().map_or(0, |selection| selection.end);
 		let selection_head = view.selection_head.unwrap_or(0);
-		let scroll =
-			(self.viewport.canvas_scroll.x.max(0.0) as usize) ^ (self.viewport.canvas_scroll.y.max(0.0) as usize);
 
-		self.session.text().len()
-			^ selection_end
-			^ selection_head
-			^ self.viewport.layout_width.round() as usize
-			^ self.viewport.scene_revision as usize
-			^ scroll
+		fold_bytes_to_usize(
+			self.session
+				.text()
+				.len()
+				.to_ne_bytes()
+				.into_iter()
+				.chain(selection_end.to_ne_bytes())
+				.chain(selection_head.to_ne_bytes())
+				.chain(self.viewport.canvas_scroll.x.max(0.0).to_bits().to_ne_bytes())
+				.chain(self.viewport.canvas_scroll.y.max(0.0).to_bits().to_ne_bytes())
+				.chain(self.viewport.layout_width.round().to_bits().to_ne_bytes())
+				.chain(self.viewport.scene_revision.to_ne_bytes()),
+		)
 	}
+}
+
+fn fold_bytes_to_usize(bytes: impl IntoIterator<Item = u8>) -> usize {
+	let mut hash = 0usize;
+	for byte in bytes {
+		hash = hash.rotate_left(5) ^ usize::from(byte);
+	}
+	hash
 }
 
 fn headless_bench_document() -> &'static str {

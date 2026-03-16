@@ -53,6 +53,7 @@ impl Playground {
 		self.controls.scene_config(self.viewport.layout_width)
 	}
 
+	#[must_use]
 	pub fn headless() -> Self {
 		Self::new().0
 	}

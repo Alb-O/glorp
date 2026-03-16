@@ -114,10 +114,10 @@ impl canvas::Program<Message> for TimeSeriesGraph {
 		let chart_bounds = chart_bounds(size);
 
 		frame.fill_rectangle(Point::ORIGIN, size, palette.background.base.color);
-		draw_grid(&mut frame, chart_bounds, *palette);
-		draw_thresholds(&mut frame, chart_bounds, &self.graph, *palette);
-		draw_series(&mut frame, chart_bounds, &self.graph, *palette);
-		draw_axis_labels(&mut frame, chart_bounds, &self.graph, *palette);
+		draw_grid(&mut frame, chart_bounds, palette);
+		draw_thresholds(&mut frame, chart_bounds, &self.graph, palette);
+		draw_series(&mut frame, chart_bounds, &self.graph, palette);
+		draw_axis_labels(&mut frame, chart_bounds, &self.graph, palette);
 
 		vec![frame.into_geometry()]
 	}
@@ -132,8 +132,8 @@ fn chart_bounds(size: Size) -> Rectangle {
 	}
 }
 
-fn draw_grid(frame: &mut canvas::Frame, bounds: Rectangle, palette: iced::theme::palette::Extended) {
-	for fraction in [0.0, 0.5, 1.0] {
+fn draw_grid(frame: &mut canvas::Frame, bounds: Rectangle, palette: &iced::theme::palette::Extended) {
+	for (fraction, alpha) in [(0.0, 0.18), (0.5, 0.18), (1.0, 0.5)] {
 		let y = bounds.y + bounds.height * fraction;
 		let path = canvas::Path::line(Point::new(bounds.x, y), Point::new(bounds.x + bounds.width, y));
 		frame.stroke(
@@ -142,14 +142,14 @@ fn draw_grid(frame: &mut canvas::Frame, bounds: Rectangle, palette: iced::theme:
 				palette.background.strong.color.r,
 				palette.background.strong.color.g,
 				palette.background.strong.color.b,
-				if fraction == 1.0 { 0.5 } else { 0.18 },
+				alpha,
 			)),
 		);
 	}
 }
 
 fn draw_thresholds(
-	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: iced::theme::palette::Extended,
+	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::palette::Extended,
 ) {
 	for (threshold, color) in [
 		(graph.warning_ms, Color::from_rgba(1.0, 0.8, 0.2, 0.45)),
@@ -179,7 +179,7 @@ fn draw_thresholds(
 }
 
 fn draw_series(
-	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: iced::theme::palette::Extended,
+	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::palette::Extended,
 ) {
 	if graph.samples_ms.is_empty() {
 		frame.fill_text(canvas::Text {
@@ -241,7 +241,7 @@ fn draw_series(
 }
 
 fn draw_axis_labels(
-	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: iced::theme::palette::Extended,
+	frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::palette::Extended,
 ) {
 	frame.fill_text(canvas::Text {
 		content: format_duration_label(graph.ceiling_ms),
@@ -270,17 +270,17 @@ fn graph_points(bounds: Rectangle, graph: &PerfGraphSeries) -> Vec<Point> {
 		)];
 	}
 
-	let step = bounds.width / (graph.samples_ms.len().saturating_sub(1) as f32).max(1.0);
+	let steps: f32 = graph.samples_ms.iter().skip(1).fold(0.0, |count, _| count + 1.0);
+	let step = bounds.width / steps.max(1.0);
+	let mut x = bounds.x;
 
 	graph
 		.samples_ms
 		.iter()
-		.enumerate()
-		.map(|(index, sample)| {
-			Point::new(
-				bounds.x + step * index as f32,
-				sample_y(bounds, *sample, graph.ceiling_ms),
-			)
+		.map(|sample| {
+			let point = Point::new(x, sample_y(bounds, *sample, graph.ceiling_ms));
+			x += step;
+			point
 		})
 		.collect()
 }

@@ -9,6 +9,10 @@ use {
 	crate::{HeadlessScriptScenario, types::SidebarTab},
 };
 
+fn assert_approx_eq(left: f32, right: f32) {
+	assert!((left - right).abs() <= 0.001, "left={left} right={right}");
+}
+
 #[test]
 fn large_paste_script_scenario_applies_one_large_edit() {
 	let mut playground = Playground::headless();
@@ -154,7 +158,7 @@ fn resize_reflow_script_scenario_changes_layout_width_and_revisions() {
 	assert!(playground.viewport.scene_revision > revision_before);
 	assert!(!playground.scene_dirty);
 	assert!(!playground.deferred_resize_reflow);
-	assert_eq!(playground.session.scene().max_width, playground.viewport.layout_width);
+	assert_approx_eq(playground.session.scene().max_width, playground.viewport.layout_width);
 }
 
 #[test]

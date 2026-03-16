@@ -15,7 +15,7 @@ const PANEL_SCROLLBAR_WIDTH: f32 = 8.0;
 const PANEL_SCROLLER_WIDTH: f32 = 8.0;
 const PANEL_SCROLLBAR_GAP: f32 = 10.0;
 
-pub(crate) fn control_row<'a>(label: impl Into<String>, control: Element<'a, Message>) -> Element<'a, Message> {
+pub(crate) fn control_row(label: impl Into<String>, control: Element<'_, Message>) -> Element<'_, Message> {
 	row![text(label.into()).width(CONTROL_LABEL_WIDTH), control]
 		.spacing(12)
 		.align_y(iced::Center)
@@ -97,7 +97,6 @@ pub(crate) fn panel_scrollable_style(
 			color: palette.background.strong.color.scale_alpha(border_alpha * 0.5),
 			width: if border_alpha > 0.0 { 1.0 } else { 0.0 },
 			radius: CONTROL_RADIUS.into(),
-			..iced::Border::default()
 		},
 		scroller: iced::widget::scrollable::Scroller {
 			background: handle_color.scale_alpha(handle_alpha).into(),
@@ -105,7 +104,6 @@ pub(crate) fn panel_scrollable_style(
 				color: palette.background.base.color.scale_alpha(border_alpha),
 				width: if border_alpha > 0.0 { 1.0 } else { 0.0 },
 				radius: CONTROL_RADIUS.into(),
-				..iced::Border::default()
 			},
 		},
 	};

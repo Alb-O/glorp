@@ -20,11 +20,9 @@ pub(super) fn apply_intent(
 
 fn apply_pointer_intent(editor: &mut EditorEngine, intent: EditorPointerIntent) -> ApplyResult {
 	match intent {
-		EditorPointerIntent::BeginSelection { position, select_word } => {
-			apply_pointer_press(editor, position, select_word)
-		}
-		EditorPointerIntent::DragSelection(position) => apply_pointer_drag(editor, position),
-		EditorPointerIntent::EndSelection => apply_pointer_release(editor),
+		EditorPointerIntent::Begin { position, select_word } => apply_pointer_press(editor, position, select_word),
+		EditorPointerIntent::Drag(position) => apply_pointer_drag(editor, position),
+		EditorPointerIntent::End => apply_pointer_release(editor),
 	}
 }
 

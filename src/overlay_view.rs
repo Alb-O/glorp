@@ -189,13 +189,13 @@ impl Widget<Message, Theme, iced::Renderer> for EditorUnderlayLayer {
 	}
 }
 
-impl<'a> From<SceneOverlayLayer> for Element<'a, Message> {
+impl From<SceneOverlayLayer> for Element<'_, Message> {
 	fn from(widget: SceneOverlayLayer) -> Self {
 		Element::new(widget)
 	}
 }
 
-impl<'a> From<EditorUnderlayLayer> for Element<'a, Message> {
+impl From<EditorUnderlayLayer> for Element<'_, Message> {
 	fn from(widget: EditorUnderlayLayer) -> Self {
 		Element::new(widget)
 	}

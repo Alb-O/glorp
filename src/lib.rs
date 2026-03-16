@@ -100,6 +100,7 @@ pub enum HeadlessScenario {
 impl HeadlessScenario {
 	pub const ALL: [Self; 4] = [Self::Default, Self::Tall, Self::TallInspect, Self::TallPerf];
 
+	#[must_use]
 	pub fn label(self) -> &'static str {
 		match self {
 			Self::Default => "default",
@@ -109,6 +110,7 @@ impl HeadlessScenario {
 		}
 	}
 
+	#[must_use]
 	pub fn parse_label(label: &str) -> Option<Self> {
 		match label {
 			"default" => Some(Self::Default),
@@ -144,6 +146,7 @@ impl PerfScenario {
 		Self::InspectInteraction,
 	];
 
+	#[must_use]
 	pub fn label(self) -> &'static str {
 		match self {
 			Self::Default => "default",
@@ -157,6 +160,7 @@ impl PerfScenario {
 		}
 	}
 
+	#[must_use]
 	pub fn parse_label(label: &str) -> Option<Self> {
 		match label {
 			"default" => Some(Self::Default),
@@ -171,6 +175,7 @@ impl PerfScenario {
 		}
 	}
 
+	#[must_use]
 	pub fn driver(self) -> &'static str {
 		match self {
 			Self::Default | Self::Tall | Self::TallInspect | Self::TallPerf => "steady-render",
@@ -209,6 +214,7 @@ impl HeadlessScriptScenario {
 		Self::InspectInteractionSweep,
 	];
 
+	#[must_use]
 	pub fn label(self) -> &'static str {
 		match self {
 			Self::LargePaste => "large-paste",
@@ -225,6 +231,11 @@ impl HeadlessScriptScenario {
 	}
 }
 
+/// Runs the interactive playground application.
+///
+/// # Errors
+///
+/// Returns any startup or runtime error reported by `iced`.
 pub fn run() -> iced::Result {
 	telemetry::init_tracing();
 
@@ -240,6 +251,7 @@ pub fn run() -> iced::Result {
 		.run()
 }
 
+#[must_use]
 pub fn main_entry() -> ExitCode {
 	if let Some(code) = headless_perf::run_from_env() {
 		return code;

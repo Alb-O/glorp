@@ -126,10 +126,7 @@ impl CanvasState {
 			}
 			CanvasIntent::CursorMoved { position, target } => {
 				if self.pointer_selecting {
-					CanvasAction::publish_editor(
-						EditorIntent::Pointer(EditorPointerIntent::DragSelection(position)),
-						true,
-					)
+					CanvasAction::publish_editor(EditorIntent::Pointer(EditorPointerIntent::Drag(position)), true)
 				} else if self.hovered_target != target {
 					self.hovered_target = target;
 					CanvasAction::publish_canvas(CanvasEvent::Hovered(target), false)
@@ -150,7 +147,7 @@ impl CanvasState {
 				CanvasAction::publish_canvas(
 					CanvasEvent::PointerSelectionStarted {
 						target,
-						intent: EditorPointerIntent::BeginSelection {
+						intent: EditorPointerIntent::Begin {
 							position,
 							select_word: double_click,
 						},
@@ -161,7 +158,7 @@ impl CanvasState {
 			CanvasIntent::PointerReleased => {
 				if self.pointer_selecting {
 					self.pointer_selecting = false;
-					CanvasAction::publish_editor(EditorIntent::Pointer(EditorPointerIntent::EndSelection), false)
+					CanvasAction::publish_editor(EditorIntent::Pointer(EditorPointerIntent::End), false)
 				} else {
 					CanvasAction::None
 				}
@@ -246,7 +243,7 @@ mod tests {
 		};
 		assert_eq!(
 			intent,
-			EditorPointerIntent::BeginSelection {
+			EditorPointerIntent::Begin {
 				position,
 				select_word: false,
 			}
@@ -258,7 +255,7 @@ mod tests {
 		};
 		assert_eq!(
 			intent,
-			EditorPointerIntent::BeginSelection {
+			EditorPointerIntent::Begin {
 				position,
 				select_word: true,
 			}
@@ -340,7 +337,7 @@ mod tests {
 		assert!(matches!(
 			action,
 			CanvasAction::Publish(
-				Message::Editor(EditorIntent::Pointer(EditorPointerIntent::DragSelection(_))),
+				Message::Editor(EditorIntent::Pointer(EditorPointerIntent::Drag(_))),
 				true
 			)
 		));

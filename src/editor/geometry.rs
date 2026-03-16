@@ -144,7 +144,8 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 				.and_then(|line| line.glyphs.last())
 				.map_or(default_width, |glyph| glyph.w.max(2.0)),
 		));
-	let y = (visual_lines_offset(cursor.line, buffer) + visual_line as i32) as f32 * line_height - scroll.vertical;
+	let y = (visual_lines_offset(cursor.line, buffer) + visual_line_count(layout, visual_line)) * line_height
+		- scroll.vertical;
 
 	Some(InsertCursorGeometry {
 		x: offset,
@@ -154,15 +155,28 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 	})
 }
 
-fn visual_lines_offset(line: usize, buffer: &Buffer) -> i32 {
+fn visual_lines_offset(line: usize, buffer: &Buffer) -> f32 {
 	let scroll = buffer.scroll();
 	let start = scroll.line.min(line);
 	let end = scroll.line.max(line);
-	let visual_lines: usize = buffer.lines[start..]
+	let visual_lines = buffer.lines[start..]
 		.iter()
 		.take(end - start)
-		.map(|line| line.layout_opt().map(Vec::len).unwrap_or_default())
-		.sum();
+		.map(visual_line_len)
+		.sum::<f32>();
 
-	visual_lines as i32 * if scroll.line < line { 1 } else { -1 }
+	if scroll.line < line {
+		visual_lines
+	} else {
+		-visual_lines
+	}
+}
+
+fn visual_line_len(line: &cosmic_text::BufferLine) -> f32 {
+	line.layout_opt()
+		.map_or(0.0, |layout| layout.iter().fold(0.0, |count, _| count + 1.0))
+}
+
+fn visual_line_count(layout: &[cosmic_text::LayoutLine], visual_line: usize) -> f32 {
+	layout.iter().take(visual_line).fold(0.0, |count, _| count + 1.0)
 }

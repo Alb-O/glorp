@@ -19,7 +19,7 @@ use {
 struct StaticSceneState {
 	cache: canvas::Cache<iced::Renderer>,
 	cached_scene_revision: Cell<Option<u64>>,
-	cached_scene_size: Cell<Option<(i32, i32)>>,
+	cached_scene_size: Cell<Option<(u32, u32)>>,
 }
 
 #[derive(Debug, Clone)]
@@ -99,7 +99,10 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 				self.scene.measured_height.max(1.0),
 			),
 		);
-		let scene_size_key = (scene_bounds.width.round() as i32, scene_bounds.height.round() as i32);
+		let scene_size_key = (
+			scene_bounds.width.round().to_bits(),
+			scene_bounds.height.round().to_bits(),
+		);
 		let revision_changed = state.cached_scene_revision.get() != Some(self.scene_revision);
 		let size_changed = state.cached_scene_size.get() != Some(scene_size_key);
 		let cache_miss = revision_changed || size_changed;
@@ -135,7 +138,7 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 	}
 }
 
-impl<'a> From<StaticSceneLayer> for Element<'a, Message> {
+impl From<StaticSceneLayer> for Element<'_, Message> {
 	fn from(widget: StaticSceneLayer) -> Self {
 		Element::new(widget)
 	}
@@ -196,7 +199,8 @@ fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 								PathCommand::MoveTo(point) => builder.move_to(Point::new(point.x, point.y)),
 								PathCommand::LineTo(point) => builder.line_to(Point::new(point.x, point.y)),
 								PathCommand::QuadTo(control, to) => {
-									builder.quadratic_curve_to(Point::new(control.x, control.y), Point::new(to.x, to.y))
+									builder
+										.quadratic_curve_to(Point::new(control.x, control.y), Point::new(to.x, to.y));
 								}
 								PathCommand::CurveTo(a, b, to) => builder.bezier_curve_to(
 									Point::new(a.x, a.y),

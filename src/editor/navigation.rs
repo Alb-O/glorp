@@ -130,7 +130,7 @@ impl EditorEngine {
 		self.set_mode(EditorMode::Normal);
 		// Normal mode uses the same visible selection that insert mode showed, so
 		// Esc does not shift the cursor left as a separate reconciliation step.
-		let selection = self.insert_selection(&layout, self.caret());
+		let selection = EditorEngine::insert_selection(&layout, self.caret());
 		self.set_selection(selection);
 		self.set_preferred_x(None);
 		self.clear_pointer_anchor();

@@ -20,7 +20,7 @@ pub(crate) fn view_inspect_tab(props: InspectTabProps) -> Element<'static, Messa
 	panel_scrollable(
 		column![
 			text("Warnings").size(18),
-			view_warnings_panel(props.warnings),
+			view_warnings_panel(&props.warnings),
 			text("Hover and selection").size(18),
 			view_interaction_panel(props.interaction_details),
 		]
@@ -29,7 +29,7 @@ pub(crate) fn view_inspect_tab(props: InspectTabProps) -> Element<'static, Messa
 	.into()
 }
 
-fn view_warnings_panel(warnings: Arc<[String]>) -> Element<'static, Message> {
+fn view_warnings_panel(warnings: &[String]) -> Element<'static, Message> {
 	let warnings_text = if warnings.is_empty() {
 		"No warnings".to_string()
 	} else {

@@ -14,6 +14,22 @@ use {
 #[cfg(test)]
 use super::build_buffer;
 
+#[cfg(test)]
+pub(crate) struct LayoutSceneTestSpec {
+	pub(crate) text: Arc<str>,
+	pub(crate) wrapping: crate::types::WrapChoice,
+	pub(crate) render_mode: crate::types::RenderMode,
+	pub(crate) font_size: f32,
+	pub(crate) line_height: f32,
+	pub(crate) max_width: f32,
+	pub(crate) measured_width: f32,
+	pub(crate) measured_height: f32,
+	pub(crate) glyph_count: usize,
+	pub(crate) font_count: usize,
+	pub(crate) runs: Vec<RunInfo>,
+	pub(crate) clusters: Vec<super::ClusterInfo>,
+}
+
 impl LayoutSceneModel {
 	pub(crate) fn new(font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig) -> Self {
 		let scene = LayoutScene::from_buffer(font_system, text, buffer, config);
@@ -161,13 +177,21 @@ impl LayoutScene {
 
 #[cfg(test)]
 impl LayoutScene {
-	pub(crate) fn new_for_test(
-		text: impl Into<Arc<str>>, _font_choice: crate::types::FontChoice, _shaping: crate::types::ShapingChoice,
-		wrapping: crate::types::WrapChoice, render_mode: crate::types::RenderMode, font_size: f32, line_height: f32,
-		max_width: f32, measured_width: f32, measured_height: f32, glyph_count: usize, font_count: usize,
-		runs: Vec<RunInfo>, clusters: Vec<super::ClusterInfo>,
-	) -> Self {
-		let text = text.into();
+	pub(crate) fn new_for_test(spec: LayoutSceneTestSpec) -> Self {
+		let LayoutSceneTestSpec {
+			text,
+			wrapping,
+			render_mode,
+			font_size,
+			line_height,
+			max_width,
+			measured_width,
+			measured_height,
+			glyph_count,
+			font_count,
+			runs,
+			clusters,
+		} = spec;
 
 		Self {
 			text: text.clone(),

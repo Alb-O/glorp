@@ -11,6 +11,10 @@ use {
 	std::time::{Duration, Instant},
 };
 
+fn assert_approx_eq(left: f32, right: f32) {
+	assert!((left - right).abs() <= 0.001, "left={left} right={right}");
+}
+
 fn editor(intent: EditorIntent) -> Message {
 	Message::Editor(intent)
 }
@@ -128,15 +132,15 @@ fn controls_tab_defers_resize_reflow_until_scene_ui_needs_it() {
 	assert!(playground.scene_dirty);
 	assert!(playground.deferred_resize_reflow);
 	assert_eq!(playground.viewport.scene_revision, revision_before);
-	assert_ne!(playground.viewport.layout_width, scene_width_before);
-	assert_eq!(playground.session.scene().max_width, scene_width_before);
+	assert!((playground.viewport.layout_width - scene_width_before).abs() > 0.001);
+	assert_approx_eq(playground.session.scene().max_width, scene_width_before);
 
 	let _ = playground.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
 
 	assert!(!playground.scene_dirty);
 	assert!(!playground.deferred_resize_reflow);
 	assert!(playground.viewport.scene_revision > revision_before);
-	assert_eq!(playground.session.scene().max_width, playground.viewport.layout_width);
+	assert_approx_eq(playground.session.scene().max_width, playground.viewport.layout_width);
 }
 
 #[test]
@@ -149,7 +153,7 @@ fn leaving_inspect_clears_hover_and_selection() {
 	))));
 	let _ = playground.update(Message::Canvas(CanvasEvent::PointerSelectionStarted {
 		target: Some(crate::types::CanvasTarget::Run(0)),
-		intent: EditorPointerIntent::BeginSelection {
+		intent: EditorPointerIntent::Begin {
 			position: iced::Point::ORIGIN,
 			select_word: false,
 		},
@@ -169,12 +173,12 @@ fn canvas_generated_editor_intents_flow_through_session() {
 
 	let _ = playground.update(Message::Canvas(CanvasEvent::PointerSelectionStarted {
 		target: Some(crate::types::CanvasTarget::Run(0)),
-		intent: EditorPointerIntent::BeginSelection {
+		intent: EditorPointerIntent::Begin {
 			position: iced::Point::new(30.0, 32.0),
 			select_word: false,
 		},
 	}));
-	let _ = playground.update(editor(EditorIntent::Pointer(EditorPointerIntent::DragSelection(
+	let _ = playground.update(editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
 		iced::Point::new(120.0, 32.0),
 	))));
 

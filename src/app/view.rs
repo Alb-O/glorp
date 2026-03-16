@@ -7,8 +7,9 @@ use {
 		scene::LayoutScene,
 		types::{Message, ShellMessage, SidebarTab},
 		ui::{
-			CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps, is_stacked_shell,
-			view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar, view_stacked_shell,
+			CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps,
+			is_stacked_shell, view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar,
+			view_stacked_shell,
 		},
 	},
 	iced::{
@@ -105,8 +106,10 @@ impl Playground {
 			scene: self.session.scene().clone(),
 			text_layer: self.session.text_layer_state(),
 			layout_width: self.viewport.layout_width,
-			show_baselines: self.controls.show_baselines,
-			show_hitboxes: self.controls.show_hitboxes,
+			decorations: CanvasDecorations {
+				show_baselines: self.controls.show_baselines,
+				show_hitboxes: self.controls.show_hitboxes,
+			},
 			inspect_overlays,
 			editor: self.session.view_state(),
 			focused: self.viewport.canvas_focused,

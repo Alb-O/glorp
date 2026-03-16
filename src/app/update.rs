@@ -213,11 +213,11 @@ impl Playground {
 		let command_started = Instant::now();
 		let apply_started = Instant::now();
 		let outcome = self.session.apply_editor_intent(intent);
-		let document_changed = outcome.document_changed;
+		let document_changed = outcome.document_changed();
 		let view_changed = outcome.view_changed;
 		let selection_changed = outcome.selection_changed;
 		let mode_changed = outcome.mode_changed;
-		let requires_scene_rebuild = outcome.requires_scene_rebuild;
+		let requires_scene_rebuild = outcome.requires_scene_rebuild();
 		let apply_elapsed = apply_started.elapsed();
 		self.perf.record_editor_apply(apply_elapsed);
 		self.handle_editor_outcome(&outcome, source);
@@ -267,11 +267,11 @@ impl Playground {
 	}
 
 	fn handle_editor_outcome(&mut self, outcome: &EditorOutcome, source: EditorDispatchSource) {
-		if outcome.document_changed {
+		if outcome.document_changed() {
 			self.controls.preset = SamplePreset::Custom;
 		}
 
-		if outcome.requires_scene_rebuild {
+		if outcome.requires_scene_rebuild() {
 			self.rebuild_scene_or_defer(SceneRefreshReason::DocumentEdited);
 		}
 
@@ -384,9 +384,9 @@ fn tick_stream(interval: Duration) -> impl futures::Stream<Item = iced::time::In
 
 fn editor_dispatch_source(intent: &EditorIntent) -> EditorDispatchSource {
 	match intent {
-		EditorIntent::Pointer(EditorPointerIntent::BeginSelection { .. }) => EditorDispatchSource::PointerPress,
-		EditorIntent::Pointer(EditorPointerIntent::DragSelection(_)) => EditorDispatchSource::PointerDrag,
-		EditorIntent::Pointer(EditorPointerIntent::EndSelection) => EditorDispatchSource::PointerRelease,
+		EditorIntent::Pointer(EditorPointerIntent::Begin { .. }) => EditorDispatchSource::PointerPress,
+		EditorIntent::Pointer(EditorPointerIntent::Drag(_)) => EditorDispatchSource::PointerDrag,
+		EditorIntent::Pointer(EditorPointerIntent::End) => EditorDispatchSource::PointerRelease,
 		_ => EditorDispatchSource::Keyboard,
 	}
 }

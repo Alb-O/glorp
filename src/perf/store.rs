@@ -140,19 +140,19 @@ impl PerfStore {
 	pub(super) fn flush_canvas_metrics(&mut self, sink: &CanvasPerfSink) {
 		let pending = sink.drain();
 
-		for duration in pending.canvas_update {
+		for duration in pending.updates {
 			self.record(MetricKind::CanvasUpdate, duration);
 		}
 
-		for duration in pending.canvas_underlay {
+		for duration in pending.underlay {
 			self.record(MetricKind::CanvasUnderlayDraw, duration);
 		}
 
-		for duration in pending.canvas_overlay {
+		for duration in pending.overlay {
 			self.record(MetricKind::CanvasOverlayDraw, duration);
 		}
 
-		for sample in pending.canvas_draw {
+		for sample in pending.draws {
 			self.record(MetricKind::CanvasDraw, sample.total);
 			if let Some(duration) = sample.static_build {
 				self.record(MetricKind::CanvasStaticBuild, duration);
@@ -184,7 +184,7 @@ pub(super) fn average_ms(values: impl Iterator<Item = f32>) -> f32 {
 	if count > 0.0 { total / count } else { 0.0 }
 }
 
-pub(super) fn percentile_ms(values: &VecDeque<f32>, percentile: f32) -> f32 {
+pub(super) fn percentile_ms(values: &VecDeque<f32>, percentile_percent: usize) -> f32 {
 	if values.is_empty() {
 		return 0.0;
 	}
@@ -192,7 +192,7 @@ pub(super) fn percentile_ms(values: &VecDeque<f32>, percentile: f32) -> f32 {
 	let mut sorted = values.iter().copied().collect::<Vec<_>>();
 	sorted.sort_by(f32::total_cmp);
 
-	let index = ((sorted.len() - 1) as f32 * percentile).round() as usize;
+	let index = ((sorted.len() - 1) * percentile_percent + 50) / 100;
 	sorted[index]
 }
 
@@ -228,7 +228,7 @@ mod tests {
 
 	#[test]
 	fn percentile_returns_zero_for_empty_series() {
-		assert_eq!(percentile_ms(&std::collections::VecDeque::new(), 0.95), 0.0);
+		assert!((percentile_ms(&std::collections::VecDeque::new(), 95) - 0.0).abs() <= 0.001);
 	}
 
 	#[test]

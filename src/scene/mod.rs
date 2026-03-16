@@ -14,6 +14,8 @@ use {
 	std::sync::Arc,
 };
 
+#[cfg(test)]
+pub(crate) use self::build::LayoutSceneTestSpec;
 pub(crate) use self::{
 	data::{ClusterInfo, GlyphInfo, InspectRunInfo, OutlinePath, PathCommand, PathPoint, RunInfo},
 	font::{build_buffer, make_font_system, scene_config},

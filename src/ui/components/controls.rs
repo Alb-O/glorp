@@ -12,6 +12,7 @@ use {
 	},
 };
 
+#[derive(Debug, Clone, Copy)]
 /// Props for the controls tab.
 ///
 /// The tab is a pure view over parent-owned state.

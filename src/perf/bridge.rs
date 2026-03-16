@@ -12,10 +12,10 @@ const PENDING_LIMIT: usize = 512;
 
 #[derive(Debug, Default)]
 pub(super) struct PendingSamples {
-	pub(super) canvas_update: VecDeque<Duration>,
-	pub(super) canvas_underlay: VecDeque<Duration>,
-	pub(super) canvas_overlay: VecDeque<Duration>,
-	pub(super) canvas_draw: VecDeque<CanvasDrawSample>,
+	pub(super) updates: VecDeque<Duration>,
+	pub(super) underlay: VecDeque<Duration>,
+	pub(super) overlay: VecDeque<Duration>,
+	pub(super) draws: VecDeque<CanvasDrawSample>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -37,7 +37,7 @@ impl CanvasPerfSink {
 			return;
 		};
 
-		push_bounded(&mut pending.canvas_update, duration, PENDING_LIMIT);
+		push_bounded(&mut pending.updates, duration, PENDING_LIMIT);
 
 		let elapsed_ms = duration_ms(duration);
 		if elapsed_ms >= 16.7 {
@@ -54,7 +54,7 @@ impl CanvasPerfSink {
 			return;
 		};
 
-		push_bounded(&mut pending.canvas_underlay, duration, PENDING_LIMIT);
+		push_bounded(&mut pending.underlay, duration, PENDING_LIMIT);
 
 		let elapsed_ms = duration_ms(duration);
 		if elapsed_ms >= 16.7 {
@@ -71,7 +71,7 @@ impl CanvasPerfSink {
 			return;
 		};
 
-		push_bounded(&mut pending.canvas_overlay, duration, PENDING_LIMIT);
+		push_bounded(&mut pending.overlay, duration, PENDING_LIMIT);
 
 		let elapsed_ms = duration_ms(duration);
 		if elapsed_ms >= 16.7 {
@@ -89,7 +89,7 @@ impl CanvasPerfSink {
 		};
 
 		push_bounded(
-			&mut pending.canvas_draw,
+			&mut pending.draws,
 			CanvasDrawSample {
 				total,
 				static_build,
@@ -120,10 +120,10 @@ impl CanvasPerfSink {
 		};
 
 		PendingSamples {
-			canvas_update: pending.canvas_update.drain(..).collect(),
-			canvas_underlay: pending.canvas_underlay.drain(..).collect(),
-			canvas_overlay: pending.canvas_overlay.drain(..).collect(),
-			canvas_draw: pending.canvas_draw.drain(..).collect(),
+			updates: pending.updates.drain(..).collect(),
+			underlay: pending.underlay.drain(..).collect(),
+			overlay: pending.overlay.drain(..).collect(),
+			draws: pending.draws.drain(..).collect(),
 		}
 	}
 }
@@ -149,15 +149,15 @@ mod tests {
 		sink.record_canvas_draw(Duration::from_millis(3), Some(Duration::from_millis(1)), true);
 
 		let pending = sink.drain();
-		assert_eq!(pending.canvas_update.len(), 1);
-		assert_eq!(pending.canvas_underlay.len(), 1);
-		assert_eq!(pending.canvas_overlay.len(), 1);
-		assert_eq!(pending.canvas_draw.len(), 1);
+		assert_eq!(pending.updates.len(), 1);
+		assert_eq!(pending.underlay.len(), 1);
+		assert_eq!(pending.overlay.len(), 1);
+		assert_eq!(pending.draws.len(), 1);
 
 		let drained_again = sink.drain();
-		assert!(drained_again.canvas_update.is_empty());
-		assert!(drained_again.canvas_underlay.is_empty());
-		assert!(drained_again.canvas_overlay.is_empty());
-		assert!(drained_again.canvas_draw.is_empty());
+		assert!(drained_again.updates.is_empty());
+		assert!(drained_again.underlay.is_empty());
+		assert!(drained_again.overlay.is_empty());
+		assert!(drained_again.draws.is_empty());
 	}
 }

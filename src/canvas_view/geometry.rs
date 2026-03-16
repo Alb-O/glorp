@@ -74,28 +74,26 @@ fn scene_content_width(scene: &LayoutScene, layout_width: f32) -> f32 {
 mod tests {
 	use {
 		super::{clamp_scroll, max_scroll},
-		crate::scene::LayoutScene,
+		crate::scene::{LayoutScene, LayoutSceneTestSpec},
 		iced::{Rectangle, Vector},
 		std::sync::Arc,
 	};
 
 	fn scene(width: f32, height: f32) -> LayoutScene {
-		LayoutScene::new_for_test(
-			Arc::<str>::from(""),
-			crate::types::FontChoice::Monospace,
-			crate::types::ShapingChoice::Basic,
-			crate::types::WrapChoice::Word,
-			crate::types::RenderMode::CanvasOnly,
-			16.0,
-			20.0,
-			width,
-			width,
-			height,
-			0,
-			0,
-			Vec::new(),
-			Vec::new(),
-		)
+		LayoutScene::new_for_test(LayoutSceneTestSpec {
+			text: Arc::<str>::from(""),
+			wrapping: crate::types::WrapChoice::Word,
+			render_mode: crate::types::RenderMode::CanvasOnly,
+			font_size: 16.0,
+			line_height: 20.0,
+			max_width: width,
+			measured_width: width,
+			measured_height: height,
+			glyph_count: 0,
+			font_count: 0,
+			runs: Vec::new(),
+			clusters: Vec::new(),
+		})
 	}
 
 	#[test]

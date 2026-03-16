@@ -41,7 +41,7 @@ pub(crate) enum SidebarMessage {
 	SelectTab(SidebarTab),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum CanvasEvent {
 	Hovered(Option<CanvasTarget>),
 	FocusChanged(bool),

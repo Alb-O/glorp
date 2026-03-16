@@ -144,13 +144,16 @@ impl BufferLayoutSnapshot {
 	pub(super) fn nearest_cluster_on_adjacent_run(
 		&self, run_index: usize, preferred_x: f32, direction: isize,
 	) -> Option<usize> {
-		let mut next = run_index as isize + direction;
+		let next_runs: Box<dyn Iterator<Item = usize>> = if direction < 0 {
+			Box::new((0..run_index).rev())
+		} else {
+			Box::new((run_index.saturating_add(1))..self.runs.len())
+		};
 
-		while next >= 0 && next < self.runs.len() as isize {
-			if let Some(target) = self.nearest_cluster_in_run(next as usize, preferred_x) {
+		for next_run in next_runs {
+			if let Some(target) = self.nearest_cluster_in_run(next_run, preferred_x) {
 				return Some(target);
 			}
-			next += direction;
 		}
 
 		None

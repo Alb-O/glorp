@@ -123,14 +123,14 @@ pub(crate) struct PerfFramePacingSummary {
 impl PerfFramePacingSummary {
 	pub(crate) fn text(&self) -> String {
 		let total = self.cache_hits + self.cache_misses;
-		let miss_rate = if total > 0 {
-			(self.cache_misses as f32 / total as f32) * 100.0
-		} else {
-			0.0
-		};
+		let miss_rate_tenths = (self.cache_misses.saturating_mul(1000) + total / 2)
+			.checked_div(total)
+			.unwrap_or_default();
+		let miss_rate_whole = miss_rate_tenths / 10;
+		let miss_rate_fraction = miss_rate_tenths % 10;
 
 		format!(
-			"canvas fps    {:>5.1}\nframe last    {:>5.2} ms\nframe avg     {:>5.2} ms\nframe max     {:>5.2} ms\ndraw calls    {:>5}\n>16.7 ms      {:>5}\n>33.3 ms      {:>5}\ncache hits    {:>5}\ncache misses  {:>5}\nmiss rate     {:>5.1} %",
+			"canvas fps    {:>5.1}\nframe last    {:>5.2} ms\nframe avg     {:>5.2} ms\nframe max     {:>5.2} ms\ndraw calls    {:>5}\n>16.7 ms      {:>5}\n>33.3 ms      {:>5}\ncache hits    {:>5}\ncache misses  {:>5}\nmiss rate     {:>4}.{} %",
 			self.fps,
 			self.last_ms,
 			self.avg_ms,
@@ -140,7 +140,8 @@ impl PerfFramePacingSummary {
 			self.severe_jank,
 			self.cache_hits,
 			self.cache_misses,
-			miss_rate,
+			miss_rate_whole,
+			miss_rate_fraction,
 		)
 	}
 
@@ -207,7 +208,7 @@ fn metric_summary(store: &PerfStore, kind: MetricKind) -> PerfMetricSummary {
 		label: kind.label(),
 		last_ms: series.window.back().copied().unwrap_or_default(),
 		avg_ms: average_ms(series.window.iter().copied()),
-		p95_ms: percentile_ms(&series.window, 0.95),
+		p95_ms: percentile_ms(&series.window, 95),
 		max_ms: series.window.iter().copied().fold(0.0, f32::max),
 		total_samples: series.total_samples,
 		over_warning: series.over_warning,
@@ -250,13 +251,13 @@ fn graphs(store: &PerfStore) -> Vec<PerfGraphSeries> {
 		ceiling_ms: graph_ceiling(
 			frame_pacing
 				.max_ms
-				.max(percentile_ms(&store.frames.intervals_ms, 0.95))
+				.max(percentile_ms(&store.frames.intervals_ms, 95))
 				.max(SEVERE_FRAME_MS),
 			false,
 		),
 		latest_ms: frame_pacing.last_ms,
 		avg_ms: frame_pacing.avg_ms,
-		p95_ms: percentile_ms(&store.frames.intervals_ms, 0.95),
+		p95_ms: percentile_ms(&store.frames.intervals_ms, 95),
 		warning_ms: Some(FRAME_BUDGET_MS),
 		severe_ms: Some(SEVERE_FRAME_MS),
 	}];
@@ -323,28 +324,26 @@ mod tests {
 		crate::{
 			editor::EditorMode,
 			perf::{CanvasPerfSink, store::PerfStore},
-			scene::LayoutScene,
+			scene::{LayoutScene, LayoutSceneTestSpec},
 		},
 		std::{sync::Arc, time::Duration},
 	};
 
 	fn scene() -> LayoutScene {
-		LayoutScene::new_for_test(
-			Arc::<str>::from("abc\ndef"),
-			crate::types::FontChoice::Monospace,
-			crate::types::ShapingChoice::Basic,
-			crate::types::WrapChoice::Word,
-			crate::types::RenderMode::CanvasOnly,
-			16.0,
-			20.0,
-			300.0,
-			280.0,
-			120.0,
-			4,
-			1,
-			Vec::new(),
-			Vec::new(),
-		)
+		LayoutScene::new_for_test(LayoutSceneTestSpec {
+			text: Arc::<str>::from("abc\ndef"),
+			wrapping: crate::types::WrapChoice::Word,
+			render_mode: crate::types::RenderMode::CanvasOnly,
+			font_size: 16.0,
+			line_height: 20.0,
+			max_width: 300.0,
+			measured_width: 280.0,
+			measured_height: 120.0,
+			glyph_count: 4,
+			font_count: 1,
+			runs: Vec::new(),
+			clusters: Vec::new(),
+		})
 	}
 
 	#[test]
@@ -366,7 +365,7 @@ mod tests {
 
 	#[test]
 	fn graph_ceiling_keeps_small_ranges_stable() {
-		assert_eq!(graph_ceiling(7.0, true), 16.7);
+		assert!((graph_ceiling(7.0, true) - 16.7).abs() <= 0.001);
 		assert!(graph_ceiling(40.0, false) >= 50.0);
 	}
 
