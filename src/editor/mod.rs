@@ -27,7 +27,7 @@ use {
 		overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
 		scene::SceneConfig,
 		telemetry::duration_ms,
-		types::{FontChoice, RenderMode, ShapingChoice, WrapChoice},
+		types::{RenderMode, WrapChoice},
 	},
 	cosmic_text::{Buffer, FontSystem},
 	iced::Point,
@@ -174,16 +174,10 @@ pub(crate) struct EditorViewportMetrics {
 	pub(crate) measured_height: f32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub(crate) struct EditorTextLayerState {
-	pub(crate) text: Arc<str>,
-	pub(crate) font_choice: FontChoice,
-	pub(crate) shaping: ShapingChoice,
-	pub(crate) wrapping: WrapChoice,
+	pub(crate) buffer: std::sync::Weak<iced::advanced::graphics::text::cosmic_text::Buffer>,
 	pub(crate) render_mode: RenderMode,
-	pub(crate) font_size: f32,
-	pub(crate) line_height: f32,
-	pub(crate) measured_width: f32,
 	pub(crate) measured_height: f32,
 }
 
@@ -316,7 +310,7 @@ impl EditorEngine {
 	}
 
 	pub(crate) fn text_layer_state(&self) -> EditorTextLayerState {
-		self.layout_model.layout.text_layer_state(self.text())
+		self.layout_model.layout.text_layer_state()
 	}
 
 	pub(crate) fn apply(&mut self, font_system: &mut FontSystem, intent: EditorIntent) -> EditorOutcome {

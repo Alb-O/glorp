@@ -6,11 +6,7 @@ use {
 	},
 	iced::{
 		Color, Element, Length, Point, Rectangle, Size, Theme, Vector,
-		advanced::{
-			Layout, Renderer as _, Widget, layout, mouse, renderer,
-			text::{Paragraph as _, Renderer as _},
-			widget::Tree,
-		},
+		advanced::{Layout, Renderer as _, Widget, graphics::text::Renderer as _, layout, mouse, renderer},
 	},
 };
 
@@ -20,12 +16,6 @@ const TEXT_COLOR: Color = Color::from_rgba(0.4, 0.8, 1.0, 0.9);
 const INSERT_GLYPH_COLOR: Color = Color::from_rgb8(8, 14, 24);
 const GUIDE_COLOR: Color = Color::from_rgba(0.6, 0.7, 1.0, 0.18);
 const BORDER_COLOR: Color = Color::from_rgba(0.8, 0.8, 0.9, 0.65);
-
-#[derive(Debug)]
-struct ParagraphState {
-	paragraph: iced::advanced::graphics::text::Paragraph,
-	text: std::sync::Arc<str>,
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneTextLayer {
@@ -79,28 +69,13 @@ impl SceneTextLayer {
 }
 
 impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
-	fn tag(&self) -> iced::advanced::widget::tree::Tag {
-		iced::advanced::widget::tree::Tag::of::<ParagraphState>()
-	}
-
-	fn state(&self) -> iced::advanced::widget::tree::State {
-		iced::advanced::widget::tree::State::new(ParagraphState {
-			paragraph: iced::advanced::graphics::text::Paragraph::with_text(text_spec(
-				&self.text_layer,
-				self.layout_width,
-			)),
-			text: self.text_layer.text.clone(),
-		})
-	}
-
 	fn size(&self) -> Size<Length> {
 		Size::new(self.width, self.height)
 	}
 
-	fn layout(&mut self, tree: &mut Tree, _renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
-		let state = tree.state.downcast_mut::<ParagraphState>();
-		sync_paragraph_state(&self.text_layer, self.layout_width, state);
-
+	fn layout(
+		&mut self, _tree: &mut iced::advanced::widget::Tree, _renderer: &iced::Renderer, limits: &layout::Limits,
+	) -> layout::Node {
 		layout::Node::new(limits.resolve(
 			self.width,
 			self.height,
@@ -109,10 +84,9 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 	}
 
 	fn draw(
-		&self, tree: &Tree, renderer: &mut iced::Renderer, _theme: &Theme, _style: &renderer::Style,
-		layout: Layout<'_>, _cursor: mouse::Cursor, _viewport: &Rectangle,
+		&self, _tree: &iced::advanced::widget::Tree, renderer: &mut iced::Renderer, _theme: &Theme,
+		_style: &renderer::Style, layout: Layout<'_>, _cursor: mouse::Cursor, _viewport: &Rectangle,
 	) {
-		let state = tree.state.downcast_ref::<ParagraphState>();
 		let bounds = layout.bounds();
 		let origin = Point::new(
 			bounds.x + scene_origin().x - self.scroll.x,
@@ -170,9 +144,19 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 		}
 
 		if self.draw_text && self.text_layer.render_mode.draw_canvas_text() {
-			renderer.fill_paragraph(&state.paragraph, origin, TEXT_COLOR, bounds);
+			renderer.fill_raw(iced::advanced::graphics::text::Raw {
+				buffer: self.text_layer.buffer.clone(),
+				position: origin,
+				color: TEXT_COLOR,
+				clip_bounds: bounds,
+			});
 			if let Some(clip) = insert_repaint_clip(origin, self.editor.mode, self.editor.viewport_target) {
-				renderer.fill_paragraph(&state.paragraph, origin, INSERT_GLYPH_COLOR, clip);
+				renderer.fill_raw(iced::advanced::graphics::text::Raw {
+					buffer: self.text_layer.buffer.clone(),
+					position: origin,
+					color: INSERT_GLYPH_COLOR,
+					clip_bounds: clip,
+				});
 			}
 		}
 	}
@@ -181,60 +165,6 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 impl From<SceneTextLayer> for Element<'_, Message> {
 	fn from(widget: SceneTextLayer) -> Self {
 		Element::new(widget)
-	}
-}
-
-fn sync_paragraph_state(text_layer: &EditorTextLayerState, layout_width: f32, state: &mut ParagraphState) {
-	if state.text != text_layer.text {
-		state.paragraph = iced::advanced::graphics::text::Paragraph::with_text(text_spec(text_layer, layout_width));
-		state.text = text_layer.text.clone();
-		return;
-	}
-
-	sync_paragraph_with_width(text_layer, layout_width, &mut state.paragraph);
-}
-
-fn sync_paragraph_with_width(
-	text_layer: &EditorTextLayerState, layout_width: f32, paragraph: &mut iced::advanced::graphics::text::Paragraph,
-) {
-	let text = text_spec(text_layer, layout_width);
-	match paragraph.compare(iced::advanced::text::Text {
-		content: (),
-		bounds: text.bounds,
-		size: text.size,
-		line_height: text.line_height,
-		font: text.font,
-		align_x: text.align_x,
-		align_y: text.align_y,
-		shaping: text.shaping,
-		wrapping: text.wrapping,
-	}) {
-		iced::advanced::text::Difference::None => {}
-		iced::advanced::text::Difference::Bounds => paragraph.resize(text.bounds),
-		iced::advanced::text::Difference::Shape => {
-			*paragraph = iced::advanced::graphics::text::Paragraph::with_text(text);
-		}
-	}
-}
-
-fn text_spec(text_layer: &EditorTextLayerState, layout_width: f32) -> iced::advanced::text::Text<&str> {
-	iced::advanced::text::Text {
-		content: &text_layer.text,
-		bounds: Size::new(
-			if matches!(text_layer.wrapping, crate::types::WrapChoice::None) {
-				f32::INFINITY
-			} else {
-				layout_width
-			},
-			f32::INFINITY,
-		),
-		size: iced::Pixels(text_layer.font_size),
-		line_height: iced::advanced::text::LineHeight::Absolute(iced::Pixels(text_layer.line_height)),
-		font: text_layer.font_choice.to_iced_font(),
-		align_x: iced::advanced::text::Alignment::Left,
-		align_y: iced::alignment::Vertical::Top,
-		shaping: text_layer.shaping.to_iced(),
-		wrapping: text_layer.wrapping.to_iced(),
 	}
 }
 
