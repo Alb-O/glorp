@@ -143,12 +143,18 @@ The repo now has a headless JSON export mode:
 
 - `cargo run -- --perf-scenario tall-inspect --samples 180 --warmup 30`
 - `cargo run -- --perf-scenario tall-perf --samples 180 --warmup 30`
+- `cargo run -- --perf-scenario incremental-typing --samples 120 --warmup 30`
+- `cargo run -- --perf-scenario resize-reflow --samples 60 --warmup 20`
 
-Current scenarios are the static render presets exposed by `HeadlessScenario` in `src/lib.rs`.
+Current scenarios are exposed by `PerfScenario` in `src/lib.rs` and split into two drivers:
+
+- `steady-render` for static scene/render checks
+- `scripted-update-render` for interleaved update/render loops like typing, motion, resize, and inspect interaction
 
 The JSON should include:
 
 - scenario metadata
+- driver kind
 - build profile
 - warmup/sample counts
 - avg / p95 / max by metric
@@ -156,7 +162,11 @@ The JSON should include:
 - cache hit/miss summary
 - environment notes like window size and backend when available
 
-What is still missing is broader scripted scenario coverage for resize, scroll, and mixed update/render loops.
+That means the runtime mode can now answer:
+
+- how much incremental typing costs in `editor.command` and `editor.apply`
+- what coalesced resize does to `scene.build`, `resize.reflow`, and cache misses
+- how inspect-mode interaction affects frame pacing when scene-derived UI is active
 
 ### Headless Benchmarks
 

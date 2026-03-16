@@ -121,6 +121,67 @@ impl HeadlessScenario {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PerfScenario {
+	Default,
+	Tall,
+	TallInspect,
+	TallPerf,
+	IncrementalTyping,
+	MotionSweep,
+	ResizeReflow,
+	InspectInteraction,
+}
+
+impl PerfScenario {
+	pub const ALL: [Self; 8] = [
+		Self::Default,
+		Self::Tall,
+		Self::TallInspect,
+		Self::TallPerf,
+		Self::IncrementalTyping,
+		Self::MotionSweep,
+		Self::ResizeReflow,
+		Self::InspectInteraction,
+	];
+
+	pub fn label(self) -> &'static str {
+		match self {
+			Self::Default => "default",
+			Self::Tall => "tall",
+			Self::TallInspect => "tall-inspect",
+			Self::TallPerf => "tall-perf",
+			Self::IncrementalTyping => "incremental-typing",
+			Self::MotionSweep => "motion-sweep",
+			Self::ResizeReflow => "resize-reflow",
+			Self::InspectInteraction => "inspect-interaction",
+		}
+	}
+
+	pub fn parse_label(label: &str) -> Option<Self> {
+		match label {
+			"default" => Some(Self::Default),
+			"tall" => Some(Self::Tall),
+			"tall-inspect" => Some(Self::TallInspect),
+			"tall-perf" => Some(Self::TallPerf),
+			"incremental-typing" => Some(Self::IncrementalTyping),
+			"motion-sweep" => Some(Self::MotionSweep),
+			"resize-reflow" => Some(Self::ResizeReflow),
+			"inspect-interaction" => Some(Self::InspectInteraction),
+			_ => None,
+		}
+	}
+
+	pub fn driver(self) -> &'static str {
+		match self {
+			Self::Default | Self::Tall | Self::TallInspect | Self::TallPerf => "steady-render",
+			Self::IncrementalTyping | Self::MotionSweep | Self::ResizeReflow | Self::InspectInteraction => {
+				"scripted-update-render"
+			}
+		}
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeadlessScriptScenario {
 	LargePaste,
 	IncrementalTyping,

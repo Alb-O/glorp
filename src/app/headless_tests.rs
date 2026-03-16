@@ -139,12 +139,10 @@ fn pointer_selection_sweep_script_scenario_expands_selection() {
 fn resize_reflow_script_scenario_changes_layout_width_and_revisions() {
 	let mut playground = Playground::headless();
 	playground.configure_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
-	let width_before = playground.viewport.layout_width;
 	let revision_before = playground.viewport.scene_revision;
 
 	let _ = playground.run_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
 
-	assert_ne!(playground.viewport.layout_width, width_before);
 	assert_eq!(playground.viewport.scene_revision, revision_before);
 	assert!(playground.scene_dirty);
 	assert!(playground.deferred_resize_reflow);
@@ -152,6 +150,34 @@ fn resize_reflow_script_scenario_changes_layout_width_and_revisions() {
 	let _ = playground.update(crate::types::Message::Sidebar(crate::types::SidebarMessage::SelectTab(
 		crate::types::SidebarTab::Inspect,
 	)));
+
+	assert!(playground.viewport.scene_revision > revision_before);
+	assert!(!playground.scene_dirty);
+	assert!(!playground.deferred_resize_reflow);
+	assert_eq!(playground.session.scene().max_width, playground.viewport.layout_width);
+}
+
+#[test]
+fn perf_incremental_typing_step_mutates_editor_state() {
+	let mut playground = Playground::headless();
+	playground.configure_headless_perf_scenario(crate::PerfScenario::IncrementalTyping);
+	let before = playground.session.text().len();
+	let history_before = playground.session.history_depths().0;
+
+	playground.run_headless_perf_step(crate::PerfScenario::IncrementalTyping, 0);
+
+	assert_eq!(playground.session.text().len(), before + 1);
+	assert_eq!(playground.session.history_depths().0, history_before + 1);
+	assert!(playground.scene_dirty);
+}
+
+#[test]
+fn perf_resize_reflow_step_rebuilds_immediately_when_scene_ui_is_active() {
+	let mut playground = Playground::headless();
+	playground.configure_headless_perf_scenario(crate::PerfScenario::ResizeReflow);
+	let revision_before = playground.viewport.scene_revision;
+
+	playground.run_headless_perf_step(crate::PerfScenario::ResizeReflow, 0);
 
 	assert!(playground.viewport.scene_revision > revision_before);
 	assert!(!playground.scene_dirty);

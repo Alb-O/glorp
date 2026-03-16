@@ -1,7 +1,7 @@
 use {
 	super::Playground,
 	crate::{
-		HeadlessScenario, HeadlessScriptScenario,
+		HeadlessScenario, HeadlessScriptScenario, PerfScenario,
 		editor::{
 			EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent,
 		},
@@ -108,6 +108,38 @@ impl Playground {
 				let _ = self.update(Message::Controls(ControlsMessage::ShowBaselinesChanged(true)));
 				let _ = self.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
 			}
+		}
+	}
+
+	pub(crate) fn configure_headless_perf_scenario(&mut self, scenario: PerfScenario) {
+		match scenario {
+			PerfScenario::Default => self.configure_headless_scenario(HeadlessScenario::Default),
+			PerfScenario::Tall => self.configure_headless_scenario(HeadlessScenario::Tall),
+			PerfScenario::TallInspect => self.configure_headless_scenario(HeadlessScenario::TallInspect),
+			PerfScenario::TallPerf => self.configure_headless_scenario(HeadlessScenario::TallPerf),
+			PerfScenario::IncrementalTyping => {
+				self.configure_headless_script_scenario(HeadlessScriptScenario::IncrementalTyping);
+			}
+			PerfScenario::MotionSweep => {
+				self.configure_headless_script_scenario(HeadlessScriptScenario::MotionSweep);
+			}
+			PerfScenario::ResizeReflow => {
+				self.configure_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
+				let _ = self.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+			}
+			PerfScenario::InspectInteraction => {
+				self.configure_headless_script_scenario(HeadlessScriptScenario::InspectInteractionSweep);
+			}
+		}
+	}
+
+	pub(crate) fn run_headless_perf_step(&mut self, scenario: PerfScenario, step: usize) {
+		match scenario {
+			PerfScenario::Default | PerfScenario::Tall | PerfScenario::TallInspect | PerfScenario::TallPerf => {}
+			PerfScenario::IncrementalTyping => self.perform_incremental_typing_step(step),
+			PerfScenario::MotionSweep => self.perform_motion_sweep_step(step),
+			PerfScenario::ResizeReflow => self.perform_resize_reflow_step(step),
+			PerfScenario::InspectInteraction => self.perform_inspect_interaction_step(step),
 		}
 	}
 
@@ -221,12 +253,9 @@ impl Playground {
 
 	fn perform_motion_sweep(&mut self) {
 		for _ in 0..HEADLESS_MOTION_SWEEP_REPEATS {
-			self.apply_headless_motion(EditorMotion::Down);
-			self.apply_headless_motion(EditorMotion::Right);
-			self.apply_headless_motion(EditorMotion::LineEnd);
-			self.apply_headless_motion(EditorMotion::Up);
-			self.apply_headless_motion(EditorMotion::LineStart);
-			self.apply_headless_motion(EditorMotion::Left);
+			for step in 0..headless_motion_sequence().len() {
+				self.perform_motion_sweep_step(step);
+			}
 		}
 	}
 
@@ -249,33 +278,71 @@ impl Playground {
 	}
 
 	fn perform_resize_reflow_sweep(&mut self) {
-		for width in HEADLESS_RESIZE_WIDTHS {
-			let _ = self.update(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
-				width,
-				HEADLESS_VIEWPORT_SIZE.height,
-			))));
-			let _ = self.update(Message::Viewport(ViewportMessage::ResizeTick(
-				Instant::now() + HEADLESS_RESIZE_SETTLE_DELAY,
-			)));
+		for step in 0..HEADLESS_RESIZE_WIDTHS.len() {
+			self.perform_resize_reflow_step(step);
 		}
 	}
 
 	fn perform_inspect_interaction_sweep(&mut self) {
-		for target in HEADLESS_INSPECT_HOVERS {
-			let _ = self.update(Message::Canvas(CanvasEvent::Hovered(Some(target))));
+		let steps = HEADLESS_INSPECT_HOVERS.len() + (HEADLESS_POINTER_SWEEP_POINTS.len() * 3);
+		for step in 0..steps {
+			self.perform_inspect_interaction_step(step);
+		}
+	}
+
+	fn perform_incremental_typing_step(&mut self, step: usize) {
+		let next = char::from(b'a' + (step % 26) as u8);
+		self.apply_headless_insert(next.to_string());
+	}
+
+	fn perform_motion_sweep_step(&mut self, step: usize) {
+		self.apply_headless_motion(headless_motion_sequence()[step % headless_motion_sequence().len()]);
+	}
+
+	fn perform_resize_reflow_step(&mut self, step: usize) {
+		let width = HEADLESS_RESIZE_WIDTHS[(step + 1) % HEADLESS_RESIZE_WIDTHS.len()];
+		let _ = self.update(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
+			width,
+			HEADLESS_VIEWPORT_SIZE.height,
+		))));
+		let _ = self.update(Message::Viewport(ViewportMessage::ResizeTick(
+			Instant::now() + HEADLESS_RESIZE_SETTLE_DELAY,
+		)));
+	}
+
+	fn perform_inspect_interaction_step(&mut self, step: usize) {
+		if step < HEADLESS_INSPECT_HOVERS.len() {
+			let _ = self.update(Message::Canvas(CanvasEvent::Hovered(Some(
+				HEADLESS_INSPECT_HOVERS[step],
+			))));
+			return;
 		}
 
-		for (start, end) in HEADLESS_POINTER_SWEEP_POINTS {
-			let _ = self.update(Message::Canvas(CanvasEvent::PointerSelectionStarted {
-				target: Some(CanvasTarget::Run(1)),
-				intent: EditorPointerIntent::BeginSelection {
-					position: Point::new(start.0, start.1),
-					select_word: false,
-				},
-			}));
-			let _ = self.update(Message::Editor(EditorIntent::Pointer(
-				EditorPointerIntent::DragSelection(Point::new(end.0, end.1)),
-			)));
+		let pointer_step = (step - HEADLESS_INSPECT_HOVERS.len()) % (HEADLESS_POINTER_SWEEP_POINTS.len() * 3);
+		let point_index = pointer_step / 3;
+		let phase = pointer_step % 3;
+		let (start, end) = HEADLESS_POINTER_SWEEP_POINTS[point_index];
+
+		match phase {
+			0 => {
+				let _ = self.update(Message::Canvas(CanvasEvent::PointerSelectionStarted {
+					target: Some(CanvasTarget::Run(1)),
+					intent: EditorPointerIntent::BeginSelection {
+						position: Point::new(start.0, start.1),
+						select_word: false,
+					},
+				}));
+			}
+			1 => {
+				let _ = self.update(Message::Editor(EditorIntent::Pointer(
+					EditorPointerIntent::DragSelection(Point::new(end.0, end.1)),
+				)));
+			}
+			_ => {
+				let _ = self.update(Message::Editor(EditorIntent::Pointer(
+					EditorPointerIntent::EndSelection,
+				)));
+			}
 		}
 	}
 
@@ -347,6 +414,17 @@ fn headless_incremental_line_break(step: usize) -> String {
 
 fn delete_seed_char_count() -> usize {
 	headless_delete_seed_chunk().chars().count()
+}
+
+fn headless_motion_sequence() -> [EditorMotion; 6] {
+	[
+		EditorMotion::Down,
+		EditorMotion::Right,
+		EditorMotion::LineEnd,
+		EditorMotion::Up,
+		EditorMotion::LineStart,
+		EditorMotion::Left,
+	]
 }
 
 #[cfg(test)]

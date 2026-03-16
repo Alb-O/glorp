@@ -1,5 +1,5 @@
 use {
-	crate::{HeadlessScenario, Playground, perf::PerfDashboard},
+	crate::{PerfScenario, Playground, perf::PerfDashboard},
 	iced::{
 		Color, Font, Pixels, Size, Theme,
 		advanced::renderer::{Headless, Style},
@@ -18,7 +18,7 @@ const VIEWPORT_PHYSICAL_HEIGHT: u32 = 1000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PerfCliConfig {
-	pub(crate) scenario: HeadlessScenario,
+	pub(crate) scenario: PerfScenario,
 	pub(crate) warmup_frames: usize,
 	pub(crate) sample_frames: usize,
 }
@@ -72,7 +72,7 @@ fn parse_args(args: &[String]) -> Result<Option<PerfCliConfig>, String> {
 					.get(index + 1)
 					.ok_or_else(|| "--perf-scenario requires a value".to_string())?;
 				scenario = Some(
-					HeadlessScenario::parse_label(value)
+					PerfScenario::parse_label(value)
 						.ok_or_else(|| format!("unknown perf scenario `{value}`\n\n{}", usage()))?,
 				);
 				index += 2;
@@ -126,9 +126,9 @@ fn parse_count(flag: &str, value: &str) -> Result<usize, String> {
 fn usage() -> String {
 	format!(
 		"Usage: glorp [--perf-scenario <{}>] [--warmup <frames>] [--samples <frames>]",
-		HeadlessScenario::ALL
+		PerfScenario::ALL
 			.into_iter()
-			.map(HeadlessScenario::label)
+			.map(PerfScenario::label)
 			.collect::<Vec<_>>()
 			.join("|")
 	)
@@ -144,7 +144,10 @@ fn run(config: PerfCliConfig) -> Result<String, String> {
 	harness.reset_perf_monitor();
 
 	let screenshot_bytes = (0..config.sample_frames)
-		.map(|_| harness.render_frame())
+		.map(|step| {
+			harness.step(step);
+			harness.render_frame()
+		})
 		.collect::<Vec<_>>();
 	let dashboard = harness.dashboard();
 
@@ -164,10 +167,11 @@ struct Harness {
 	viewport_physical: Size<u32>,
 	viewport_logical: Size,
 	theme: Theme,
+	scenario: PerfScenario,
 }
 
 impl Harness {
-	fn new(scenario: HeadlessScenario) -> Result<Self, String> {
+	fn new(scenario: PerfScenario) -> Result<Self, String> {
 		let backend = env::var("GLORP_HEADLESS_BACKEND").ok();
 		let renderer = block_on(<iced::Renderer as Headless>::new(
 			Font::DEFAULT,
@@ -191,9 +195,14 @@ impl Harness {
 			viewport_physical,
 			viewport_logical,
 			theme: Theme::TokyoNightStorm,
+			scenario,
 		};
-		harness.playground.configure_headless_scenario(scenario);
+		harness.playground.configure_headless_perf_scenario(scenario);
 		Ok(harness)
+	}
+
+	fn step(&mut self, step: usize) {
+		self.playground.run_headless_perf_step(self.scenario, step);
 	}
 
 	fn render_frame(&mut self) -> usize {
@@ -267,6 +276,7 @@ fn build_report_json(
 	let mut json = String::new();
 	json.push_str("{\n");
 	json.push_str(&format!("  \"scenario\": {},\n", json_string(config.scenario.label())));
+	json.push_str(&format!("  \"driver\": {},\n", json_string(config.scenario.driver())));
 	json.push_str(&format!("  \"renderer\": {},\n", json_string(renderer_name)));
 	json.push_str(&format!(
 		"  \"build_profile\": {},\n",
@@ -415,7 +425,7 @@ fn json_string(value: &str) -> String {
 mod tests {
 	use {
 		super::{DEFAULT_SAMPLE_FRAMES, DEFAULT_WARMUP_FRAMES, parse_args},
-		crate::HeadlessScenario,
+		crate::PerfScenario,
 	};
 
 	fn strings(values: &[&str]) -> Vec<String> {
@@ -435,7 +445,7 @@ mod tests {
 		.expect("args should parse")
 		.expect("perf mode should be selected");
 
-		assert_eq!(config.scenario, HeadlessScenario::TallInspect);
+		assert_eq!(config.scenario, PerfScenario::TallInspect);
 		assert_eq!(config.warmup_frames, 12);
 		assert_eq!(config.sample_frames, 48);
 	}
@@ -446,9 +456,19 @@ mod tests {
 			.expect("args should parse")
 			.expect("perf mode should be selected");
 
-		assert_eq!(config.scenario, HeadlessScenario::Tall);
+		assert_eq!(config.scenario, PerfScenario::Tall);
 		assert_eq!(config.warmup_frames, DEFAULT_WARMUP_FRAMES);
 		assert_eq!(config.sample_frames, DEFAULT_SAMPLE_FRAMES);
+	}
+
+	#[test]
+	fn parse_args_accepts_scripted_perf_scenarios() {
+		let config = parse_args(&strings(&["--perf-scenario", "resize-reflow", "--samples", "24"]))
+			.expect("args should parse")
+			.expect("perf mode should be selected");
+
+		assert_eq!(config.scenario, PerfScenario::ResizeReflow);
+		assert_eq!(config.sample_frames, 24);
 	}
 
 	#[test]
