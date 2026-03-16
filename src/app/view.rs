@@ -76,21 +76,8 @@ impl EditorApp {
 	fn view_canvas(&self, stacked: bool) -> Element<'static, Message> {
 		let editor_presentation = self.session.editor_presentation();
 		let derived_scene = self.session.derived_scene().cloned();
-		let inspect_overlays = if self.sidebar.active_tab == SidebarTab::Inspect {
-			derived_scene.as_ref().map_or_else(
-				|| Arc::from([]),
-				|scene| {
-					scene.layout.inspect_overlay_primitives(
-						self.sidebar.hovered_target,
-						self.sidebar.selected_target,
-						self.viewport.layout_width,
-						self.controls.show_hitboxes,
-					)
-				},
-			)
-		} else {
-			Arc::from([])
-		};
+		let inspect_targets_active = self.sidebar.active_tab == SidebarTab::Inspect;
+		let inspect_overlays = self.inspect_overlays(derived_scene.as_ref(), inspect_targets_active);
 
 		view_canvas_pane(CanvasPaneProps {
 			editor_presentation: editor_presentation.clone(),
@@ -101,7 +88,7 @@ impl EditorApp {
 				show_hitboxes: self.controls.show_hitboxes,
 			},
 			inspect_overlays,
-			inspect_targets_active: self.sidebar.active_tab == SidebarTab::Inspect,
+			inspect_targets_active,
 			focused: self.viewport.canvas_focused,
 			scene_revision: self.viewport.scene_revision,
 			scroll: self.viewport.canvas_scroll,
@@ -151,6 +138,26 @@ impl EditorApp {
 		SidebarBodyData::Perf(
 			self.sidebar_cache
 				.perf_dashboard(self.session.editor_presentation(), scene, &self.perf),
+		)
+	}
+
+	fn inspect_overlays(
+		&self, scene: Option<&crate::presentation::DerivedScenePresentation>, active: bool,
+	) -> Arc<[crate::overlay::OverlayPrimitive]> {
+		if !active {
+			return Arc::from([]);
+		}
+
+		scene.map_or_else(
+			|| Arc::from([]),
+			|scene| {
+				scene.layout.inspect_overlay_primitives(
+					self.sidebar.hovered_target,
+					self.sidebar.selected_target,
+					self.viewport.layout_width,
+					self.controls.show_hitboxes,
+				)
+			},
 		)
 	}
 }

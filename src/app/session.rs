@@ -119,21 +119,13 @@ impl DocumentSession {
 	/// Applies a width change and refreshes the hot presentation if needed.
 	pub(super) fn sync_width(&mut self, width: f32) -> bool {
 		let changed = self.editor.sync_buffer_width(&mut self.font_system, width);
-		if changed {
-			self.refresh_editor_presentation();
-			self.invalidate_derived_scene();
-		}
-		changed
+		self.finish_buffer_sync(changed)
 	}
 
 	/// Applies a config change and refreshes the hot presentation if needed.
 	pub(super) fn sync_config(&mut self, config: SceneConfig) -> bool {
 		let changed = self.editor.sync_buffer_config(&mut self.font_system, config);
-		if changed {
-			self.refresh_editor_presentation();
-			self.invalidate_derived_scene();
-		}
-		changed
+		self.finish_buffer_sync(changed)
 	}
 
 	/// Replaces the document contents and refreshes the hot presentation.
@@ -191,6 +183,16 @@ impl DocumentSession {
 		// heavier inspect/perf scene stays cold.
 		let revision = self.editor_presentation.revision + 1;
 		self.editor_presentation = build_editor_presentation(&self.editor, revision);
+	}
+
+	fn finish_buffer_sync(&mut self, changed: bool) -> bool {
+		if !changed {
+			return false;
+		}
+
+		self.refresh_editor_presentation();
+		self.invalidate_derived_scene();
+		true
 	}
 
 	fn invalidate_derived_scene(&mut self) {

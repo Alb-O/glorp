@@ -117,8 +117,7 @@ impl EditorEngine {
 		let layout = Arc::new(layout.unwrap_or_else(|| self.document_layout()));
 		let layout_ref = layout.as_ref();
 		let layout_elapsed = started.elapsed();
-		let selection = self.selection().cloned();
-		let selection_head = selection.as_ref().map(EditorSelection::head);
+		let (selection, selection_head) = self.selection_state();
 		let tone = EditorOverlayTone::from(self.mode());
 		let insert_cursor = if matches!(self.mode(), EditorMode::Insert) {
 			selection_head.and_then(|head| self.projection.layout.insert_cursor_rectangle(self.text(), head))
@@ -129,14 +128,7 @@ impl EditorEngine {
 		let overlay_started = Instant::now();
 		let overlays = self.build_overlays(layout_ref, selection.as_ref(), insert_cursor, viewport_target, tone);
 		let overlay_elapsed = overlay_started.elapsed();
-		self.projection.layout.set_view_state(EditorViewState {
-			mode: self.mode(),
-			selection: selection.as_ref().map(EditorSelection::range_cloned),
-			selection_head,
-			pointer_anchor: self.pointer_anchor(),
-			overlays,
-			viewport_target,
-		});
+		self.set_view_state(selection.as_ref(), overlays, viewport_target);
 		self.projection.layout.set_document_layout(layout);
 		let total_ms = duration_ms(started.elapsed());
 		if total_ms >= 8.0 {
@@ -169,53 +161,15 @@ impl EditorEngine {
 		&self, layout: &DocumentLayout, selection: Option<&EditorSelection>, insert_cursor: Option<LayoutRect>,
 		viewport_target: Option<LayoutRect>, tone: EditorOverlayTone,
 	) -> Arc<[OverlayPrimitive]> {
-		let mut overlays = Vec::with_capacity(match self.mode() {
-			EditorMode::Insert => 2,
-			EditorMode::Normal => usize::from(viewport_target.is_some()),
-		});
-
 		if matches!(self.mode(), EditorMode::Insert) {
-			if let Some(insert_block) = viewport_target {
-				overlays.push(OverlayPrimitive::scene_rect(
-					insert_block,
-					OverlayRectKind::EditorInsertBlock(tone),
-					OverlayLayer::UnderText,
-				));
-			}
-
-			if let Some(caret) = insert_cursor {
-				overlays.push(OverlayPrimitive::scene_rect(
-					caret,
-					OverlayRectKind::EditorCaret(tone),
-					OverlayLayer::UnderText,
-				));
-			}
-		} else {
-			if let Some(selection) = selection {
-				overlays.extend(
-					selection_rectangles(layout, selection.range())
-						.iter()
-						.copied()
-						.map(|rect| {
-							OverlayPrimitive::scene_rect(
-								rect,
-								OverlayRectKind::EditorSelection(tone),
-								OverlayLayer::UnderText,
-							)
-						}),
-				);
-			}
-
-			if let Some(active) = viewport_target {
-				overlays.push(OverlayPrimitive::scene_rect(
-					active,
-					OverlayRectKind::EditorActive(tone),
-					OverlayLayer::UnderText,
-				));
-			}
+			return Self::insert_overlays(tone, insert_cursor, viewport_target);
 		}
 
-		overlays.into()
+		let selection_rectangles = selection.map_or_else(
+			|| Arc::from([]),
+			|selection| selection_rectangles(layout, selection.range()),
+		);
+		Self::normal_overlays(tone, selection_rectangles.as_ref(), viewport_target)
 	}
 
 	pub(super) fn buffer_hit(&self, point: Point) -> Option<cosmic_text::Cursor> {
@@ -302,13 +256,58 @@ impl EditorEngine {
 	}
 
 	pub(super) fn refresh_insert_view_state_fast(&mut self) {
-		let selection = self.selection().cloned();
-		let selection_head = selection.as_ref().map(EditorSelection::head);
+		let (selection, selection_head) = self.selection_state();
 		let tone = EditorOverlayTone::from(self.mode());
 		let insert_cursor =
 			selection_head.and_then(|head| self.projection.layout.insert_cursor_rectangle(self.text(), head));
 		let viewport_target =
 			selection_head.and_then(|head| self.projection.layout.insert_cursor_block(self.text(), head));
+		let overlays = Self::insert_overlays(tone, insert_cursor, viewport_target);
+		self.set_view_state(selection.as_ref(), overlays, viewport_target);
+	}
+
+	fn refresh_normal_view_state_fast(&mut self) {
+		let (selection, selection_head) = self.selection_state();
+		let tone = EditorOverlayTone::from(self.mode());
+		let (selection_rectangles, viewport_target) = selection.as_ref().map_or_else(
+			|| (Arc::from([]), None),
+			|selection| {
+				normal_selection_geometry(
+					&self.buffer(),
+					self.text(),
+					selection.range(),
+					selection_head.unwrap_or(selection.range().start),
+				)
+			},
+		);
+		let overlays = Self::normal_overlays(tone, selection_rectangles.as_ref(), viewport_target);
+		self.set_view_state(selection.as_ref(), overlays, viewport_target);
+	}
+
+	fn selection_state(&self) -> (Option<EditorSelection>, Option<usize>) {
+		let selection = self.selection().cloned();
+		let selection_head = selection.as_ref().map(EditorSelection::head);
+		(selection, selection_head)
+	}
+
+	fn set_view_state(
+		&mut self, selection: Option<&EditorSelection>, overlays: Arc<[OverlayPrimitive]>,
+		viewport_target: Option<LayoutRect>,
+	) {
+		let selection_head = selection.map(EditorSelection::head);
+		self.projection.layout.set_view_state(EditorViewState {
+			mode: self.mode(),
+			selection: selection.map(EditorSelection::range_cloned),
+			selection_head,
+			pointer_anchor: self.pointer_anchor(),
+			overlays,
+			viewport_target,
+		});
+	}
+
+	fn insert_overlays(
+		tone: EditorOverlayTone, insert_cursor: Option<LayoutRect>, viewport_target: Option<LayoutRect>,
+	) -> Arc<[OverlayPrimitive]> {
 		let mut overlays =
 			Vec::with_capacity(usize::from(viewport_target.is_some()) + usize::from(insert_cursor.is_some()));
 
@@ -328,31 +327,12 @@ impl EditorEngine {
 			));
 		}
 
-		self.projection.layout.set_view_state(EditorViewState {
-			mode: self.mode(),
-			selection: selection.as_ref().map(EditorSelection::range_cloned),
-			selection_head,
-			pointer_anchor: self.pointer_anchor(),
-			overlays: overlays.into(),
-			viewport_target,
-		});
+		overlays.into()
 	}
 
-	fn refresh_normal_view_state_fast(&mut self) {
-		let selection = self.selection().cloned();
-		let selection_head = selection.as_ref().map(EditorSelection::head);
-		let tone = EditorOverlayTone::from(self.mode());
-		let (selection_rectangles, viewport_target) = selection.as_ref().map_or_else(
-			|| (Arc::from([]), None),
-			|selection| {
-				normal_selection_geometry(
-					&self.buffer(),
-					self.text(),
-					selection.range(),
-					selection_head.unwrap_or(selection.range().start),
-				)
-			},
-		);
+	fn normal_overlays(
+		tone: EditorOverlayTone, selection_rectangles: &[LayoutRect], viewport_target: Option<LayoutRect>,
+	) -> Arc<[OverlayPrimitive]> {
 		let mut overlays = Vec::with_capacity(selection_rectangles.len() + usize::from(viewport_target.is_some()));
 
 		overlays.extend(selection_rectangles.iter().copied().map(|rect| {
@@ -367,13 +347,6 @@ impl EditorEngine {
 			));
 		}
 
-		self.projection.layout.set_view_state(EditorViewState {
-			mode: self.mode(),
-			selection: selection.as_ref().map(EditorSelection::range_cloned),
-			selection_head,
-			pointer_anchor: self.pointer_anchor(),
-			overlays: overlays.into(),
-			viewport_target,
-		});
+		overlays.into()
 	}
 }

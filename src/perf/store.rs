@@ -13,6 +13,7 @@ pub(super) const SEVERE_FRAME_MS: f32 = 33.3;
 pub(super) const METRIC_WARNING_MS: f32 = 8.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
 pub(super) enum MetricKind {
 	EditorCommand,
 	EditorApply,
@@ -62,20 +63,7 @@ impl MetricKind {
 	}
 
 	pub(super) fn index(self) -> usize {
-		match self {
-			Self::EditorCommand => 0,
-			Self::EditorApply => 1,
-			Self::EditorWidthSync => 2,
-			Self::SceneBuild => 3,
-			Self::ResizeReflow => 4,
-			Self::UiBuild => 5,
-			Self::UiDraw => 6,
-			Self::CanvasUpdate => 7,
-			Self::CanvasStaticBuild => 8,
-			Self::CanvasUnderlayDraw => 9,
-			Self::CanvasOverlayDraw => 10,
-			Self::CanvasDraw => 11,
-		}
+		self as usize
 	}
 }
 
@@ -219,7 +207,7 @@ pub(super) fn percentile_ms(values: &VecDeque<f32>, percentile_percent: usize) -
 
 fn push_bounded<T>(items: &mut VecDeque<T>, value: T, limit: usize) {
 	if items.len() == limit {
-		let _ = items.pop_front();
+		items.pop_front();
 	}
 
 	items.push_back(value);

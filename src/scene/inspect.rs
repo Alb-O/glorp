@@ -61,11 +61,7 @@ impl DocumentLayout {
 						width: layout_width.max(run.line_width).max(1.0),
 						height: run.line_height.max(1.0),
 					},
-					if selected {
-						OverlayRectKind::InspectRunSelected
-					} else {
-						OverlayRectKind::InspectRunHover
-					},
+					run_overlay_kind(selected),
 					OverlayLayer::OverText,
 				));
 			}
@@ -75,27 +71,43 @@ impl DocumentLayout {
 				};
 				overlays.push(OverlayPrimitive::scene_rect(
 					rect,
-					if selected {
-						OverlayRectKind::InspectGlyphSelected
-					} else {
-						OverlayRectKind::InspectGlyphHover
-					},
+					cluster_overlay_kind(selected),
 					OverlayLayer::OverText,
 				));
 
 				if show_hitboxes {
 					overlays.push(OverlayPrimitive::scene_rect(
 						rect,
-						if selected {
-							OverlayRectKind::InspectGlyphHitboxSelected
-						} else {
-							OverlayRectKind::InspectGlyphHitboxHover
-						},
+						cluster_hitbox_overlay_kind(selected),
 						OverlayLayer::OverText,
 					));
 				}
 			}
 		}
+	}
+}
+
+fn run_overlay_kind(selected: bool) -> OverlayRectKind {
+	if selected {
+		OverlayRectKind::InspectRunSelected
+	} else {
+		OverlayRectKind::InspectRunHover
+	}
+}
+
+fn cluster_overlay_kind(selected: bool) -> OverlayRectKind {
+	if selected {
+		OverlayRectKind::InspectGlyphSelected
+	} else {
+		OverlayRectKind::InspectGlyphHover
+	}
+}
+
+fn cluster_hitbox_overlay_kind(selected: bool) -> OverlayRectKind {
+	if selected {
+		OverlayRectKind::InspectGlyphHitboxSelected
+	} else {
+		OverlayRectKind::InspectGlyphHitboxHover
 	}
 }
 

@@ -141,7 +141,7 @@ fn log_draw_duration(total: Duration, static_build: Option<Duration>, cache_miss
 
 fn push_bounded<T>(items: &mut VecDeque<T>, value: T, limit: usize) {
 	if items.len() == limit {
-		let _ = items.pop_front();
+		items.pop_front();
 	}
 
 	items.push_back(value);

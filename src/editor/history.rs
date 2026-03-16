@@ -34,7 +34,7 @@ impl EditorHistory {
 
 	pub(super) fn record(&mut self, entry: HistoryEntry) {
 		if self.undo.len() == HISTORY_LIMIT {
-			let _ = self.undo.pop_front();
+			self.undo.pop_front();
 		}
 
 		self.undo.push_back(entry);
