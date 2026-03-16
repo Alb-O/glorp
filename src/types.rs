@@ -23,7 +23,7 @@ pub(crate) enum Message {
 	Shell(ShellMessage),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum ControlsMessage {
 	LoadPreset(SamplePreset),
 	FontSelected(FontChoice),

@@ -11,6 +11,8 @@ use {
 	},
 };
 
+type InspectGlyphDetails = Arc<[Arc<[Arc<str>]>]>;
+
 #[derive(Debug)]
 pub(super) struct SceneInspectCache {
 	pub(super) buffer: Arc<Buffer>,
@@ -18,7 +20,7 @@ pub(super) struct SceneInspectCache {
 	pub(super) font_names: Arc<[(fontdb::ID, Arc<str>)]>,
 	pub(super) runs: OnceLock<Arc<[InspectRunInfo]>>,
 	pub(super) run_details: OnceLock<Arc<[Arc<str>]>>,
-	pub(super) glyph_details: OnceLock<Arc<[Arc<[Arc<str>]>]>>,
+	pub(super) glyph_details: OnceLock<InspectGlyphDetails>,
 }
 
 impl LayoutScene {
@@ -63,8 +65,7 @@ impl LayoutScene {
 	fn debug_snippet(&self, range: &Range<usize>) -> String {
 		self.text
 			.get(range.clone())
-			.map(debug_snippet)
-			.unwrap_or_else(|| "<invalid utf8 slice>".to_string())
+			.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
 	}
 
 	pub(crate) fn inspect_overlay_primitives(
@@ -194,7 +195,7 @@ fn build_run_details(runs: &[super::RunInfo]) -> Arc<[Arc<str>]> {
 		.collect()
 }
 
-fn build_glyph_details(scene: &LayoutScene) -> Arc<[Arc<[Arc<str>]>]> {
+fn build_glyph_details(scene: &LayoutScene) -> InspectGlyphDetails {
 	scene
 		.inspect_runs()
 		.iter()
@@ -263,8 +264,7 @@ pub(super) fn font_name(
 	let name: Arc<str> = font_system
 		.db()
 		.face(font_id)
-		.map(|face| face.post_script_name.as_str())
-		.unwrap_or_else(|| "unknown-font")
+		.map_or_else(|| "unknown-font", |face| face.post_script_name.as_str())
 		.into();
 	font_names.push((font_id, name.clone()));
 	name
@@ -322,6 +322,5 @@ fn lookup_font_name(font_names: &[(fontdb::ID, Arc<str>)], font_id: fontdb::ID) 
 	font_names
 		.iter()
 		.find(|(id, _)| *id == font_id)
-		.map(|(_, name)| name.clone())
-		.unwrap_or_else(|| Arc::<str>::from("unknown-font"))
+		.map_or_else(|| Arc::<str>::from("unknown-font"), |(_, name)| name.clone())
 }

@@ -108,7 +108,7 @@ pub(crate) enum EditorIntent {
 	History(EditorHistoryIntent),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum EditorPointerIntent {
 	BeginSelection { position: Point, select_word: bool },
 	DragSelection(Point),

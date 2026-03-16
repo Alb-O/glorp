@@ -102,8 +102,8 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 		.iter()
 		.enumerate()
 		.find_map(|(index, line)| {
-			let start = line.glyphs.first().map(|glyph| glyph.start).unwrap_or(0);
-			let end = line.glyphs.last().map(|glyph| glyph.end).unwrap_or(0);
+			let start = line.glyphs.first().map_or(0, |glyph| glyph.start);
+			let end = line.glyphs.last().map_or(0, |glyph| glyph.end);
 			let is_cursor_before_start = start > cursor.index;
 			let is_cursor_before_end = cursor.index <= end;
 
@@ -113,8 +113,7 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 					let width = previous_line
 						.glyphs
 						.last()
-						.map(|glyph| glyph.w.max(2.0))
-						.unwrap_or(default_width);
+						.map_or(default_width, |glyph| glyph.w.max(2.0));
 
 					(previous, previous_line.w, width)
 				})
@@ -130,8 +129,7 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 					.iter()
 					.find(|glyph| cursor.index <= glyph.start)
 					.or_else(|| line.glyphs.last())
-					.map(|glyph| glyph.w.max(2.0))
-					.unwrap_or(default_width);
+					.map_or(default_width, |glyph| glyph.w.max(2.0));
 
 				Some((index, offset, width))
 			} else {
@@ -140,12 +138,11 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 		})
 		.unwrap_or((
 			layout.len().saturating_sub(1),
-			layout.last().map(|line| line.w).unwrap_or(0.0),
+			layout.last().map_or(0.0, |line| line.w),
 			layout
 				.last()
 				.and_then(|line| line.glyphs.last())
-				.map(|glyph| glyph.w.max(2.0))
-				.unwrap_or(default_width),
+				.map_or(default_width, |glyph| glyph.w.max(2.0)),
 		));
 	let y = (visual_lines_offset(cursor.line, buffer) + visual_line as i32) as f32 * line_height - scroll.vertical;
 

@@ -106,13 +106,11 @@ impl EditorEngine {
 				let target = if to_start {
 					layout
 						.first_cluster_in_run(caret.run_index)
-						.map(|index| layout.clusters()[index].byte_range.start)
-						.unwrap_or(self.caret())
+						.map_or(self.caret(), |index| layout.clusters()[index].byte_range.start)
 				} else {
 					layout
 						.last_cluster_in_run(caret.run_index)
-						.map(|index| layout.clusters()[index].byte_range.end)
-						.unwrap_or(self.caret())
+						.map_or(self.caret(), |index| layout.clusters()[index].byte_range.end)
 				};
 
 				self.set_insert_head(layout, target);

@@ -46,7 +46,7 @@ impl canvas::Program<Message> for GlyphCanvas {
 			state.scroll(),
 		)
 		.map(|event| state.transition(event, max_scroll))
-		.and_then(|action| action.into_iced());
+		.and_then(state::CanvasAction::into_iced);
 
 		self.perf.record_canvas_update(started.elapsed());
 		action

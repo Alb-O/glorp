@@ -190,7 +190,7 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 	let mut font_system = make_font_system();
 	let scene = LayoutScene::build(
 		&mut font_system,
-		text.to_string(),
+		text,
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
 		WrapChoice::None,

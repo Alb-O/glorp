@@ -31,7 +31,7 @@ pub struct Playground {
 impl Playground {
 	pub(crate) fn new() -> (Self, Task<Message>) {
 		let controls = ControlsState::new();
-		let viewport = ViewportState::new(controls.initial_layout_width());
+		let viewport = ViewportState::new(ControlsState::initial_layout_width());
 		let session = SceneSession::new(controls.preset.text(), controls.scene_config(viewport.layout_width));
 
 		(

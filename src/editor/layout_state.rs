@@ -28,14 +28,7 @@ impl EditorLayout {
 		Self {
 			buffer: Arc::new(build_buffer(font_system, text, config)),
 			config,
-			view_state: EditorViewState {
-				mode: EditorMode::Normal,
-				selection: None,
-				selection_head: None,
-				pointer_anchor: None,
-				overlays: Arc::from([]),
-				viewport_target: None,
-			},
+			view_state: default_view_state(),
 		}
 	}
 
@@ -83,14 +76,7 @@ impl EditorLayout {
 	pub(super) fn reset(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) {
 		self.config = config;
 		self.buffer = Arc::new(build_buffer(font_system, text, config));
-		self.view_state = EditorViewState {
-			mode: EditorMode::Normal,
-			selection: None,
-			selection_head: None,
-			pointer_anchor: None,
-			overlays: Arc::from([]),
-			viewport_target: None,
-		};
+		self.view_state = default_view_state();
 	}
 
 	pub(super) fn snapshot(&self, text: &str) -> BufferLayoutSnapshot {
@@ -206,6 +192,17 @@ fn edit_changes_line_structure(text: &str, edit: &TextEdit) -> bool {
 	text.get(edit.range.clone())
 		.is_some_and(|removed| removed.contains('\n'))
 		|| edit.inserted.contains('\n')
+}
+
+fn default_view_state() -> EditorViewState {
+	EditorViewState {
+		mode: EditorMode::Normal,
+		selection: None,
+		selection_head: None,
+		pointer_anchor: None,
+		overlays: Arc::from([]),
+		viewport_target: None,
+	}
 }
 
 fn measure_buffer(buffer: &Buffer) -> (f32, f32) {

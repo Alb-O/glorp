@@ -23,7 +23,7 @@ fn scene_build_is_stable_for_unicode_replace() {
 	let mut rebuilt_font_system = make_font_system();
 	let rebuilt = LayoutScene::build(
 		&mut rebuilt_font_system,
-		expected.clone(),
+		&expected,
 		config.font_choice,
 		config.shaping,
 		config.wrapping,
@@ -53,7 +53,7 @@ fn inspect_overlays_emit_run_and_glyph_primitives() {
 	let mut font_system = make_font_system();
 	let scene = LayoutScene::build(
 		&mut font_system,
-		"alpha beta".to_string(),
+		"alpha beta",
 		config.font_choice,
 		config.shaping,
 		config.wrapping,
@@ -113,7 +113,7 @@ fn inspect_overlays_fall_back_to_clusters_without_lazy_runs() {
 	let mut font_system = make_font_system();
 	let scene = LayoutScene::build(
 		&mut font_system,
-		"alpha beta".to_string(),
+		"alpha beta",
 		config.font_choice,
 		config.shaping,
 		config.wrapping,
@@ -158,7 +158,7 @@ fn target_details_reuse_cached_strings() {
 	let mut font_system = make_font_system();
 	let scene = LayoutScene::build(
 		&mut font_system,
-		"alpha beta".to_string(),
+		"alpha beta",
 		config.font_choice,
 		config.shaping,
 		config.wrapping,

@@ -37,7 +37,7 @@ impl LayoutScene {
 	#[cfg(test)]
 	#[allow(clippy::too_many_arguments)]
 	pub(crate) fn build(
-		font_system: &mut FontSystem, text: String, font_choice: crate::types::FontChoice,
+		font_system: &mut FontSystem, text: &str, font_choice: crate::types::FontChoice,
 		shaping: crate::types::ShapingChoice, wrapping: crate::types::WrapChoice, font_size: f32, line_height: f32,
 		max_width: f32, render_mode: crate::types::RenderMode,
 	) -> Self {
@@ -51,8 +51,8 @@ impl LayoutScene {
 			max_width,
 		};
 
-		let buffer = Arc::new(build_buffer(font_system, &text, config));
-		let model = LayoutSceneModel::new(font_system, &text, buffer, config);
+		let buffer = Arc::new(build_buffer(font_system, text, config));
+		let model = LayoutSceneModel::new(font_system, text, buffer, config);
 		model.scene
 	}
 

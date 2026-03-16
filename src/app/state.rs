@@ -122,7 +122,7 @@ impl ControlsState {
 		}
 	}
 
-	pub(super) fn initial_layout_width(&self) -> f32 {
+	pub(super) const fn initial_layout_width() -> f32 {
 		540.0
 	}
 

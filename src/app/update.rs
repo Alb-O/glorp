@@ -58,7 +58,10 @@ impl Playground {
 			Message::Controls(message) => self.handle_controls_message(message),
 			Message::Sidebar(message) => self.handle_sidebar_message(message),
 			Message::Canvas(message) => self.handle_canvas_message(message),
-			Message::Editor(intent) => self.dispatch_editor_intent(intent.clone(), editor_dispatch_source(&intent)),
+			Message::Editor(intent) => {
+				let source = editor_dispatch_source(&intent);
+				self.dispatch_editor_intent(intent, source);
+			}
 			Message::Perf(PerfMessage::Tick(_now)) => {}
 			Message::Viewport(message) => self.handle_viewport_message(message),
 			Message::Shell(ShellMessage::PaneResized(event)) => {
@@ -217,7 +220,7 @@ impl Playground {
 		let requires_scene_rebuild = outcome.requires_scene_rebuild;
 		let apply_elapsed = apply_started.elapsed();
 		self.perf.record_editor_apply(apply_elapsed);
-		self.handle_editor_outcome(outcome, source);
+		self.handle_editor_outcome(&outcome, source);
 		let command_elapsed = command_started.elapsed();
 		self.perf.record_editor_command(command_elapsed);
 
@@ -263,7 +266,7 @@ impl Playground {
 		}
 	}
 
-	fn handle_editor_outcome(&mut self, outcome: EditorOutcome, source: EditorDispatchSource) {
+	fn handle_editor_outcome(&mut self, outcome: &EditorOutcome, source: EditorDispatchSource) {
 		if outcome.document_changed {
 			self.controls.preset = SamplePreset::Custom;
 		}

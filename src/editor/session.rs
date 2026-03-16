@@ -31,7 +31,7 @@ impl EditorSession {
 	}
 
 	pub(super) fn caret(&self) -> usize {
-		self.selection.as_ref().map(EditorSelection::head).unwrap_or(0)
+		self.selection.as_ref().map_or(0, EditorSelection::head)
 	}
 
 	pub(super) fn preferred_x(&self) -> Option<f32> {
