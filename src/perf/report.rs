@@ -21,6 +21,17 @@ const GRAPH_METRICS: [MetricKind; 12] = [
 	MetricKind::SceneBuild,
 	MetricKind::EditorApply,
 ];
+const RECENT_ACTIVITY_METRICS: [MetricKind; 9] = [
+	MetricKind::EditorWidthSync,
+	MetricKind::ResizeReflow,
+	MetricKind::UiBuild,
+	MetricKind::UiDraw,
+	MetricKind::CanvasUpdate,
+	MetricKind::CanvasStaticBuild,
+	MetricKind::CanvasUnderlayDraw,
+	MetricKind::CanvasOverlayDraw,
+	MetricKind::CanvasDraw,
+];
 
 #[derive(Debug, Clone)]
 pub(crate) struct PerfGraphSeries {
@@ -184,21 +195,11 @@ pub(super) fn build_dashboard(
 	// dashboard rebuild does not rescan the same metric windows twice.
 	let hot_paths = MetricKind::ALL.map(|kind| metric_summary(store, kind));
 	let frame_pacing = frame_pacing_summary(store);
-	let mut recent_activity = Vec::with_capacity(10);
-	for kind in [
-		MetricKind::EditorWidthSync,
-		MetricKind::ResizeReflow,
-		MetricKind::UiBuild,
-		MetricKind::UiDraw,
-		MetricKind::CanvasUpdate,
-		MetricKind::CanvasStaticBuild,
-		MetricKind::CanvasUnderlayDraw,
-		MetricKind::CanvasOverlayDraw,
-		MetricKind::CanvasDraw,
-	] {
-		recent_activity.push(recent_metric_activity(store, kind));
-	}
-	recent_activity.push(frame_pacing.recent_activity());
+	let recent_activity = RECENT_ACTIVITY_METRICS
+		.into_iter()
+		.map(|kind| recent_metric_activity(store, kind))
+		.chain(std::iter::once(frame_pacing.recent_activity()))
+		.collect();
 
 	PerfDashboard {
 		overview: PerfOverview {
@@ -267,7 +268,7 @@ fn graphs(
 	store: &PerfStore, frame_pacing: &PerfFramePacingSummary, hot_paths: &[PerfMetricSummary; MetricKind::ALL.len()],
 ) -> Vec<PerfGraphSeries> {
 	let frame_p95 = percentile_ms(&store.frames.intervals_ms, 95);
-	let mut graphs = vec![PerfGraphSeries {
+	let frame_graph = PerfGraphSeries {
 		title: "frame delta",
 		samples_ms: store.frames.intervals_ms.iter().copied().collect(),
 		ceiling_ms: graph_ceiling(frame_pacing.max_ms.max(frame_p95).max(SEVERE_FRAME_MS), false),
@@ -276,24 +277,23 @@ fn graphs(
 		p95_ms: frame_p95,
 		warning_ms: Some(FRAME_BUDGET_MS),
 		severe_ms: Some(SEVERE_FRAME_MS),
-	}];
-	graphs.reserve(GRAPH_METRICS.len());
+	};
 
-	for kind in GRAPH_METRICS {
-		let summary = &hot_paths[kind.index()];
-		graphs.push(PerfGraphSeries {
-			title: kind.label(),
-			samples_ms: store.metrics[kind.index()].window.iter().copied().collect(),
-			ceiling_ms: graph_ceiling(summary.max_ms.max(summary.p95_ms), true),
-			latest_ms: summary.last_ms,
-			avg_ms: summary.avg_ms,
-			p95_ms: summary.p95_ms,
-			warning_ms: Some(METRIC_WARNING_MS),
-			severe_ms: Some(FRAME_BUDGET_MS),
-		});
-	}
-
-	graphs
+	std::iter::once(frame_graph)
+		.chain(GRAPH_METRICS.into_iter().map(|kind| {
+			let summary = &hot_paths[kind.index()];
+			PerfGraphSeries {
+				title: kind.label(),
+				samples_ms: store.metrics[kind.index()].window.iter().copied().collect(),
+				ceiling_ms: graph_ceiling(summary.max_ms.max(summary.p95_ms), true),
+				latest_ms: summary.last_ms,
+				avg_ms: summary.avg_ms,
+				p95_ms: summary.p95_ms,
+				warning_ms: Some(METRIC_WARNING_MS),
+				severe_ms: Some(FRAME_BUDGET_MS),
+			}
+		}))
+		.collect()
 }
 
 pub(super) fn graph_ceiling(max_sample_ms: f32, keep_low_range: bool) -> f32 {

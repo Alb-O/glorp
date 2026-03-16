@@ -8,9 +8,8 @@ use {
 	crate::{
 		types::{Message, ShellMessage, SidebarTab},
 		ui::{
-			CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps,
-			is_stacked_shell, view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar,
-			view_stacked_shell,
+			CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, is_stacked_shell,
+			view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar, view_stacked_shell,
 		},
 	},
 	iced::{
@@ -133,19 +132,15 @@ impl EditorApp {
 			.session
 			.derived_scene()
 			.expect("inspect view requires a materialized derived scene");
-		SidebarBodyData::Inspect(
-			self.sidebar_cache
-				.inspect_model(InspectSidebarArgs {
-					editor: self.session.editor_presentation(),
-					scene,
-					text: self.session.text(),
-					hovered_target: self.sidebar.hovered_target,
-					selected_target: self.sidebar.selected_target,
-					undo_depth,
-					redo_depth,
-				})
-				.data,
-		)
+		SidebarBodyData::Inspect(self.sidebar_cache.inspect_data(InspectSidebarArgs {
+			editor: self.session.editor_presentation(),
+			scene,
+			text: self.session.text(),
+			hovered_target: self.sidebar.hovered_target,
+			selected_target: self.sidebar.selected_target,
+			undo_depth,
+			redo_depth,
+		}))
 	}
 
 	fn perf_sidebar_body_data(&self) -> SidebarBodyData {
@@ -155,8 +150,7 @@ impl EditorApp {
 			.expect("perf view requires a materialized derived scene");
 		SidebarBodyData::Perf(
 			self.sidebar_cache
-				.perf_model(self.session.editor_presentation(), scene, &self.perf)
-				.data,
+				.perf_dashboard(self.session.editor_presentation(), scene, &self.perf),
 		)
 	}
 }
@@ -186,12 +180,7 @@ fn render_sidebar_body(body: SidebarBodyData) -> Element<'static, Message> {
 		}
 		SidebarBodyData::Perf(data) => {
 			let key = Arc::as_ptr(&data);
-			lazy(key, move |_| {
-				view_perf_tab(PerfTabProps {
-					dashboard: data.dashboard.clone(),
-				})
-			})
-			.into()
+			lazy(key, move |_| view_perf_tab(data.as_ref())).into()
 		}
 	}
 }

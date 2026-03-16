@@ -12,7 +12,7 @@ mod sidebar;
 pub(crate) use {
 	controls::{ControlsTabProps, view_controls_tab},
 	inspect::{InspectTabProps, view_inspect_tab},
-	perf::{PerfTabProps, view_perf_tab},
+	perf::view_perf_tab,
 	shell::{
 		CanvasDecorations, CanvasPaneProps, default_sidebar_ratio, is_stacked_shell, view_canvas_pane,
 		view_stacked_shell,

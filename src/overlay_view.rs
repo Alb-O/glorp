@@ -61,6 +61,14 @@ impl SceneOverlayLayer {
 		self.height = height.into();
 		self
 	}
+
+	fn measured_height(&self) -> f32 {
+		self.derived_scene
+			.as_ref()
+			.map_or(self.editor_presentation.viewport_metrics.measured_height, |scene| {
+				scene.layout.measured_height
+			})
+	}
 }
 
 #[derive(Debug, Clone)]
@@ -100,16 +108,10 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 	}
 
 	fn layout(&mut self, _tree: &mut Tree, _renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
-		let measured_height = self
-			.derived_scene
-			.as_ref()
-			.map_or(self.editor_presentation.viewport_metrics.measured_height, |scene| {
-				scene.layout.measured_height
-			});
 		layout::Node::new(limits.resolve(
 			self.width,
 			self.height,
-			Size::new(self.layout_width.max(1.0), measured_height.max(1.0)),
+			Size::new(self.layout_width.max(1.0), self.measured_height().max(1.0)),
 		))
 	}
 
@@ -138,12 +140,6 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 		}
 
 		if self.focused {
-			let measured_height = self
-				.derived_scene
-				.as_ref()
-				.map_or(self.editor_presentation.viewport_metrics.measured_height, |scene| {
-					scene.layout.measured_height
-				});
 			draw_rect_primitive(
 				renderer,
 				bounds,
@@ -152,7 +148,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 					x: 0.0,
 					y: 0.0,
 					width: self.layout_width.max(1.0),
-					height: measured_height.max(1.0),
+					height: self.measured_height().max(1.0),
 				},
 				OverlayRectKind::EditorFocusFrame(EditorOverlayTone::from(self.editor_presentation.editor.mode)),
 				OverlaySpace::Scene,

@@ -1,9 +1,9 @@
 use {
-	super::sidebar_data::{InspectSidebarData, PerfSidebarData},
+	super::sidebar_data::InspectSidebarData,
 	crate::{
 		editor::{EditorMode, EditorViewState},
 		overlay::{EditorOverlayTone, OverlayRectKind},
-		perf::{PerfMonitor, PerfSnapshotKey},
+		perf::{PerfDashboard, PerfMonitor, PerfSnapshotKey},
 		presentation::{DerivedScenePresentation, EditorPresentation},
 		scene::{DocumentLayout, debug_snippet},
 		types::CanvasTarget,
@@ -40,23 +40,17 @@ pub(super) struct PerfSidebarKey {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct InspectSidebarModel {
-	pub(super) key: InspectSidebarKey,
-	pub(super) data: Arc<InspectSidebarData>,
-}
-
-#[derive(Debug, Clone)]
-pub(super) struct PerfSidebarModel {
-	pub(super) key: PerfSidebarKey,
-	pub(super) data: Arc<PerfSidebarData>,
+struct CachedEntry<K, V> {
+	key: K,
+	data: Arc<V>,
 }
 
 #[derive(Default)]
 pub(super) struct SidebarCache {
 	inspect_dirty: Cell<bool>,
 	perf_dirty: Cell<bool>,
-	inspect: RefCell<Option<InspectSidebarModel>>,
-	perf: RefCell<Option<PerfSidebarModel>>,
+	inspect: RefCell<Option<CachedEntry<InspectSidebarKey, InspectSidebarData>>>,
+	perf: RefCell<Option<CachedEntry<PerfSidebarKey, PerfDashboard>>>,
 	#[cfg(test)]
 	inspect_builds: Cell<usize>,
 	#[cfg(test)]
@@ -77,38 +71,38 @@ impl SidebarCache {
 		self.invalidate_perf();
 	}
 
-	pub(super) fn inspect_model(&self, args: InspectSidebarArgs<'_>) -> InspectSidebarModel {
+	pub(super) fn inspect_data(&self, args: InspectSidebarArgs<'_>) -> Arc<InspectSidebarData> {
 		let key = args.key();
 
-		if let Some(model) = cached_model(&self.inspect, &self.inspect_dirty, key, |model| model.key) {
-			return model;
+		if let Some(data) = cached_data(&self.inspect, &self.inspect_dirty, key) {
+			return data;
 		}
 
-		let model = InspectSidebarModel {
-			key,
-			data: Arc::new(InspectSidebarData {
-				warnings: args.scene.layout.warnings.clone(),
-				interaction_details: interaction_details(
-					args.editor,
-					args.scene,
-					args.text,
-					args.hovered_target,
-					args.selected_target,
-					args.undo_depth,
-					args.redo_depth,
-				),
-			}),
-		};
+		let data = Arc::new(InspectSidebarData {
+			warnings: args.scene.layout.warnings.clone(),
+			interaction_details: interaction_details(
+				args.editor,
+				args.scene,
+				args.text,
+				args.hovered_target,
+				args.selected_target,
+				args.undo_depth,
+				args.redo_depth,
+			),
+		});
 		self.inspect_dirty.set(false);
 		#[cfg(test)]
 		self.inspect_builds.set(self.inspect_builds.get() + 1);
-		self.inspect.replace(Some(model.clone()));
-		model
+		self.inspect.replace(Some(CachedEntry {
+			key,
+			data: data.clone(),
+		}));
+		data
 	}
 
-	pub(super) fn perf_model(
+	pub(super) fn perf_dashboard(
 		&self, editor: &EditorPresentation, scene: &DerivedScenePresentation, perf: &PerfMonitor,
-	) -> PerfSidebarModel {
+	) -> Arc<PerfDashboard> {
 		let key = PerfSidebarKey {
 			editor_revision: editor.revision,
 			scene_revision: scene.revision,
@@ -117,21 +111,19 @@ impl SidebarCache {
 			perf: perf.key(),
 		};
 
-		if let Some(model) = cached_model(&self.perf, &self.perf_dirty, key, |model| model.key) {
-			return model;
+		if let Some(data) = cached_data(&self.perf, &self.perf_dirty, key) {
+			return data;
 		}
 
-		let model = PerfSidebarModel {
-			key,
-			data: Arc::new(PerfSidebarData {
-				dashboard: Arc::new(perf.dashboard(scene.layout.as_ref(), editor.mode(), editor.editor_bytes())),
-			}),
-		};
+		let data = Arc::new(perf.dashboard(scene.layout.as_ref(), editor.mode(), editor.editor_bytes()));
 		self.perf_dirty.set(false);
 		#[cfg(test)]
 		self.perf_builds.set(self.perf_builds.get() + 1);
-		self.perf.replace(Some(model.clone()));
-		model
+		self.perf.replace(Some(CachedEntry {
+			key,
+			data: data.clone(),
+		}));
+		data
 	}
 
 	#[cfg(test)]
@@ -175,15 +167,14 @@ impl InspectSidebarArgs<'_> {
 	}
 }
 
-fn cached_model<T, K>(model: &RefCell<Option<T>>, dirty: &Cell<bool>, key: K, key_of: impl Fn(&T) -> K) -> Option<T>
+fn cached_data<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, dirty: &Cell<bool>, key: K) -> Option<Arc<V>>
 where
-	T: Clone,
 	K: Copy + Eq, {
 	if !dirty.get()
-		&& let Some(model) = model.borrow().as_ref()
-		&& key_of(model) == key
+		&& let Some(entry) = cache.borrow().as_ref()
+		&& entry.key == key
 	{
-		return Some(model.clone());
+		return Some(entry.data.clone());
 	}
 
 	None

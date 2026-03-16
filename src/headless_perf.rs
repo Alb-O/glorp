@@ -37,10 +37,7 @@ pub(crate) fn run_from_env() -> Option<ExitCode> {
 	let config = match parse_args(&args) {
 		Ok(Some(config)) => config,
 		Ok(None) => return None,
-		Err(message) => {
-			eprintln!("{message}");
-			return Some(ExitCode::FAILURE);
-		}
+		Err(message) => return report_error(message),
 	};
 
 	crate::init_tracing();
@@ -50,10 +47,7 @@ pub(crate) fn run_from_env() -> Option<ExitCode> {
 			println!("{report}");
 			Some(ExitCode::SUCCESS)
 		}
-		Err(message) => {
-			eprintln!("{message}");
-			Some(ExitCode::FAILURE)
-		}
+		Err(message) => report_error(message),
 	}
 }
 
@@ -128,15 +122,18 @@ fn parse_count(flag: &str, value: &str) -> Result<usize, String> {
 }
 
 fn usage() -> String {
-	let mut scenarios = String::new();
-	for scenario in PerfScenario::ALL {
-		if !scenarios.is_empty() {
-			scenarios.push('|');
-		}
-		scenarios.push_str(scenario.label());
-	}
+	let scenarios = PerfScenario::ALL
+		.into_iter()
+		.map(PerfScenario::label)
+		.collect::<Vec<_>>()
+		.join("|");
 
 	format!("Usage: glorp [--perf-scenario <{scenarios}>] [--warmup <frames>] [--samples <frames>]")
+}
+
+fn report_error(message: String) -> Option<ExitCode> {
+	eprintln!("{message}");
+	Some(ExitCode::FAILURE)
 }
 
 fn run(config: PerfCliConfig) -> Result<String, String> {

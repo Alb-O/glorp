@@ -8,16 +8,9 @@ use {
 		Color, Element, Font, Length, Pixels, Point, Rectangle, Size, Theme,
 		widget::{canvas, column, container, row, text},
 	},
-	std::sync::Arc,
 };
 
-/// Props for the performance inspection tab.
-pub(crate) struct PerfTabProps {
-	pub(crate) dashboard: Arc<PerfDashboard>,
-}
-
-pub(crate) fn view_perf_tab(props: PerfTabProps) -> Element<'static, Message> {
-	let dashboard = props.dashboard;
+pub(crate) fn view_perf_tab(dashboard: &PerfDashboard) -> Element<'static, Message> {
 	panel_scrollable(
 		container(
 			column![

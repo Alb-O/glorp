@@ -107,13 +107,13 @@ pub(super) fn selection_rectangles(layout: &DocumentLayout, range: &Range<usize>
 	let mut span_end = span_start;
 
 	for cluster in selected {
-		if cluster.run_index == span_end.run_index && cluster.byte_range.start <= span_end.byte_range.end {
-			span_end = cluster;
-		} else {
+		let continues_span =
+			cluster.run_index == span_end.run_index && cluster.byte_range.start <= span_end.byte_range.end;
+		if !continues_span {
 			rectangles.push(span_rectangle(span_start, span_end));
 			span_start = cluster;
-			span_end = cluster;
 		}
+		span_end = cluster;
 	}
 
 	rectangles.push(span_rectangle(span_start, span_end));

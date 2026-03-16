@@ -1,8 +1,5 @@
 use {
-	crate::{
-		perf::PerfDashboard,
-		types::{FontChoice, SamplePreset, ShapingChoice, WrapChoice},
-	},
+	crate::types::{FontChoice, SamplePreset, ShapingChoice, WrapChoice},
 	std::sync::Arc,
 };
 
@@ -25,13 +22,8 @@ pub(super) struct InspectSidebarData {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct PerfSidebarData {
-	pub(super) dashboard: Arc<PerfDashboard>,
-}
-
-#[derive(Debug, Clone)]
 pub(super) enum SidebarBodyData {
 	Controls(ControlsSidebarData),
 	Inspect(Arc<InspectSidebarData>),
-	Perf(Arc<PerfSidebarData>),
+	Perf(Arc<crate::perf::PerfDashboard>),
 }
