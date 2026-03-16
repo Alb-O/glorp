@@ -140,6 +140,7 @@ impl EditorEngine {
 		ApplyResult {
 			text_edit: None,
 			layout: Some(layout),
+			view_refreshed: false,
 		}
 	}
 }

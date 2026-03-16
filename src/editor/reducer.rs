@@ -115,6 +115,7 @@ fn layout_result(layout: super::BufferLayoutSnapshot) -> ApplyResult {
 	ApplyResult {
 		text_edit: None,
 		layout: Some(layout),
+		view_refreshed: false,
 	}
 }
 

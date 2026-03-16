@@ -175,7 +175,6 @@ impl EditorLayout {
 	fn resize_buffer(&mut self, font_system: &mut FontSystem, width: f32) {
 		let buffer = Arc::make_mut(&mut self.buffer);
 		buffer.set_size(font_system, Some(width), None);
-		buffer.shape_until_scroll(font_system, false);
 	}
 }
 

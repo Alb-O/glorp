@@ -17,6 +17,7 @@ impl EditorEngine {
 		ApplyResult {
 			text_edit: Some(entry.inverse),
 			layout: Some(next_layout),
+			view_refreshed: false,
 		}
 	}
 
@@ -32,6 +33,7 @@ impl EditorEngine {
 		ApplyResult {
 			text_edit: Some(entry.forward),
 			layout: Some(next_layout),
+			view_refreshed: false,
 		}
 	}
 
@@ -62,6 +64,7 @@ impl EditorEngine {
 		ApplyResult {
 			text_edit: Some(text_edit),
 			layout: Some(next_layout),
+			view_refreshed: false,
 		}
 	}
 
@@ -79,16 +82,29 @@ impl EditorEngine {
 					range,
 					inserted: String::new(),
 				};
+				let structural = self.edit_changes_line_structure(&text_edit);
 				let inverse = self.apply_document_edit(font_system, &text_edit);
-				let next_layout = self.layout_snapshot();
-				self.set_insert_head(&next_layout, previous);
 				self.set_preferred_x(None);
 				self.clear_pointer_anchor();
-				self.record_history(text_edit.clone(), inverse, before);
 
-				ApplyResult {
-					text_edit: Some(text_edit),
-					layout: Some(next_layout),
+				if structural {
+					let next_layout = self.layout_snapshot();
+					self.set_insert_head(&next_layout, previous);
+					self.record_history(text_edit.clone(), inverse, before);
+					ApplyResult {
+						text_edit: Some(text_edit),
+						layout: Some(next_layout),
+						view_refreshed: false,
+					}
+				} else {
+					self.set_insert_head_fast(previous);
+					self.record_history(text_edit.clone(), inverse, before);
+					self.refresh_insert_view_state_fast();
+					ApplyResult {
+						text_edit: Some(text_edit),
+						layout: None,
+						view_refreshed: true,
+					}
 				}
 			}
 		}
@@ -107,16 +123,29 @@ impl EditorEngine {
 					range: self.caret()..next,
 					inserted: String::new(),
 				};
+				let structural = self.edit_changes_line_structure(&text_edit);
 				let inverse = self.apply_document_edit(font_system, &text_edit);
-				let next_layout = self.layout_snapshot();
-				self.set_insert_head(&next_layout, self.caret());
 				self.set_preferred_x(None);
 				self.clear_pointer_anchor();
-				self.record_history(text_edit.clone(), inverse, before);
 
-				ApplyResult {
-					text_edit: Some(text_edit),
-					layout: Some(next_layout),
+				if structural {
+					let next_layout = self.layout_snapshot();
+					self.set_insert_head(&next_layout, self.caret());
+					self.record_history(text_edit.clone(), inverse, before);
+					ApplyResult {
+						text_edit: Some(text_edit),
+						layout: Some(next_layout),
+						view_refreshed: false,
+					}
+				} else {
+					self.set_insert_head_fast(self.caret());
+					self.record_history(text_edit.clone(), inverse, before);
+					self.refresh_insert_view_state_fast();
+					ApplyResult {
+						text_edit: Some(text_edit),
+						layout: None,
+						view_refreshed: true,
+					}
 				}
 			}
 		}
@@ -137,16 +166,36 @@ impl EditorEngine {
 			range: caret..caret,
 			inserted: text,
 		};
+		let structural = self.edit_changes_line_structure(&text_edit);
 		let inverse = self.apply_document_edit(font_system, &text_edit);
-		let next_layout = self.layout_snapshot();
-		self.set_insert_head(&next_layout, caret + text_edit.inserted.len());
 		self.set_preferred_x(None);
 		self.clear_pointer_anchor();
-		self.record_history(text_edit.clone(), inverse, before);
 
-		ApplyResult {
-			text_edit: Some(text_edit),
-			layout: Some(next_layout),
+		if structural {
+			let next_layout = self.layout_snapshot();
+			self.set_insert_head(&next_layout, caret + text_edit.inserted.len());
+			self.record_history(text_edit.clone(), inverse, before);
+			ApplyResult {
+				text_edit: Some(text_edit),
+				layout: Some(next_layout),
+				view_refreshed: false,
+			}
+		} else {
+			self.set_insert_head_fast(caret + text_edit.inserted.len());
+			self.record_history(text_edit.clone(), inverse, before);
+			self.refresh_insert_view_state_fast();
+			ApplyResult {
+				text_edit: Some(text_edit),
+				layout: None,
+				view_refreshed: true,
+			}
 		}
+	}
+
+	fn edit_changes_line_structure(&self, edit: &TextEdit) -> bool {
+		self.text()
+			.get(edit.range.clone())
+			.is_some_and(|removed| removed.contains('\n'))
+			|| edit.inserted.contains('\n')
 	}
 }

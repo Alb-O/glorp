@@ -1,7 +1,7 @@
 use {
 	super::{
 		layout::{BufferClusterInfo, BufferLayoutSnapshot},
-		text::byte_to_cursor,
+		text::{byte_to_cursor, line_byte_offsets},
 	},
 	crate::overlay::LayoutRect,
 	cosmic_text::Buffer,
@@ -56,6 +56,45 @@ pub(super) fn insert_cursor_block(buffer: &Buffer, font_size: f32, text: &str, b
 		y: geometry.y,
 		width: geometry.block_width.max(2.0),
 		height: geometry.height,
+	})
+}
+
+pub(super) fn insert_selection_range(buffer: &Buffer, text: &str, byte: usize) -> Option<Range<usize>> {
+	let cursor = byte_to_cursor(text, byte);
+	let line = buffer.lines.get(cursor.line)?;
+	let layout = line.layout_opt()?;
+	let line_offsets = line_byte_offsets(text);
+	let line_offset = *line_offsets.get(cursor.line)?;
+	let ends_hard_line = byte
+		.checked_add(1)
+		.is_some_and(|next| line_offsets[1..].binary_search(&next).is_ok());
+	let mut clusters = Vec::new();
+
+	for visual_line in layout {
+		for glyph in &visual_line.glyphs {
+			let cluster = (line_offset + glyph.start)..(line_offset + glyph.end);
+			if clusters.last() != Some(&cluster) {
+				clusters.push(cluster);
+			}
+		}
+	}
+
+	if clusters.is_empty() {
+		return None;
+	}
+
+	if ends_hard_line {
+		return clusters
+			.partition_point(|cluster| cluster.start < byte.saturating_add(1))
+			.checked_sub(1)
+			.and_then(|index| clusters.get(index).cloned());
+	}
+
+	let index = clusters.partition_point(|cluster| cluster.end <= byte);
+	clusters.get(index).cloned().or_else(|| {
+		index
+			.checked_sub(1)
+			.and_then(|previous| clusters.get(previous).cloned())
 	})
 }
 

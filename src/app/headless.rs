@@ -95,9 +95,6 @@ impl Playground {
 	pub fn configure_headless_script_scenario(&mut self, scenario: HeadlessScriptScenario) {
 		self.configure_headless_viewport();
 		self.load_headless_document(match scenario {
-			// Incremental newline insertion rebuilds the retained buffer each step,
-			// so the full 768-line perf fixture turns this unit-test scenario into a
-			// multi-minute stress run. Keep it realistic, but bounded.
 			HeadlessScriptScenario::IncrementalLineBreaks => headless_line_break_document(),
 			_ => headless_bench_document(),
 		});

@@ -16,7 +16,7 @@ mod tests;
 use {
 	self::{
 		document::DocumentState,
-		geometry::{cluster_rectangle, selection_rectangles},
+		geometry::{cluster_rectangle, insert_selection_range, selection_rectangles},
 		history::{EditorSnapshot, HistoryEntry},
 		layout::{BufferClusterInfo, BufferLayoutSnapshot},
 		layout_state::EditorLayout,
@@ -165,6 +165,7 @@ pub(crate) struct EditorOutcome {
 struct ApplyResult {
 	text_edit: Option<TextEdit>,
 	layout: Option<BufferLayoutSnapshot>,
+	view_refreshed: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -316,10 +317,16 @@ impl EditorEngine {
 		let _span = trace_span!("editor.apply", intent = ?intent).entered();
 		let previous_view = self.layout_model.layout.view_state();
 		let apply_started = Instant::now();
-		let ApplyResult { text_edit, layout } = apply_intent(self, font_system, intent);
+		let ApplyResult {
+			text_edit,
+			layout,
+			view_refreshed,
+		} = apply_intent(self, font_system, intent);
 		let reducer_elapsed = apply_started.elapsed();
 		let refresh_started = Instant::now();
-		self.refresh_view_state(layout);
+		if !view_refreshed {
+			self.refresh_view_state(layout);
+		}
 		let refresh_elapsed = refresh_started.elapsed();
 		let total_elapsed = apply_started.elapsed();
 		let total_ms = duration_ms(total_elapsed);
@@ -354,6 +361,7 @@ impl EditorEngine {
 			ApplyResult {
 				text_edit,
 				layout: None,
+				view_refreshed: false,
 			},
 		)
 	}
@@ -642,5 +650,47 @@ impl EditorEngine {
 
 	fn set_insert_head(&mut self, layout: &BufferLayoutSnapshot, head: usize) {
 		self.state.session.enter_insert(Self::insert_selection(layout, head));
+	}
+
+	fn set_insert_head_fast(&mut self, head: usize) {
+		let selection =
+			insert_selection_range(&self.buffer(), self.text(), head).map(|range| EditorSelection::new(range, head));
+		self.state.session.enter_insert(selection);
+	}
+
+	fn refresh_insert_view_state_fast(&mut self) {
+		let selection = self.selection().cloned();
+		let selection_head = selection.as_ref().map(EditorSelection::head);
+		let tone = EditorOverlayTone::from(self.mode());
+		let insert_cursor =
+			selection_head.and_then(|head| self.layout_model.layout.insert_cursor_rectangle(self.text(), head));
+		let viewport_target =
+			selection_head.and_then(|head| self.layout_model.layout.insert_cursor_block(self.text(), head));
+		let mut overlays = Vec::new();
+
+		if let Some(insert_block) = viewport_target {
+			overlays.push(OverlayPrimitive::scene_rect(
+				insert_block,
+				OverlayRectKind::EditorInsertBlock(tone),
+				OverlayLayer::UnderText,
+			));
+		}
+
+		if let Some(caret) = insert_cursor {
+			overlays.push(OverlayPrimitive::scene_rect(
+				caret,
+				OverlayRectKind::EditorCaret(tone),
+				OverlayLayer::UnderText,
+			));
+		}
+
+		self.layout_model.layout.set_view_state(EditorViewState {
+			mode: self.mode(),
+			selection: selection.as_ref().map(EditorSelection::range_cloned),
+			selection_head,
+			pointer_anchor: self.pointer_anchor(),
+			overlays: overlays.into(),
+			viewport_target,
+		});
 	}
 }
