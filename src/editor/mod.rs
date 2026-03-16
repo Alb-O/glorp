@@ -27,7 +27,7 @@ use {
 		overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
 		scene::SceneConfig,
 		telemetry::duration_ms,
-		types::{RenderMode, WrapChoice},
+		types::WrapChoice,
 	},
 	cosmic_text::{Buffer, FontSystem},
 	iced::Point,
@@ -177,7 +177,6 @@ pub(crate) struct EditorViewportMetrics {
 #[derive(Debug, Clone)]
 pub(crate) struct EditorTextLayerState {
 	pub(crate) buffer: std::sync::Weak<cosmic_text::Buffer>,
-	pub(crate) render_mode: RenderMode,
 	pub(crate) measured_height: f32,
 }
 

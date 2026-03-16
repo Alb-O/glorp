@@ -1,7 +1,7 @@
 use {
 	crate::{
 		perf::PerfDashboard,
-		types::{FontChoice, RenderMode, SamplePreset, ShapingChoice, WrapChoice},
+		types::{FontChoice, SamplePreset, ShapingChoice, WrapChoice},
 	},
 	std::sync::Arc,
 };
@@ -12,7 +12,6 @@ pub(super) struct ControlsSidebarData {
 	pub(super) font: FontChoice,
 	pub(super) shaping: ShapingChoice,
 	pub(super) wrapping: WrapChoice,
-	pub(super) render_mode: RenderMode,
 	pub(super) font_size: f32,
 	pub(super) line_height: f32,
 	pub(super) show_baselines: bool,

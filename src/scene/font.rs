@@ -1,6 +1,6 @@
 use {
 	super::SceneConfig,
-	crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice},
+	crate::types::{FontChoice, ShapingChoice, WrapChoice},
 	cosmic_text::{Attrs, Buffer, FontSystem, Metrics},
 	iced::Font,
 };
@@ -14,14 +14,13 @@ pub(crate) fn make_font_system() -> FontSystem {
 }
 
 pub(crate) fn scene_config(
-	font_choice: FontChoice, shaping: ShapingChoice, wrapping: WrapChoice, render_mode: RenderMode, font_size: f32,
-	line_height: f32, max_width: f32,
+	font_choice: FontChoice, shaping: ShapingChoice, wrapping: WrapChoice, font_size: f32, line_height: f32,
+	max_width: f32,
 ) -> SceneConfig {
 	SceneConfig {
 		font_choice,
 		shaping,
 		wrapping,
-		render_mode,
 		font_size,
 		line_height,
 		max_width,

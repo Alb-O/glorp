@@ -2,7 +2,7 @@ use {
 	crate::{
 		canvas_view::scene_origin,
 		perf::CanvasPerfSink,
-		scene::{LayoutScene, PathCommand},
+		scene::LayoutScene,
 		types::{Message, WrapChoice},
 	},
 	iced::{
@@ -77,24 +77,6 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 		})
 	}
 
-	fn diff(&self, tree: &mut Tree) {
-		let state = tree.state.downcast_mut::<StaticSceneState>();
-
-		// Replacing the cache object here is intentional.
-		//
-		// `canvas::Cache::clear()` keeps the previous geometry around so the next
-		// build can reuse its storage. That is normally beneficial, but after an
-		// outline-heavy scene revision it means later text-only revisions can keep
-		// dragging the larger mesh allocation through resize. Recreating the cache
-		// on scene revision boundaries drops that stale outline-era geometry
-		// completely instead of recycling it.
-		if state.cached_scene_revision.get() != Some(self.scene_revision) {
-			state.cache = canvas::Cache::default();
-			state.cached_scene_revision.set(None);
-			state.cached_scene_size.set(None);
-		}
-	}
-
 	fn size(&self) -> Size<Length> {
 		Size::new(self.width, self.height)
 	}
@@ -124,6 +106,10 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 		let revision_changed = state.cached_scene_revision.get() != Some(self.scene_revision);
 		let size_changed = state.cached_scene_size.get() != Some(scene_size_key);
 		let cache_miss = revision_changed || size_changed;
+
+		if revision_changed {
+			state.cache.clear();
+		}
 
 		let mut static_build = None;
 		let geometry = state.cache.draw_with_bounds(renderer, scene_bounds, |frame| {
@@ -159,7 +145,7 @@ impl From<StaticSceneLayer> for Element<'_, Message> {
 }
 
 fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
-	let inspect_runs = (layer.show_hitboxes || layer.scene.draw_outlines).then(|| layer.scene.inspect_runs());
+	let inspect_runs = layer.show_hitboxes.then(|| layer.scene.inspect_runs());
 
 	for (run_index, run) in layer.scene.runs.iter().enumerate() {
 		if layer.show_baselines {
@@ -195,46 +181,13 @@ fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 		};
 
 		for glyph in glyphs {
-			if layer.show_hitboxes {
-				frame.stroke_rectangle(
-					Point::new(glyph.x, glyph.y),
-					Size::new(glyph.width.max(0.5), glyph.height.max(0.5)),
-					canvas::Stroke::default()
-						.with_width(1.0)
-						.with_color(iced::Color::from_rgba(1.0, 0.3, 0.3, 0.6)),
-				);
-			}
-
-			if layer.scene.draw_outlines {
-				if let Some(outline) = &glyph.outline {
-					let path = canvas::Path::new(|builder| {
-						for command in &outline.commands {
-							match command {
-								PathCommand::MoveTo(point) => builder.move_to(Point::new(point.x, point.y)),
-								PathCommand::LineTo(point) => builder.line_to(Point::new(point.x, point.y)),
-								PathCommand::QuadTo(control, to) => {
-									builder
-										.quadratic_curve_to(Point::new(control.x, control.y), Point::new(to.x, to.y));
-								}
-								PathCommand::CurveTo(a, b, to) => builder.bezier_curve_to(
-									Point::new(a.x, a.y),
-									Point::new(b.x, b.y),
-									Point::new(to.x, to.y),
-								),
-								PathCommand::Close => builder.close(),
-							}
-						}
-					});
-
-					frame.fill(&path, iced::Color::from_rgb8(245, 245, 240));
-				} else {
-					frame.fill_rectangle(
-						Point::new(glyph.x, glyph.y),
-						Size::new(glyph.width.max(1.0), glyph.height.max(1.0)),
-						iced::Color::from_rgba(0.95, 0.9, 0.3, 0.18),
-					);
-				}
-			}
+			frame.stroke_rectangle(
+				Point::new(glyph.x, glyph.y),
+				Size::new(glyph.width.max(0.5), glyph.height.max(0.5)),
+				canvas::Stroke::default()
+					.with_width(1.0)
+					.with_color(iced::Color::from_rgba(1.0, 0.3, 0.3, 0.6)),
+			);
 		}
 	}
 }

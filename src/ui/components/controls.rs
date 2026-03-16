@@ -1,6 +1,6 @@
 use {
 	crate::{
-		types::{ControlsMessage, FontChoice, Message, RenderMode, SamplePreset, ShapingChoice, WrapChoice},
+		types::{ControlsMessage, FontChoice, Message, SamplePreset, ShapingChoice, WrapChoice},
 		ui::{
 			PICK_LIST_PADDING, control_row, panel_scrollable, panel_style, rounded_checkbox_style,
 			rounded_pick_list_menu_style, rounded_pick_list_style, rounded_slider_style,
@@ -21,7 +21,6 @@ pub(crate) struct ControlsTabProps {
 	pub(crate) font: FontChoice,
 	pub(crate) shaping: ShapingChoice,
 	pub(crate) wrapping: WrapChoice,
-	pub(crate) render_mode: RenderMode,
 	pub(crate) font_size: f32,
 	pub(crate) line_height: f32,
 	pub(crate) show_baselines: bool,
@@ -65,16 +64,6 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 				"Wrap",
 				pick_list(Some(props.wrapping), WrapChoice::ALL, ToString::to_string)
 					.on_select(|wrapping| Message::Controls(ControlsMessage::WrappingSelected(wrapping)))
-					.padding(PICK_LIST_PADDING)
-					.style(rounded_pick_list_style)
-					.menu_style(rounded_pick_list_menu_style)
-					.width(Length::Fill)
-					.into(),
-			),
-			control_row(
-				"Render",
-				pick_list(Some(props.render_mode), RenderMode::ALL, ToString::to_string)
-					.on_select(|render_mode| Message::Controls(ControlsMessage::RenderModeSelected(render_mode)))
 					.padding(PICK_LIST_PADDING)
 					.style(rounded_pick_list_style)
 					.menu_style(rounded_pick_list_menu_style)

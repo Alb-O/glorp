@@ -143,7 +143,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 			);
 		}
 
-		if self.draw_text && self.text_layer.render_mode.draw_canvas_text() {
+		if self.draw_text {
 			renderer.fill_raw(iced::advanced::graphics::text::Raw {
 				buffer: self.text_layer.buffer.clone(),
 				position: origin,

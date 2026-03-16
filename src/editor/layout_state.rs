@@ -53,11 +53,6 @@ impl EditorLayout {
 			return false;
 		}
 
-		if self.layout_config_change_only_affects_render_mode(config) {
-			self.config = config;
-			return false;
-		}
-
 		if self.width_only_config_change(config) {
 			self.resize_buffer(font_system, config.max_width);
 			self.config = config;
@@ -101,7 +96,6 @@ impl EditorLayout {
 		let metrics = self.viewport_metrics();
 		EditorTextLayerState {
 			buffer: Arc::downgrade(&self.buffer),
-			render_mode: self.config.render_mode,
 			measured_height: metrics.measured_height,
 		}
 	}
@@ -174,18 +168,8 @@ impl EditorLayout {
 		self.config.font_choice == config.font_choice
 			&& self.config.shaping == config.shaping
 			&& self.config.wrapping == config.wrapping
-			&& self.config.render_mode == config.render_mode
 			&& (self.config.font_size - config.font_size).abs() < f32::EPSILON
 			&& (self.config.line_height - config.line_height).abs() < f32::EPSILON
-	}
-
-	fn layout_config_change_only_affects_render_mode(&self, config: SceneConfig) -> bool {
-		self.config.font_choice == config.font_choice
-			&& self.config.shaping == config.shaping
-			&& self.config.wrapping == config.wrapping
-			&& (self.config.font_size - config.font_size).abs() < f32::EPSILON
-			&& (self.config.line_height - config.line_height).abs() < f32::EPSILON
-			&& (self.config.max_width - config.max_width).abs() < 0.5
 	}
 
 	fn resize_buffer(&mut self, font_system: &mut FontSystem, width: f32) {

@@ -88,10 +88,6 @@ impl Playground {
 				self.controls.wrapping = wrapping;
 				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
 			}
-			ControlsMessage::RenderModeSelected(render_mode) => {
-				self.controls.render_mode = render_mode;
-				self.rebuild_scene(SceneRefreshReason::ControlsChanged);
-			}
 			ControlsMessage::FontSizeChanged(font_size) => {
 				self.controls.font_size = font_size;
 				self.controls.line_height = self.controls.line_height.max(self.controls.font_size);
@@ -368,11 +364,7 @@ impl Playground {
 	}
 
 	fn requires_immediate_scene_refresh(&self) -> bool {
-		self.sidebar.active_tab != SidebarTab::Controls
-			|| self.controls.show_baselines
-			|| self.controls.show_hitboxes
-			|| self.session.scene().draw_outlines
-			|| self.controls.render_mode.draw_outlines()
+		self.sidebar.active_tab != SidebarTab::Controls || self.controls.show_baselines || self.controls.show_hitboxes
 	}
 }
 

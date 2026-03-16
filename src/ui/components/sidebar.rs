@@ -26,10 +26,7 @@ pub(crate) fn view_sidebar(props: SidebarProps<'_>) -> Element<'_, Message> {
 	container(
 		column![
 			text("Glyph Playground").size(28),
-			text(
-				"Iced + cosmic-text + swash. Edit the source, then inspect the shaped runs, glyph boxes, and vendored outlines."
-			)
-			.size(15),
+			text("Iced + cosmic-text + swash. Edit the source, then inspect the shaped runs and glyph boxes.").size(15),
 			view_sidebar_tabs(props.active_tab),
 			view_editor_status(
 				props.editor_mode,

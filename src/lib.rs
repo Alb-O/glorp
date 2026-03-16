@@ -8,7 +8,6 @@
 //! - shape and lay it out with `cosmic-text`
 //! - inspect runs and glyphs directly
 //! - compare that data against Iced's paragraph renderer
-//! - draw vendored glyph outlines from `swash`
 //!
 //! # Upstream map
 //!
@@ -21,11 +20,6 @@
 //!    - Local: `scene::to_attributes`, `scene::to_family`,
 //!      `scene::to_weight`, `scene::to_stretch`, `scene::to_style`
 //!    - Why: this keeps our shaping inputs close to what `iced` itself uses.
-//!
-//! 2. Swash outline traversal
-//!    - Upstream: `iced_graphics::geometry::text::Text::draw_with`
-//!    - Local: outline extraction in `scene::LayoutScene::build`
-//!    - Why: this is the core of the local outline rendering mode.
 //!
 //! ## Still external and vital
 //!
@@ -67,7 +61,6 @@
 //! ## Not worth adapting yet
 //!
 //! - Font to `Attrs` conversion: already local
-//! - Swash outline traversal: already local
 //! - Hover/click hit-testing: already local
 mod app;
 mod canvas_view;

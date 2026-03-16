@@ -24,7 +24,6 @@ pub(crate) enum ControlsMessage {
 	FontSelected(FontChoice),
 	ShapingSelected(ShapingChoice),
 	WrappingSelected(WrapChoice),
-	RenderModeSelected(RenderMode),
 	FontSizeChanged(f32),
 	LineHeightChanged(f32),
 	ShowBaselinesChanged(bool),
@@ -266,35 +265,6 @@ impl Display for WrapChoice {
 			WrapChoice::Word => write!(f, "Word"),
 			WrapChoice::Glyph => write!(f, "Glyph"),
 			WrapChoice::WordOrGlyph => write!(f, "Word or glyph"),
-		}
-	}
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RenderMode {
-	CanvasOnly,
-	OutlinesOnly,
-	CanvasAndOutlines,
-}
-
-impl RenderMode {
-	pub(crate) const ALL: [RenderMode; 3] = [Self::CanvasOnly, Self::OutlinesOnly, Self::CanvasAndOutlines];
-
-	pub(crate) fn draw_canvas_text(self) -> bool {
-		matches!(self, RenderMode::CanvasOnly | RenderMode::CanvasAndOutlines)
-	}
-
-	pub(crate) fn draw_outlines(self) -> bool {
-		matches!(self, RenderMode::OutlinesOnly | RenderMode::CanvasAndOutlines)
-	}
-}
-
-impl Display for RenderMode {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			RenderMode::CanvasOnly => write!(f, "Text"),
-			RenderMode::OutlinesOnly => write!(f, "Outlines"),
-			RenderMode::CanvasAndOutlines => write!(f, "Both"),
 		}
 	}
 }

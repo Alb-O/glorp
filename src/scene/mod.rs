@@ -9,7 +9,7 @@ mod text;
 
 use {
 	self::inspect::SceneInspectCache,
-	crate::types::{FontChoice, RenderMode, ShapingChoice, WrapChoice},
+	crate::types::{FontChoice, ShapingChoice, WrapChoice},
 	iced::Font,
 	std::sync::Arc,
 };
@@ -17,7 +17,7 @@ use {
 #[cfg(test)]
 pub(crate) use self::build::LayoutSceneTestSpec;
 pub(crate) use self::{
-	data::{ClusterInfo, GlyphInfo, InspectRunInfo, OutlinePath, PathCommand, PathPoint, RunInfo},
+	data::{ClusterInfo, GlyphInfo, InspectRunInfo, RunInfo},
 	font::{build_buffer, make_font_system, scene_config},
 	text::debug_snippet,
 };
@@ -27,7 +27,6 @@ pub(crate) struct SceneConfig {
 	pub(crate) font_choice: FontChoice,
 	pub(crate) shaping: ShapingChoice,
 	pub(crate) wrapping: WrapChoice,
-	pub(crate) render_mode: RenderMode,
 	pub(crate) font_size: f32,
 	pub(crate) line_height: f32,
 	pub(crate) max_width: f32,
@@ -57,6 +56,5 @@ pub(crate) struct LayoutScene {
 	pub(crate) runs: Arc<[RunInfo]>,
 	pub(crate) clusters: Arc<[ClusterInfo]>,
 	pub(crate) warnings: Arc<[String]>,
-	pub(crate) draw_outlines: bool,
 	inspect: Arc<SceneInspectCache>,
 }

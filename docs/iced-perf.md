@@ -12,7 +12,7 @@ The app has three runtime layers:
 
 - `EditorEngine` in `src/editor/mod.rs` owns the retained `cosmic-text::Buffer`. It is the source of truth for text, motion, hit testing, and editor selection state.
 - `SceneTextLayer` in `src/text_view.rs` draws the visible document through `fill_raw(...)` with a weak handle to that same editor-owned buffer.
-- `LayoutScene` in `src/scene/mod.rs` is a derived inspection snapshot used for dump/inspect/outlines, not for core editor interaction.
+- `LayoutScene` in `src/scene/mod.rs` is a derived inspection snapshot used for dump/inspect overlays, not for core editor interaction.
 
 The canvas split is now narrower than before:
 

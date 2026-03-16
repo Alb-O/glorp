@@ -2,12 +2,12 @@
 use cosmic_text::Metrics;
 use {
 	super::{
-		InspectRunInfo, LayoutScene, LayoutSceneModel, RunInfo, SceneConfig,
+		LayoutScene, LayoutSceneModel, RunInfo, SceneConfig,
 		geometry::build_clusters,
-		inspect::{SceneInspectCache, font_name, glyph_outline},
+		inspect::{SceneInspectCache, font_name},
 		text::line_byte_offsets,
 	},
-	cosmic_text::{Buffer, FontSystem, SwashCache},
+	cosmic_text::{Buffer, FontSystem},
 	std::sync::{Arc, OnceLock},
 };
 
@@ -18,7 +18,6 @@ use super::build_buffer;
 pub(crate) struct LayoutSceneTestSpec {
 	pub(crate) text: Arc<str>,
 	pub(crate) wrapping: crate::types::WrapChoice,
-	pub(crate) render_mode: crate::types::RenderMode,
 	pub(crate) font_size: f32,
 	pub(crate) line_height: f32,
 	pub(crate) max_width: f32,
@@ -55,13 +54,12 @@ impl LayoutScene {
 	pub(crate) fn build(
 		font_system: &mut FontSystem, text: &str, font_choice: crate::types::FontChoice,
 		shaping: crate::types::ShapingChoice, wrapping: crate::types::WrapChoice, font_size: f32, line_height: f32,
-		max_width: f32, render_mode: crate::types::RenderMode,
+		max_width: f32,
 	) -> Self {
 		let config = SceneConfig {
 			font_choice,
 			shaping,
 			wrapping,
-			render_mode,
 			font_size,
 			line_height,
 			max_width,
@@ -73,7 +71,6 @@ impl LayoutScene {
 	}
 
 	fn from_buffer(font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig) -> Self {
-		let draw_outlines = config.render_mode.draw_outlines();
 		let mut runs = Vec::new();
 		let mut warnings = Vec::new();
 		let mut font_names = Vec::new();
@@ -82,15 +79,12 @@ impl LayoutScene {
 		let mut glyph_count = 0usize;
 		let mut clusters = Vec::new();
 		let line_byte_offsets = Arc::<[usize]>::from(line_byte_offsets(text));
-		let mut eager_inspect_runs = draw_outlines.then(Vec::new);
-		let mut swash_cache = draw_outlines.then(SwashCache::new);
 
 		for run in buffer.layout_runs() {
 			let line_byte_offset = line_byte_offsets[run.line_i];
 			measured_width = measured_width.max(run.line_w);
 			measured_height = measured_height.max(run.line_top + run.line_height);
 			glyph_count += run.glyphs.len();
-			let mut inspect_glyphs = draw_outlines.then(Vec::new);
 			let cluster_start = clusters.len();
 			clusters.extend(build_clusters(
 				runs.len(),
@@ -101,25 +95,8 @@ impl LayoutScene {
 			));
 			let cluster_end = clusters.len();
 
-			if let Some(inspect_glyphs) = inspect_glyphs.as_mut() {
-				for glyph in run.glyphs {
-					let font_name = font_name(font_system, &mut font_names, glyph.font_id);
-					let outline = swash_cache
-						.as_mut()
-						.and_then(|cache| glyph_outline(cache, font_system, glyph, run.line_y));
-					inspect_glyphs.push(super::GlyphInfo::from_layout_glyph(
-						glyph,
-						line_byte_offset,
-						run.line_top,
-						run.line_height,
-						font_name,
-						outline,
-					));
-				}
-			} else {
-				for glyph in run.glyphs {
-					let _ = font_name(font_system, &mut font_names, glyph.font_id);
-				}
+			for glyph in run.glyphs {
+				let _ = font_name(font_system, &mut font_names, glyph.font_id);
 			}
 
 			runs.push(RunInfo {
@@ -132,13 +109,6 @@ impl LayoutScene {
 				cluster_range: cluster_start..cluster_end,
 				glyph_count: run.glyphs.len(),
 			});
-
-			if let (Some(eager_runs), Some(glyphs)) = (eager_inspect_runs.as_mut(), inspect_glyphs) {
-				eager_runs.push(InspectRunInfo {
-					line_index: run.line_i,
-					glyphs,
-				});
-			}
 		}
 
 		if runs.is_empty() {
@@ -154,10 +124,6 @@ impl LayoutScene {
 			glyph_details: OnceLock::new(),
 		});
 
-		if let Some(eager_runs) = eager_inspect_runs {
-			let _ = inspect.runs.set(eager_runs.into());
-		}
-
 		Self {
 			text: Arc::<str>::from(text),
 			wrapping: config.wrapping,
@@ -169,7 +135,6 @@ impl LayoutScene {
 			runs: runs.into(),
 			clusters: clusters.into(),
 			warnings: warnings.into(),
-			draw_outlines,
 			inspect,
 		}
 	}
@@ -181,7 +146,6 @@ impl LayoutScene {
 		let LayoutSceneTestSpec {
 			text,
 			wrapping,
-			render_mode,
 			font_size,
 			line_height,
 			max_width,
@@ -204,7 +168,6 @@ impl LayoutScene {
 			runs: runs.into(),
 			clusters: clusters.into(),
 			warnings: Vec::new().into(),
-			draw_outlines: render_mode.draw_outlines(),
 			inspect: Arc::new(SceneInspectCache {
 				buffer: Arc::new(Buffer::new_empty(Metrics::new(
 					font_size.max(1.0),

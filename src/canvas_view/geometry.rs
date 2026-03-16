@@ -83,7 +83,6 @@ mod tests {
 		LayoutScene::new_for_test(LayoutSceneTestSpec {
 			text: Arc::<str>::from(""),
 			wrapping: crate::types::WrapChoice::Word,
-			render_mode: crate::types::RenderMode::CanvasOnly,
 			font_size: 16.0,
 			line_height: 20.0,
 			max_width: width,

@@ -2,7 +2,7 @@ use {
 	super::{LayoutScene, make_font_system, scene_config},
 	crate::{
 		overlay::{OverlayLayer, OverlayPrimitive, OverlayRectKind},
-		types::{CanvasTarget, FontChoice, RenderMode, ShapingChoice, WrapChoice},
+		types::{CanvasTarget, FontChoice, ShapingChoice, WrapChoice},
 	},
 	std::sync::Arc,
 };
@@ -14,7 +14,6 @@ fn scene_build_is_stable_for_unicode_replace() {
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
 		WrapChoice::Word,
-		RenderMode::CanvasOnly,
 		22.0,
 		30.0,
 		320.0,
@@ -30,7 +29,6 @@ fn scene_build_is_stable_for_unicode_replace() {
 		config.font_size,
 		config.line_height,
 		config.max_width,
-		config.render_mode,
 	);
 
 	assert_eq!(rebuilt.text.as_ref(), expected);
@@ -45,7 +43,6 @@ fn inspect_overlays_emit_run_and_glyph_primitives() {
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
 		WrapChoice::Word,
-		RenderMode::CanvasOnly,
 		22.0,
 		30.0,
 		320.0,
@@ -60,7 +57,6 @@ fn inspect_overlays_emit_run_and_glyph_primitives() {
 		config.font_size,
 		config.line_height,
 		config.max_width,
-		config.render_mode,
 	);
 
 	let overlays = scene.inspect_overlay_primitives(
@@ -105,7 +101,6 @@ fn inspect_overlays_fall_back_to_clusters_without_lazy_runs() {
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
 		WrapChoice::Word,
-		RenderMode::CanvasOnly,
 		22.0,
 		30.0,
 		320.0,
@@ -120,7 +115,6 @@ fn inspect_overlays_fall_back_to_clusters_without_lazy_runs() {
 		config.font_size,
 		config.line_height,
 		config.max_width,
-		config.render_mode,
 	);
 
 	let overlays = scene.inspect_overlay_primitives(
@@ -150,7 +144,6 @@ fn target_details_reuse_cached_strings() {
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
 		WrapChoice::Word,
-		RenderMode::CanvasOnly,
 		22.0,
 		30.0,
 		320.0,
@@ -165,7 +158,6 @@ fn target_details_reuse_cached_strings() {
 		config.font_size,
 		config.line_height,
 		config.max_width,
-		config.render_mode,
 	);
 
 	let run_a = scene

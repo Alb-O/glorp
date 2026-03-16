@@ -1,10 +1,10 @@
 use {
-	super::{GlyphInfo, InspectRunInfo, LayoutScene, OutlinePath, PathCommand, PathPoint, debug_snippet},
+	super::{GlyphInfo, InspectRunInfo, LayoutScene, debug_snippet},
 	crate::{
 		overlay::{LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
 		types::CanvasTarget,
 	},
-	cosmic_text::{Buffer, Command, FontSystem, LayoutGlyph, SwashCache, fontdb},
+	cosmic_text::{Buffer, FontSystem, fontdb},
 	std::{
 		ops::Range,
 		sync::{Arc, OnceLock},
@@ -25,15 +25,6 @@ pub(super) struct SceneInspectCache {
 
 impl LayoutScene {
 	pub(crate) fn inspect_runs(&self) -> &[InspectRunInfo] {
-		if self.draw_outlines {
-			return self
-				.inspect
-				.runs
-				.get()
-				.expect("outline runs should be built eagerly")
-				.as_ref();
-		}
-
 		self.inspect
 			.runs
 			.get_or_init(|| build_inspect_runs(&self.inspect))
@@ -201,7 +192,7 @@ fn build_glyph_details(scene: &LayoutScene) -> InspectGlyphDetails {
 				.enumerate()
 				.map(|(glyph_index, glyph)| {
 					Arc::<str>::from(format!(
-						"  kind: glyph\n  run index: {run_index}\n  glyph index: {glyph_index}\n  source line: {}\n  cluster: {}\n  bytes: {:?}\n  font: {}\n  glyph id: {}\n  x/y: {:.1}, {:.1}\n  w/h: {:.1}, {:.1}\n  size: {:.1}\n  x/y offset: {:.3}, {:.3}\n  outline: {}",
+						"  kind: glyph\n  run index: {run_index}\n  glyph index: {glyph_index}\n  source line: {}\n  cluster: {}\n  bytes: {:?}\n  font: {}\n  glyph id: {}\n  x/y: {:.1}, {:.1}\n  w/h: {:.1}, {:.1}\n  size: {:.1}\n  x/y offset: {:.3}, {:.3}",
 						run.line_index,
 						scene.debug_snippet(&glyph.cluster_range),
 						glyph.cluster_range,
@@ -214,7 +205,6 @@ fn build_glyph_details(scene: &LayoutScene) -> InspectGlyphDetails {
 						glyph.font_size,
 						glyph.x_offset,
 						glyph.y_offset,
-						glyph.outline.is_some(),
 					))
 				})
 				.collect::<Arc<[Arc<str>]>>()
@@ -240,7 +230,6 @@ pub(super) fn build_inspect_runs(inspect: &SceneInspectCache) -> Arc<[InspectRun
 							run.line_top,
 							run.line_height,
 							lookup_font_name(&inspect.font_names, glyph.font_id),
-							None,
 						)
 					})
 					.collect(),
@@ -263,54 +252,6 @@ pub(super) fn font_name(
 		.into();
 	font_names.push((font_id, name.clone()));
 	name
-}
-
-pub(super) fn glyph_outline(
-	swash_cache: &mut SwashCache, font_system: &mut FontSystem, glyph: &LayoutGlyph, baseline: f32,
-) -> Option<OutlinePath> {
-	let physical_glyph = glyph.physical((0.0, 0.0), 1.0);
-	swash_cache
-		.get_outline_commands(font_system, physical_glyph.cache_key)
-		.map(|commands| OutlinePath {
-			commands: commands
-				.iter()
-				.map(|command| match command {
-					Command::MoveTo(point) => PathCommand::MoveTo(PathPoint {
-						x: point.x + glyph.x + glyph.x_offset,
-						y: -point.y + baseline + glyph.y_offset,
-					}),
-					Command::LineTo(point) => PathCommand::LineTo(PathPoint {
-						x: point.x + glyph.x + glyph.x_offset,
-						y: -point.y + baseline + glyph.y_offset,
-					}),
-					Command::QuadTo(control, to) => PathCommand::QuadTo(
-						PathPoint {
-							x: control.x + glyph.x + glyph.x_offset,
-							y: -control.y + baseline + glyph.y_offset,
-						},
-						PathPoint {
-							x: to.x + glyph.x + glyph.x_offset,
-							y: -to.y + baseline + glyph.y_offset,
-						},
-					),
-					Command::CurveTo(a, b, to) => PathCommand::CurveTo(
-						PathPoint {
-							x: a.x + glyph.x + glyph.x_offset,
-							y: -a.y + baseline + glyph.y_offset,
-						},
-						PathPoint {
-							x: b.x + glyph.x + glyph.x_offset,
-							y: -b.y + baseline + glyph.y_offset,
-						},
-						PathPoint {
-							x: to.x + glyph.x + glyph.x_offset,
-							y: -to.y + baseline + glyph.y_offset,
-						},
-					),
-					Command::Close => PathCommand::Close,
-				})
-				.collect(),
-		})
 }
 
 fn lookup_font_name(font_names: &[(fontdb::ID, Arc<str>)], font_id: fontdb::ID) -> Arc<str> {

@@ -6,7 +6,7 @@ use {
 	crate::{
 		overlay::{EditorOverlayTone, LayoutRect, OverlayPrimitive, OverlayRectKind},
 		scene::{LayoutScene, make_font_system, scene_config},
-		types::{FontChoice, RenderMode, ShapingChoice, WrapChoice},
+		types::{FontChoice, ShapingChoice, WrapChoice},
 	},
 	iced::Point,
 };
@@ -21,7 +21,6 @@ fn editor(text: &str) -> (cosmic_text::FontSystem, EditorEngine) {
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
 		WrapChoice::Word,
-		RenderMode::CanvasOnly,
 		24.0,
 		32.0,
 		400.0,
@@ -167,7 +166,6 @@ fn reset_rebuilds_document_session_and_layout_together() {
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
 		WrapChoice::Word,
-		RenderMode::CanvasOnly,
 		24.0,
 		32.0,
 		400.0,
@@ -201,13 +199,11 @@ fn delete_selection_on_later_line_handles_multibyte_text() {
 		24.0,
 		32.0,
 		400.0,
-		RenderMode::CanvasAndOutlines,
 	);
 	let config = scene_config(
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
 		WrapChoice::None,
-		RenderMode::CanvasAndOutlines,
 		24.0,
 		32.0,
 		400.0,
@@ -249,7 +245,6 @@ fn deleting_a_full_line_rebuilds_without_a_zombie_visual_row() {
 		FontChoice::SansSerif,
 		ShapingChoice::Advanced,
 		WrapChoice::None,
-		RenderMode::CanvasOnly,
 		24.0,
 		32.0,
 		400.0,
