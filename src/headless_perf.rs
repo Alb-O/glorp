@@ -2,7 +2,10 @@ use {
 	crate::{PerfScenario, Playground, perf::PerfDashboard},
 	iced::{
 		Color, Font, Pixels, Size, Theme,
-		advanced::renderer::{Headless, Style},
+		advanced::{
+			graphics::Viewport,
+			renderer::{Headless, Style},
+		},
 		mouse,
 	},
 	iced_runtime::{UserInterface, user_interface},
@@ -237,10 +240,8 @@ impl Harness {
 
 	fn capture_screenshot(&mut self) -> CaptureSummary {
 		let started = std::time::Instant::now();
-		let bytes = self
-			.renderer
-			.screenshot(self.viewport_physical, VIEWPORT_SCALE_FACTOR, Color::BLACK)
-			.len();
+		let viewport = Viewport::with_physical_size(self.viewport_physical, VIEWPORT_SCALE_FACTOR);
+		let bytes = self.renderer.screenshot(&viewport, Color::BLACK).len();
 		CaptureSummary {
 			mode: "final-only",
 			bytes,

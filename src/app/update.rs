@@ -11,7 +11,7 @@ use {
 			ViewportMessage,
 		},
 	},
-	iced::{Size, Subscription, Task, futures, stream},
+	iced::{Size, Subscription, Task, time},
 	std::time::{Duration, Instant},
 	tracing::{debug, trace, trace_span, warn},
 };
@@ -41,13 +41,13 @@ impl Playground {
 
 		match (perf, resize) {
 			(false, false) => Subscription::none(),
-			(true, false) => Subscription::run(perf_tick_stream).map(|now| Message::Perf(PerfMessage::Tick(now))),
+			(true, false) => time::every(Duration::from_millis(100)).map(|now| Message::Perf(PerfMessage::Tick(now))),
 			(false, true) => {
-				Subscription::run(resize_tick_stream).map(|now| Message::Viewport(ViewportMessage::ResizeTick(now)))
+				time::every(RESIZE_REFLOW_INTERVAL).map(|now| Message::Viewport(ViewportMessage::ResizeTick(now)))
 			}
 			(true, true) => Subscription::batch([
-				Subscription::run(perf_tick_stream).map(|now| Message::Perf(PerfMessage::Tick(now))),
-				Subscription::run(resize_tick_stream).map(|now| Message::Viewport(ViewportMessage::ResizeTick(now))),
+				time::every(Duration::from_millis(100)).map(|now| Message::Perf(PerfMessage::Tick(now))),
+				time::every(RESIZE_REFLOW_INTERVAL).map(|now| Message::Viewport(ViewportMessage::ResizeTick(now))),
 			]),
 		}
 	}
@@ -364,28 +364,6 @@ impl Playground {
 	fn requires_immediate_scene_refresh(&self) -> bool {
 		self.sidebar.active_tab != SidebarTab::Controls || self.controls.show_baselines || self.controls.show_hitboxes
 	}
-}
-
-fn perf_tick_stream() -> impl futures::Stream<Item = iced::time::Instant> {
-	tick_stream(Duration::from_millis(100))
-}
-
-fn resize_tick_stream() -> impl futures::Stream<Item = iced::time::Instant> {
-	tick_stream(RESIZE_REFLOW_INTERVAL)
-}
-
-fn tick_stream(interval: Duration) -> impl futures::Stream<Item = iced::time::Instant> {
-	stream::channel(1, async move |mut output| {
-		use futures::SinkExt;
-
-		loop {
-			std::thread::sleep(interval);
-
-			if output.send(iced::time::Instant::now()).await.is_err() {
-				break;
-			}
-		}
-	})
 }
 
 fn editor_dispatch_source(intent: &EditorIntent) -> EditorDispatchSource {
