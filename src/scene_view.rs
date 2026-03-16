@@ -20,6 +20,7 @@ struct StaticSceneState {
 	cache: canvas::Cache<iced::Renderer>,
 	cached_scene_revision: Cell<Option<u64>>,
 	cached_scene_size: Cell<Option<(u32, u32)>>,
+	cached_scene_has_debug_geometry: Cell<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +63,10 @@ impl StaticSceneLayer {
 		self.height = height.into();
 		self
 	}
+
+	fn has_debug_geometry(&self) -> bool {
+		self.show_baselines || self.show_hitboxes
+	}
 }
 
 impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
@@ -74,7 +79,27 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 			cache: canvas::Cache::default(),
 			cached_scene_revision: Cell::new(None),
 			cached_scene_size: Cell::new(None),
+			cached_scene_has_debug_geometry: Cell::new(false),
 		})
+	}
+
+	fn diff(&self, tree: &mut Tree) {
+		let state = tree.state.downcast_mut::<StaticSceneState>();
+
+		// Replacing the cache object is only needed when a prior debug-heavy
+		// build would otherwise donate its larger mesh storage to a plain
+		// document scene again.
+		if should_reset_cache_storage(
+			state.cached_scene_revision.get(),
+			state.cached_scene_has_debug_geometry.get(),
+			self.scene_revision,
+			self.has_debug_geometry(),
+		) {
+			state.cache = canvas::Cache::default();
+			state.cached_scene_revision.set(None);
+			state.cached_scene_size.set(None);
+			state.cached_scene_has_debug_geometry.set(false);
+		}
 	}
 
 	fn size(&self) -> Size<Length> {
@@ -123,6 +148,7 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 		if cache_miss {
 			state.cached_scene_revision.set(Some(self.scene_revision));
 			state.cached_scene_size.set(Some(scene_size_key));
+			state.cached_scene_has_debug_geometry.set(self.has_debug_geometry());
 		}
 
 		renderer.with_layer(bounds, |renderer| {
@@ -191,5 +217,27 @@ fn scene_content_width(layout: &crate::scene::DocumentLayout, layout_width: f32)
 		layout.measured_width.max(layout_width).max(1.0)
 	} else {
 		layout_width.max(1.0)
+	}
+}
+
+fn should_reset_cache_storage(
+	cached_scene_revision: Option<u64>, cached_scene_has_debug_geometry: bool, scene_revision: u64,
+	scene_has_debug_geometry: bool,
+) -> bool {
+	cached_scene_revision != Some(scene_revision) && cached_scene_has_debug_geometry && !scene_has_debug_geometry
+}
+
+#[cfg(test)]
+mod tests {
+	use super::should_reset_cache_storage;
+
+	#[test]
+	fn drops_cached_storage_when_debug_geometry_is_removed() {
+		assert!(should_reset_cache_storage(Some(4), true, 5, false));
+	}
+
+	#[test]
+	fn keeps_cached_storage_while_debug_geometry_remains() {
+		assert!(!should_reset_cache_storage(Some(4), true, 5, true));
 	}
 }
