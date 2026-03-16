@@ -34,11 +34,13 @@ fn tracing_filter() -> Option<EnvFilter> {
 		return None;
 	}
 
-	if let Some(value) = glorp_trace.as_deref() {
-		let directive = match value.trim() {
-			"" | "1" | "true" | "TRUE" => DEFAULT_TRACE_FILTER,
-			"0" | "false" | "FALSE" => return None,
-			other => other,
+	if let Some(value) = glorp_trace.as_deref().map(str::trim) {
+		let directive = if value.is_empty() || value == "1" || value.eq_ignore_ascii_case("true") {
+			DEFAULT_TRACE_FILTER
+		} else if value == "0" || value.eq_ignore_ascii_case("false") {
+			return None;
+		} else {
+			value
 		};
 
 		if let Ok(filter) = EnvFilter::try_new(directive) {

@@ -78,9 +78,7 @@ impl Playground {
 			}
 			HeadlessScenario::TallInspect => {
 				let _ = self.update(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
-				let _ = self.update(Message::Controls(ControlsMessage::ShowHitboxesChanged(true)));
-				let _ = self.update(Message::Controls(ControlsMessage::ShowBaselinesChanged(true)));
-				let _ = self.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+				self.enable_headless_inspect_mode();
 				let _ = self.update(Message::Canvas(CanvasEvent::Hovered(Some(CanvasTarget::Glyph {
 					run_index: 0,
 					glyph_index: 0,
@@ -118,9 +116,7 @@ impl Playground {
 			| HeadlessScriptScenario::PointerSelectionSweep
 			| HeadlessScriptScenario::ResizeReflowSweep => {}
 			HeadlessScriptScenario::InspectInteractionSweep => {
-				let _ = self.update(Message::Controls(ControlsMessage::ShowHitboxesChanged(true)));
-				let _ = self.update(Message::Controls(ControlsMessage::ShowBaselinesChanged(true)));
-				let _ = self.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+				self.enable_headless_inspect_mode();
 			}
 		}
 	}
@@ -231,6 +227,12 @@ impl Playground {
 		let _ = self.update(Message::Viewport(ViewportMessage::CanvasResized(
 			HEADLESS_VIEWPORT_SIZE,
 		)));
+	}
+
+	fn enable_headless_inspect_mode(&mut self) {
+		let _ = self.update(Message::Controls(ControlsMessage::ShowHitboxesChanged(true)));
+		let _ = self.update(Message::Controls(ControlsMessage::ShowBaselinesChanged(true)));
+		let _ = self.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
 	}
 
 	fn load_headless_document(&mut self, text: &str) {
@@ -457,7 +459,9 @@ fn headless_incremental_line_break(step: usize) -> String {
 }
 
 fn delete_seed_char_count() -> usize {
-	headless_delete_seed_chunk().chars().count()
+	static COUNT: OnceLock<usize> = OnceLock::new();
+
+	*COUNT.get_or_init(|| headless_delete_seed_chunk().chars().count())
 }
 
 #[cfg(test)]

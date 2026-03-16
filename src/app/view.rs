@@ -123,11 +123,10 @@ impl Playground {
 	}
 
 	fn inspect_sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
-		let editor = self.session.view_state();
 		let model = self.sidebar_cache.inspect_model(InspectSidebarArgs {
 			scene_revision: self.viewport.scene_revision,
 			scene: self.session.scene(),
-			editor: &editor,
+			editor: self.session.view_state_ref(),
 			hovered_target: self.sidebar.hovered_target,
 			selected_target: self.sidebar.selected_target,
 			undo_depth,

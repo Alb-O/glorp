@@ -118,24 +118,14 @@ impl Playground {
 					return;
 				}
 				self.controls.show_baselines = show_baselines;
-				if show_baselines && self.scene_dirty {
-					self.rebuild_scene(SceneRefreshReason::ControlsChanged);
-				} else {
-					self.viewport.scene_revision += 1;
-					self.sidebar_cache.invalidate_scene_derived();
-				}
+				self.finish_decoration_toggle(show_baselines);
 			}
 			ControlsMessage::ShowHitboxesChanged(show_hitboxes) => {
 				if self.controls.show_hitboxes == show_hitboxes {
 					return;
 				}
 				self.controls.show_hitboxes = show_hitboxes;
-				if show_hitboxes && self.scene_dirty {
-					self.rebuild_scene(SceneRefreshReason::ControlsChanged);
-				} else {
-					self.viewport.scene_revision += 1;
-					self.sidebar_cache.invalidate_scene_derived();
-				}
+				self.finish_decoration_toggle(show_hitboxes);
 			}
 		}
 	}
@@ -359,6 +349,16 @@ impl Playground {
 		if reason.records_resize_reflow() {
 			self.perf.record_resize_reflow(duration);
 		}
+	}
+
+	fn finish_decoration_toggle(&mut self, enabled: bool) {
+		if enabled && self.scene_dirty {
+			self.rebuild_scene(SceneRefreshReason::ControlsChanged);
+			return;
+		}
+
+		self.viewport.scene_revision += 1;
+		self.sidebar_cache.invalidate_scene_derived();
 	}
 
 	fn ensure_scene_current(&mut self, reason: SceneRefreshReason) {

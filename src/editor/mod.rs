@@ -302,6 +302,10 @@ impl EditorEngine {
 		self.layout_model.layout.view_state()
 	}
 
+	pub(crate) fn view_state_ref(&self) -> &EditorViewState {
+		self.layout_model.layout.view_state_ref()
+	}
+
 	pub(crate) fn viewport_metrics(&self) -> EditorViewportMetrics {
 		self.layout_model.layout.viewport_metrics()
 	}

@@ -46,6 +46,10 @@ impl SceneSession {
 		self.editor.view_state()
 	}
 
+	pub(super) fn view_state_ref(&self) -> &EditorViewState {
+		self.editor.view_state_ref()
+	}
+
 	pub(super) fn viewport_metrics(&self) -> EditorViewportMetrics {
 		self.editor.viewport_metrics()
 	}

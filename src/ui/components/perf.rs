@@ -155,12 +155,10 @@ fn draw_thresholds(
 	}
 
 	if let Some(warning_ms) = graph.warning_ms {
+		let warning_y = sample_y(bounds, warning_ms, graph.ceiling_ms);
 		let danger_zone = canvas::Path::rectangle(
-			Point::new(bounds.x, sample_y(bounds, warning_ms, graph.ceiling_ms)),
-			Size::new(
-				bounds.width,
-				bounds.height - (sample_y(bounds, warning_ms, graph.ceiling_ms) - bounds.y),
-			),
+			Point::new(bounds.x, warning_y),
+			Size::new(bounds.width, bounds.height - (warning_y - bounds.y)),
 		);
 		frame.fill(&danger_zone, Color::from_rgba(1.0, 0.2, 0.2, 0.06));
 	}
@@ -258,7 +256,7 @@ fn graph_points(bounds: Rectangle, graph: &PerfGraphSeries) -> Vec<Point> {
 		)];
 	}
 
-	let steps: f32 = graph.samples_ms.iter().skip(1).fold(0.0, |count, _| count + 1.0);
+	let steps = (graph.samples_ms.len() - 1) as f32;
 	let step = bounds.width / steps.max(1.0);
 	let mut x = bounds.x;
 

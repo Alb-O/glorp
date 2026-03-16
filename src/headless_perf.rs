@@ -128,14 +128,15 @@ fn parse_count(flag: &str, value: &str) -> Result<usize, String> {
 }
 
 fn usage() -> String {
-	format!(
-		"Usage: glorp [--perf-scenario <{}>] [--warmup <frames>] [--samples <frames>]",
-		PerfScenario::ALL
-			.into_iter()
-			.map(PerfScenario::label)
-			.collect::<Vec<_>>()
-			.join("|")
-	)
+	let mut scenarios = String::new();
+	for scenario in PerfScenario::ALL {
+		if !scenarios.is_empty() {
+			scenarios.push('|');
+		}
+		scenarios.push_str(scenario.label());
+	}
+
+	format!("Usage: glorp [--perf-scenario <{scenarios}>] [--warmup <frames>] [--samples <frames>]")
 }
 
 fn run(config: PerfCliConfig) -> Result<String, String> {
@@ -311,7 +312,7 @@ fn append_overview(json: &mut String, dashboard: &PerfDashboard) {
 	let _ = writeln!(
 		json,
 		"    \"editor_mode\": {},",
-		json_string(&dashboard.overview.editor_mode.to_string())
+		json_string(editor_mode_label(dashboard.overview.editor_mode))
 	);
 	let _ = writeln!(json, "    \"editor_bytes\": {},", dashboard.overview.editor_bytes);
 	let _ = writeln!(json, "    \"editor_chars\": {},", dashboard.overview.editor_chars);
@@ -337,6 +338,13 @@ fn append_overview(json: &mut String, dashboard: &PerfDashboard) {
 		json_float(f64::from(dashboard.overview.layout_width))
 	);
 	json.push_str("  },\n");
+}
+
+fn editor_mode_label(mode: crate::editor::EditorMode) -> &'static str {
+	match mode {
+		crate::editor::EditorMode::Normal => "Normal",
+		crate::editor::EditorMode::Insert => "Insert",
+	}
 }
 
 fn append_frame_pacing(json: &mut String, dashboard: &PerfDashboard) {
@@ -395,7 +403,8 @@ fn append_hot_paths(json: &mut String, dashboard: &PerfDashboard) {
 }
 
 fn json_numbers(values: &[f32]) -> String {
-	let mut json = String::from("[");
+	let mut json = String::with_capacity((values.len() * 8) + 2);
+	json.push('[');
 	for (index, value) in values.iter().enumerate() {
 		if index > 0 {
 			json.push_str(", ");

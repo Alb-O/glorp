@@ -378,6 +378,13 @@ fn draw_selection_group(renderer: &mut iced::Renderer, rectangles: &[LayoutRect]
 		);
 	}
 
+	if let [rect] = rectangles {
+		for segment in rectangle_outline(*rect) {
+			draw_outline_segment(renderer, segment, palette.selection_stroke);
+		}
+		return;
+	}
+
 	for segment in merged_selection_outline(rectangles) {
 		draw_outline_segment(renderer, segment, palette.selection_stroke);
 	}
@@ -425,6 +432,32 @@ struct VerticalSegment {
 	x: f32,
 	y0: f32,
 	y1: f32,
+}
+
+fn rectangle_outline(rect: LayoutRect) -> [OutlineSegment; 4] {
+	let x0 = rect.x;
+	let x1 = rect.x + rect.width.max(1.0);
+	let y0 = rect.y;
+	let y1 = rect.y + rect.height.max(1.0);
+
+	[
+		OutlineSegment {
+			start: Point::new(x0, y0),
+			end: Point::new(x1, y0),
+		},
+		OutlineSegment {
+			start: Point::new(x0, y1),
+			end: Point::new(x1, y1),
+		},
+		OutlineSegment {
+			start: Point::new(x0, y0),
+			end: Point::new(x0, y1),
+		},
+		OutlineSegment {
+			start: Point::new(x1, y0),
+			end: Point::new(x1, y1),
+		},
+	]
 }
 
 fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
