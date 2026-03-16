@@ -64,12 +64,3 @@ pub(super) fn line_byte_offsets(text: &str) -> Vec<usize> {
 
 	offsets
 }
-
-pub(super) fn debug_snippet(text: &str) -> String {
-	let escaped: String = text.chars().flat_map(char::escape_default).collect();
-	if escaped.is_empty() {
-		"<empty>".to_string()
-	} else {
-		format!("\"{escaped}\"")
-	}
-}

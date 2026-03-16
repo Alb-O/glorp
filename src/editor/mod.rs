@@ -22,7 +22,6 @@ use {
 		layout_state::EditorLayout,
 		reducer::apply_intent,
 		session::EditorSession,
-		text::debug_snippet,
 	},
 	crate::{
 		overlay::{EditorOverlayTone, LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
@@ -41,7 +40,7 @@ use {
 	tracing::{debug, trace, trace_span, warn},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum EditorMode {
 	Normal,
 	Insert,
@@ -61,6 +60,7 @@ pub(crate) struct EditorViewState {
 	pub(crate) mode: EditorMode,
 	pub(crate) selection: Option<Range<usize>>,
 	pub(crate) selection_head: Option<usize>,
+	pub(crate) pointer_anchor: Option<usize>,
 	pub(crate) overlays: Arc<[OverlayPrimitive]>,
 	pub(crate) viewport_target: Option<LayoutRect>,
 }
@@ -359,55 +359,6 @@ impl EditorEngine {
 		)
 	}
 
-	pub(crate) fn selection_details(&self) -> String {
-		let (undo_depth, redo_depth) = self.state.document.history_depths();
-		match self.mode() {
-			EditorMode::Normal => {
-				let Some(selection) = self.selection() else {
-					return format!("  mode: {}\n  selection: none", self.mode());
-				};
-
-				format!(
-					"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}/{}",
-					self.mode(),
-					selection.range(),
-					self.preview_range(selection.range()),
-					self.layout_model
-						.layout
-						.view_state_ref()
-						.overlay_count(OverlayRectKind::EditorSelection(EditorOverlayTone::Normal)),
-					self.caret(),
-					self.pointer_anchor().unwrap_or(selection.range().start),
-					undo_depth,
-					redo_depth,
-				)
-			}
-			EditorMode::Insert => self.selection().map_or_else(
-				|| {
-					format!(
-						"  mode: {}\n  selection: none\n  undo/redo: {undo_depth}/{redo_depth}",
-						self.mode()
-					)
-				},
-				|selection| {
-					format!(
-						"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  head byte: {}\n  undo/redo: {}/{}",
-						self.mode(),
-						selection.range(),
-						self.preview_range(selection.range()),
-						self.layout_model
-							.layout
-							.view_state_ref()
-							.overlay_count(OverlayRectKind::EditorSelection(EditorOverlayTone::Insert)),
-						selection.head(),
-						undo_depth,
-						redo_depth,
-					)
-				},
-			),
-		}
-	}
-
 	#[cfg(test)]
 	pub(crate) fn buffer_text(&self) -> String {
 		self.layout_model.layout.buffer_text()
@@ -478,13 +429,6 @@ impl EditorEngine {
 			.and_then(|index| layout.cluster(index))
 	}
 
-	fn preview_range(&self, range: &Range<usize>) -> String {
-		self.text()
-			.get(range.clone())
-			.map(debug_snippet)
-			.unwrap_or_else(|| "<invalid utf8 slice>".to_string())
-	}
-
 	fn history_snapshot(&self) -> EditorSnapshot {
 		self.state.session.history_snapshot()
 	}
@@ -535,6 +479,7 @@ impl EditorEngine {
 			mode: self.mode(),
 			selection: selection.as_ref().map(EditorSelection::range_cloned),
 			selection_head,
+			pointer_anchor: self.pointer_anchor(),
 			overlays,
 			viewport_target,
 		});

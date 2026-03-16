@@ -7,15 +7,16 @@ use {
 		Element, Font, Length, Theme,
 		widget::{column, container, text},
 	},
+	std::sync::Arc,
 };
 
 /// Props for the inspect tab.
-pub(crate) struct InspectTabProps<'a> {
-	pub(crate) warnings: &'a [String],
+pub(crate) struct InspectTabProps {
+	pub(crate) warnings: Arc<[String]>,
 	pub(crate) interaction_details: String,
 }
 
-pub(crate) fn view_inspect_tab(props: InspectTabProps<'_>) -> Element<'_, Message> {
+pub(crate) fn view_inspect_tab(props: InspectTabProps) -> Element<'static, Message> {
 	panel_scrollable(
 		column![
 			text("Warnings").size(18),
@@ -28,11 +29,11 @@ pub(crate) fn view_inspect_tab(props: InspectTabProps<'_>) -> Element<'_, Messag
 	.into()
 }
 
-fn view_warnings_panel<'a>(warnings: &'a [String]) -> Element<'a, Message> {
+fn view_warnings_panel(warnings: Arc<[String]>) -> Element<'static, Message> {
 	let warnings_text = if warnings.is_empty() {
 		"No warnings".to_string()
 	} else {
-		warnings.join("\n")
+		warnings.iter().map(String::as_str).collect::<Vec<_>>().join("\n")
 	};
 	let has_warnings = !warnings.is_empty();
 

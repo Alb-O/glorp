@@ -1,6 +1,10 @@
 use {
 	super::{Playground, state::ShellPane},
 	crate::{
+		editor::{EditorMode, EditorViewState},
+		overlay::{EditorOverlayTone, OverlayRectKind},
+		perf::PerfSnapshotKey,
+		scene::LayoutScene,
 		types::{Message, ShellMessage, SidebarTab},
 		ui::{
 			CanvasPaneProps, ControlsTabProps, InspectTabProps, PerfTabProps, SidebarProps, is_stacked_shell,
@@ -9,10 +13,32 @@ use {
 	},
 	iced::{
 		Element, Length,
-		widget::{pane_grid, responsive},
+		widget::{lazy, pane_grid, responsive},
 	},
-	std::{fmt::Write as _, sync::Arc},
+	std::{fmt::Write as _, ops::Range, sync::Arc},
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct InspectSidebarKey {
+	scene_revision: u64,
+	hovered_target: Option<crate::types::CanvasTarget>,
+	selected_target: Option<crate::types::CanvasTarget>,
+	editor_mode: EditorMode,
+	selection_start: Option<usize>,
+	selection_end: Option<usize>,
+	selection_head: Option<usize>,
+	pointer_anchor: Option<usize>,
+	undo_depth: usize,
+	redo_depth: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct PerfSidebarKey {
+	scene_revision: u64,
+	editor_mode: EditorMode,
+	editor_bytes: usize,
+	perf: PerfSnapshotKey,
+}
 
 impl Playground {
 	pub(crate) fn view(&self) -> Element<'_, Message> {
@@ -58,7 +84,7 @@ impl Playground {
 			editor_bytes: self.session.text().len(),
 			undo_depth,
 			redo_depth,
-			body: self.view_sidebar_body(),
+			body: self.view_sidebar_body(undo_depth, redo_depth),
 			stacked,
 		})
 	}
@@ -91,7 +117,7 @@ impl Playground {
 		})
 	}
 
-	fn view_sidebar_body(&self) -> Element<'_, Message> {
+	fn view_sidebar_body(&self, undo_depth: usize, redo_depth: usize) -> Element<'static, Message> {
 		match self.sidebar.active_tab {
 			SidebarTab::Controls => view_controls_tab(ControlsTabProps {
 				preset: self.controls.preset,
@@ -104,42 +130,142 @@ impl Playground {
 				show_baselines: self.controls.show_baselines,
 				show_hitboxes: self.controls.show_hitboxes,
 			}),
-			SidebarTab::Inspect => view_inspect_tab(InspectTabProps {
-				warnings: &self.session.scene().warnings,
-				interaction_details: self.interaction_details(),
-			}),
-			SidebarTab::Perf => view_perf_tab(PerfTabProps {
-				dashboard: self
-					.perf
-					.dashboard(self.session.scene(), self.session.mode(), self.session.text().len()),
-			}),
+			SidebarTab::Inspect => self.view_inspect_sidebar(undo_depth, redo_depth),
+			SidebarTab::Perf => self.view_perf_sidebar(),
 		}
 	}
 
-	fn interaction_details(&self) -> String {
-		let mut details = String::new();
-		let _ = writeln!(details, "editor");
-		let _ = writeln!(details, "{}", self.session.selection_details());
-		let _ = writeln!(details);
-		let _ = writeln!(details, "hover");
-		let _ = writeln!(
-			details,
-			"{}",
-			self.session
-				.scene()
-				.target_details(self.sidebar.hovered_target)
-				.unwrap_or_else(|| "  none".to_string())
-		);
-		let _ = writeln!(details);
-		let _ = writeln!(details, "selection");
-		let _ = writeln!(
-			details,
-			"{}",
-			self.session
-				.scene()
-				.target_details(self.sidebar.selected_target)
-				.unwrap_or_else(|| "  none".to_string())
-		);
-		details
+	fn view_inspect_sidebar(&self, undo_depth: usize, redo_depth: usize) -> Element<'static, Message> {
+		let scene = self.session.scene().clone();
+		let editor = self.session.view_state();
+		let hovered_target = self.sidebar.hovered_target;
+		let selected_target = self.sidebar.selected_target;
+		let key = InspectSidebarKey {
+			scene_revision: self.viewport.scene_revision,
+			hovered_target,
+			selected_target,
+			editor_mode: editor.mode,
+			selection_start: editor.selection.as_ref().map(|range| range.start),
+			selection_end: editor.selection.as_ref().map(|range| range.end),
+			selection_head: editor.selection_head,
+			pointer_anchor: editor.pointer_anchor,
+			undo_depth,
+			redo_depth,
+		};
+
+		lazy(key, move |_| {
+			view_inspect_tab(InspectTabProps {
+				warnings: scene.warnings.clone(),
+				interaction_details: interaction_details(
+					&scene,
+					&editor,
+					hovered_target,
+					selected_target,
+					undo_depth,
+					redo_depth,
+				),
+			})
+		})
+		.into()
+	}
+
+	fn view_perf_sidebar(&self) -> Element<'static, Message> {
+		let scene = self.session.scene().clone();
+		let perf = self.perf.snapshot();
+		let editor_mode = self.session.mode();
+		let editor_bytes = self.session.text().len();
+		let key = PerfSidebarKey {
+			scene_revision: self.viewport.scene_revision,
+			editor_mode,
+			editor_bytes,
+			perf: perf.key(),
+		};
+
+		lazy(key, move |_| {
+			view_perf_tab(PerfTabProps {
+				dashboard: perf.dashboard(&scene, editor_mode, editor_bytes),
+			})
+		})
+		.into()
+	}
+}
+
+fn interaction_details(
+	scene: &LayoutScene, editor: &EditorViewState, hovered_target: Option<crate::types::CanvasTarget>,
+	selected_target: Option<crate::types::CanvasTarget>, undo_depth: usize, redo_depth: usize,
+) -> String {
+	let mut details = String::new();
+	let _ = writeln!(details, "editor");
+	let _ = writeln!(
+		details,
+		"{}",
+		editor_selection_details(&scene.text, editor, undo_depth, redo_depth)
+	);
+	let _ = writeln!(details);
+	let _ = writeln!(details, "hover");
+	let _ = writeln!(
+		details,
+		"{}",
+		scene
+			.target_details(hovered_target)
+			.unwrap_or_else(|| "  none".to_string())
+	);
+	let _ = writeln!(details);
+	let _ = writeln!(details, "selection");
+	let _ = writeln!(
+		details,
+		"{}",
+		scene
+			.target_details(selected_target)
+			.unwrap_or_else(|| "  none".to_string())
+	);
+	details
+}
+
+fn editor_selection_details(text: &str, editor: &EditorViewState, undo_depth: usize, redo_depth: usize) -> String {
+	let selection_rects = editor.overlay_count(OverlayRectKind::EditorSelection(EditorOverlayTone::from(editor.mode)));
+
+	match (editor.mode, editor.selection.as_ref()) {
+		(EditorMode::Normal, None) => format!("  mode: {}\n  selection: none", editor.mode),
+		(EditorMode::Normal, Some(selection)) => format!(
+			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}/{}",
+			editor.mode,
+			selection,
+			preview_range(text, selection),
+			selection_rects,
+			editor.selection_head.unwrap_or(selection.start),
+			editor.pointer_anchor.unwrap_or(selection.start),
+			undo_depth,
+			redo_depth,
+		),
+		(EditorMode::Insert, None) => format!(
+			"  mode: {}\n  selection: none\n  undo/redo: {undo_depth}/{redo_depth}",
+			editor.mode
+		),
+		(EditorMode::Insert, Some(selection)) => format!(
+			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  head byte: {}\n  undo/redo: {}/{}",
+			editor.mode,
+			selection,
+			preview_range(text, selection),
+			selection_rects,
+			editor.selection_head.unwrap_or(selection.start),
+			undo_depth,
+			redo_depth,
+		),
+	}
+}
+
+fn preview_range(text: &str, range: &Range<usize>) -> String {
+	text.get(range.clone())
+		.map(debug_snippet)
+		.unwrap_or_else(|| "<invalid utf8 slice>".to_string())
+}
+
+fn debug_snippet(text: &str) -> String {
+	let escaped = text.chars().flat_map(char::escape_default).collect::<String>();
+	if escaped.is_empty() {
+		"<empty>".to_string()
+	} else {
+		format!("\"{escaped}\"")
 	}
 }

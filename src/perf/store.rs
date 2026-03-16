@@ -52,7 +52,7 @@ impl MetricKind {
 		}
 	}
 
-	fn index(self) -> usize {
+	pub(super) fn index(self) -> usize {
 		match self {
 			Self::EditorCommand => 0,
 			Self::EditorApply => 1,
@@ -85,7 +85,7 @@ impl MetricSeries {
 	}
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub(super) struct FrameSeries {
 	pub(super) intervals_ms: VecDeque<f32>,
 	last_draw_at: Option<Instant>,
@@ -107,13 +107,13 @@ impl FrameSeries {
 	}
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub(super) struct CacheStats {
 	pub(super) hits: u64,
 	pub(super) misses: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub(super) struct PerfStore {
 	pub(super) metrics: [MetricSeries; MetricKind::ALL.len()],
 	pub(super) frames: FrameSeries,

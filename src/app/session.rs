@@ -58,10 +58,6 @@ impl SceneSession {
 		self.editor.history_depths()
 	}
 
-	pub(super) fn selection_details(&self) -> String {
-		self.editor.selection_details()
-	}
-
 	pub(super) fn inspect_overlay_primitives(
 		&self, hovered_target: Option<CanvasTarget>, selected_target: Option<CanvasTarget>, layout_width: f32,
 		show_hitboxes: bool,

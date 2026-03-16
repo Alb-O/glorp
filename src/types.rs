@@ -6,7 +6,10 @@ use {
 		time::Instant,
 		widget::pane_grid,
 	},
-	std::fmt::{self, Display},
+	std::{
+		fmt::{self, Display},
+		hash::Hash,
+	},
 };
 
 #[derive(Debug, Clone)]
@@ -65,7 +68,7 @@ pub(crate) enum ShellMessage {
 	PaneResized(pane_grid::ResizeEvent),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum SidebarTab {
 	Controls,
 	Inspect,
@@ -88,7 +91,7 @@ impl Display for SidebarTab {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum CanvasTarget {
 	Run(usize),
 	Glyph { run_index: usize, glyph_index: usize },

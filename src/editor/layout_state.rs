@@ -32,6 +32,7 @@ impl EditorLayout {
 				mode: EditorMode::Normal,
 				selection: None,
 				selection_head: None,
+				pointer_anchor: None,
 				overlays: Arc::from([]),
 				viewport_target: None,
 			},
@@ -86,6 +87,7 @@ impl EditorLayout {
 			mode: EditorMode::Normal,
 			selection: None,
 			selection_head: None,
+			pointer_anchor: None,
 			overlays: Arc::from([]),
 			viewport_target: None,
 		};
