@@ -428,6 +428,43 @@ fn live_selection_rectangles_track_wrapped_width_changes() {
 }
 
 #[test]
+fn insert_mode_caret_overlays_track_wrapped_width_changes() {
+	let text = "alpha beta gamma delta epsilon zeta eta theta";
+	let (mut font_system, mut editor) = editor(text);
+
+	for _ in 0..14 {
+		editor.apply(&mut font_system, motion(EditorMotion::Right));
+	}
+
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+
+	let before_caret = first_rect(
+		&editor.view_state(),
+		OverlayRectKind::EditorCaret(EditorOverlayTone::Insert),
+	);
+
+	editor.sync_buffer_width(&mut font_system, 110.0);
+
+	let after_view = editor.view_state();
+	let after_caret = first_rect(&after_view, OverlayRectKind::EditorCaret(EditorOverlayTone::Insert));
+	let after_block = first_rect(
+		&after_view,
+		OverlayRectKind::EditorInsertBlock(EditorOverlayTone::Insert),
+	);
+
+	assert_eq!(after_view.mode, EditorMode::Insert);
+	assert_eq!(after_view.selection_head, Some(15));
+	assert!(
+		after_caret.y > before_caret.y
+			|| ((after_caret.y - before_caret.y).abs() <= 0.001 && after_caret.x < before_caret.x),
+		"expected wrapped caret to move after width shrink, before={before_caret:?} after={after_caret:?}"
+	);
+	assert_approx_eq(after_caret.x, after_block.x);
+	assert_approx_eq(after_caret.y, after_block.y);
+	assert!(after_block.width >= 2.0);
+}
+
+#[test]
 fn drag_selection_spans_multiple_wrapped_rectangles() {
 	let text = "alpha beta gamma delta epsilon zeta eta theta";
 	let (mut font_system, mut editor) = editor(text);

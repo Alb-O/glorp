@@ -12,7 +12,11 @@ use {
 	},
 	cosmic_text::{Buffer, Cursor, Edit as _, Editor as CosmicEditor, FontSystem},
 	iced::Point,
-	std::{cell::RefCell, sync::Arc, time::Instant},
+	std::{
+		cell::{Cell, RefCell},
+		sync::Arc,
+		time::Instant,
+	},
 	tracing::{debug, trace},
 };
 
@@ -21,6 +25,7 @@ pub(super) struct EditorLayout {
 	buffer: Arc<Buffer>,
 	config: SceneConfig,
 	snapshot: RefCell<Option<Arc<BufferLayoutSnapshot>>>,
+	viewport_metrics: Cell<Option<EditorViewportMetrics>>,
 	view_state: EditorViewState,
 }
 
@@ -30,6 +35,7 @@ impl EditorLayout {
 			buffer: Arc::new(build_buffer(font_system, text, config)),
 			config,
 			snapshot: RefCell::new(None),
+			viewport_metrics: Cell::new(None),
 			view_state: default_view_state(),
 		}
 	}
@@ -95,22 +101,34 @@ impl EditorLayout {
 	}
 
 	pub(super) fn set_snapshot(&self, snapshot: Arc<BufferLayoutSnapshot>) {
+		self.viewport_metrics.set(Some(EditorViewportMetrics {
+			wrapping: self.config.wrapping,
+			measured_width: snapshot.measured_width(),
+			measured_height: snapshot.measured_height(),
+		}));
 		self.snapshot.replace(Some(snapshot));
 	}
 
 	pub(super) fn viewport_metrics(&self) -> EditorViewportMetrics {
+		if let Some(metrics) = self.viewport_metrics.get() {
+			return metrics;
+		}
+
 		let (measured_width, measured_height) = measure_buffer(&self.buffer);
-		EditorViewportMetrics {
+		let metrics = EditorViewportMetrics {
 			wrapping: self.config.wrapping,
 			measured_width,
 			measured_height,
-		}
+		};
+		self.viewport_metrics.set(Some(metrics));
+		metrics
 	}
 
 	pub(super) fn text_layer_state(&self) -> EditorTextLayerState {
+		let metrics = self.viewport_metrics();
 		EditorTextLayerState {
 			buffer: Arc::downgrade(&self.buffer),
-			measured_height: measure_buffer_height(&self.buffer),
+			measured_height: metrics.measured_height,
 		}
 	}
 
@@ -194,6 +212,7 @@ impl EditorLayout {
 
 	fn clear_snapshot(&self) {
 		self.snapshot.replace(None);
+		self.viewport_metrics.set(None);
 	}
 }
 
@@ -225,14 +244,4 @@ fn measure_buffer(buffer: &Buffer) -> (f32, f32) {
 	}
 
 	(measured_width, measured_height)
-}
-
-fn measure_buffer_height(buffer: &Buffer) -> f32 {
-	let mut measured_height: f32 = 0.0;
-
-	for run in buffer.layout_runs() {
-		measured_height = measured_height.max(run.line_top + run.line_height);
-	}
-
-	measured_height
 }

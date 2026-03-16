@@ -118,6 +118,58 @@ pub(super) fn selection_rectangles(layout: &BufferLayoutSnapshot, range: &Range<
 	rectangles.into()
 }
 
+pub(super) fn normal_selection_geometry(
+	buffer: &Buffer, text: &str, range: &Range<usize>, active_byte: usize,
+) -> (Arc<[LayoutRect]>, Option<LayoutRect>) {
+	let mut rectangles = Vec::new();
+	let mut span: Option<(usize, usize, LayoutRect)> = None;
+	let mut next_target: Option<(usize, usize, LayoutRect)> = None;
+	let mut previous_target: Option<(usize, usize, LayoutRect)> = None;
+
+	for_each_cluster_rect(buffer, text, |run_index, byte_range, rect| {
+		if byte_range.end > range.start && byte_range.start < range.end {
+			match span.as_mut() {
+				Some((span_run_index, span_end, span_rect))
+					if *span_run_index == run_index && byte_range.start <= *span_end =>
+				{
+					*span_end = (*span_end).max(byte_range.end);
+					merge_rect(span_rect, rect);
+				}
+				Some(_) => {
+					push_span(&mut rectangles, &mut span);
+					span = Some((run_index, byte_range.end, rect));
+				}
+				None => {
+					span = Some((run_index, byte_range.end, rect));
+				}
+			}
+		}
+
+		if byte_range.end > active_byte
+			&& next_target.as_ref().is_none_or(|(best_start, best_end, _)| {
+				byte_range.start < *best_start || (byte_range.start == *best_start && byte_range.end < *best_end)
+			}) {
+			next_target = Some((byte_range.start, byte_range.end, rect));
+		}
+
+		if byte_range.start <= active_byte
+			&& previous_target.as_ref().is_none_or(|(best_start, best_end, _)| {
+				byte_range.start > *best_start || (byte_range.start == *best_start && byte_range.end > *best_end)
+			}) {
+			previous_target = Some((byte_range.start, byte_range.end, rect));
+		}
+	});
+
+	push_span(&mut rectangles, &mut span);
+
+	(
+		rectangles.into(),
+		next_target
+			.map(|(_, _, rect)| rect)
+			.or_else(|| previous_target.map(|(_, _, rect)| rect)),
+	)
+}
+
 fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usize) -> Option<InsertCursorGeometry> {
 	let cursor = byte_to_cursor(text, byte);
 	let line_height = buffer.metrics().line_height.max(1.0);
@@ -182,6 +234,63 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 		height: line_height,
 		block_width,
 	})
+}
+
+fn for_each_cluster_rect(buffer: &Buffer, text: &str, mut f: impl FnMut(usize, Range<usize>, LayoutRect)) {
+	let line_byte_offsets = line_byte_offsets(text);
+
+	for (run_index, run) in buffer.layout_runs().enumerate() {
+		let line_byte_offset = line_byte_offsets[run.line_i];
+		let mut current: Option<(Range<usize>, LayoutRect)> = None;
+
+		for glyph in run.glyphs {
+			let byte_range = (line_byte_offset + glyph.start)..(line_byte_offset + glyph.end);
+			let glyph_y = run.line_top + glyph.y;
+			let glyph_height = glyph.line_height_opt.unwrap_or(run.line_height).max(1.0);
+
+			match current.as_mut() {
+				Some((current_range, current_rect)) if *current_range == byte_range => {
+					current_rect.width = (glyph.x + glyph.w - current_rect.x).max(current_rect.width);
+					current_rect.height = current_rect.height.max(glyph_height);
+					current_rect.y = current_rect.y.min(glyph_y);
+				}
+				_ => {
+					if let Some((byte_range, rect)) = current.take() {
+						f(run_index, byte_range, rect);
+					}
+
+					current = Some((
+						byte_range,
+						LayoutRect {
+							x: glyph.x,
+							y: glyph_y,
+							width: glyph.w.max(1.0),
+							height: glyph_height,
+						},
+					));
+				}
+			}
+		}
+
+		if let Some((byte_range, rect)) = current.take() {
+			f(run_index, byte_range, rect);
+		}
+	}
+}
+
+fn merge_rect(target: &mut LayoutRect, next: LayoutRect) {
+	let left = target.x.min(next.x);
+	let right = (target.x + target.width).max(next.x + next.width);
+	target.x = left;
+	target.y = target.y.min(next.y);
+	target.width = (right - left).max(1.0);
+	target.height = target.height.max(next.height);
+}
+
+fn push_span(rectangles: &mut Vec<LayoutRect>, span: &mut Option<(usize, usize, LayoutRect)>) {
+	if let Some((_, _, rect)) = span.take() {
+		rectangles.push(rect);
+	}
 }
 
 fn visual_lines_offset(line: usize, buffer: &Buffer) -> f32 {

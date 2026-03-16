@@ -16,7 +16,7 @@ mod tests;
 use {
 	self::{
 		document::DocumentState,
-		geometry::{cluster_rectangle, insert_selection_range, selection_rectangles},
+		geometry::{cluster_rectangle, insert_selection_range, normal_selection_geometry, selection_rectangles},
 		history::{EditorSnapshot, HistoryEntry},
 		layout::BufferClusterInfo,
 		layout_state::EditorLayout,
@@ -287,7 +287,7 @@ impl EditorEngine {
 
 	pub(crate) fn sync_buffer_width(&mut self, font_system: &mut FontSystem, width: f32) {
 		if self.layout_model.layout.sync_buffer_width(font_system, width) {
-			self.refresh_view_state(None);
+			self.refresh_view_state_after_width_sync();
 		}
 	}
 
@@ -517,6 +517,13 @@ impl EditorEngine {
 		}
 	}
 
+	fn refresh_view_state_after_width_sync(&mut self) {
+		match self.mode() {
+			EditorMode::Insert => self.refresh_insert_view_state_fast(),
+			EditorMode::Normal => self.refresh_normal_view_state_fast(),
+		}
+	}
+
 	fn build_overlays(
 		&self, layout: &BufferLayoutSnapshot, selection: Option<&EditorSelection>, insert_cursor: Option<LayoutRect>,
 		viewport_target: Option<LayoutRect>, tone: EditorOverlayTone,
@@ -689,6 +696,45 @@ impl EditorEngine {
 			overlays.push(OverlayPrimitive::scene_rect(
 				caret,
 				OverlayRectKind::EditorCaret(tone),
+				OverlayLayer::UnderText,
+			));
+		}
+
+		self.layout_model.layout.set_view_state(EditorViewState {
+			mode: self.mode(),
+			selection: selection.as_ref().map(EditorSelection::range_cloned),
+			selection_head,
+			pointer_anchor: self.pointer_anchor(),
+			overlays: overlays.into(),
+			viewport_target,
+		});
+	}
+
+	fn refresh_normal_view_state_fast(&mut self) {
+		let selection = self.selection().cloned();
+		let selection_head = selection.as_ref().map(EditorSelection::head);
+		let tone = EditorOverlayTone::from(self.mode());
+		let (selection_rectangles, viewport_target) = selection.as_ref().map_or_else(
+			|| (Arc::from([]), None),
+			|selection| {
+				normal_selection_geometry(
+					&self.buffer(),
+					self.text(),
+					selection.range(),
+					selection_head.unwrap_or(selection.range().start),
+				)
+			},
+		);
+		let mut overlays = Vec::new();
+
+		overlays.extend(selection_rectangles.iter().copied().map(|rect| {
+			OverlayPrimitive::scene_rect(rect, OverlayRectKind::EditorSelection(tone), OverlayLayer::UnderText)
+		}));
+
+		if let Some(active) = viewport_target {
+			overlays.push(OverlayPrimitive::scene_rect(
+				active,
+				OverlayRectKind::EditorActive(tone),
 				OverlayLayer::UnderText,
 			));
 		}
