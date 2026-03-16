@@ -33,7 +33,7 @@ pub(crate) use {
 		view_stacked_shell,
 	},
 	tokens::{
-		CONTROL_RADIUS, control_row, panel_scrollable, panel_style, rounded_checkbox_style,
+		CONTROL_RADIUS, PICK_LIST_PADDING, control_row, panel_scrollable, panel_style, rounded_checkbox_style,
 		rounded_pick_list_menu_style, rounded_pick_list_style, rounded_slider_style, surface_style, view_sidebar_tab,
 	},
 };

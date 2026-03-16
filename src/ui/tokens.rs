@@ -9,6 +9,7 @@ use {
 pub(crate) const SIDEBAR_WIDTH: f32 = 380.0;
 const CONTROL_LABEL_WIDTH: f32 = 90.0;
 pub(crate) const CONTROL_RADIUS: f32 = 6.0;
+pub(crate) const PICK_LIST_PADDING: [u16; 2] = [8, 12];
 const CHECKBOX_RADIUS: f32 = 4.0;
 const PANEL_SCROLLBAR_WIDTH: f32 = 8.0;
 const PANEL_SCROLLER_WIDTH: f32 = 8.0;
