@@ -284,8 +284,11 @@ impl EditorEngine {
 	}
 
 	pub(crate) fn sync_buffer_config(&mut self, font_system: &mut FontSystem, config: SceneConfig) {
-		let text = self.text().to_string();
-		if self.layout_model.layout.sync_buffer_config(font_system, &text, config) {
+		let Self { state, layout_model } = self;
+		if layout_model
+			.layout
+			.sync_buffer_config(font_system, state.document.text(), config)
+		{
 			self.refresh_view_state(None);
 		}
 	}
@@ -298,8 +301,8 @@ impl EditorEngine {
 	pub(crate) fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
 		self.state.document.reset(text);
 		self.state.session = EditorSession::new();
-		let text = self.text().to_string();
-		self.layout_model.layout.reset(font_system, &text, config);
+		let Self { state, layout_model } = self;
+		layout_model.layout.reset(font_system, state.document.text(), config);
 		self.reset_normal_selection();
 		self.refresh_view_state(None);
 	}
@@ -609,16 +612,14 @@ impl EditorEngine {
 
 	fn apply_buffer_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
 		let started = Instant::now();
-		let text = self.text().to_string();
-		let clone_elapsed = started.elapsed();
+		let Self { state, layout_model } = self;
 		let apply_started = Instant::now();
-		self.layout_model.layout.apply_edit(font_system, &text, edit);
+		layout_model.layout.apply_edit(font_system, state.document.text(), edit);
 		let apply_elapsed = apply_started.elapsed();
 		let total_ms = duration_ms(started.elapsed());
 		if total_ms >= 8.0 {
 			debug!(
-				cloned_bytes = text.len(),
-				clone_ms = duration_ms(clone_elapsed),
+				text_bytes = state.document.len(),
 				layout_apply_ms = duration_ms(apply_elapsed),
 				total_ms,
 				inserted_bytes = edit.inserted.len(),
@@ -628,8 +629,7 @@ impl EditorEngine {
 			);
 		} else {
 			trace!(
-				cloned_bytes = text.len(),
-				clone_ms = duration_ms(clone_elapsed),
+				text_bytes = state.document.len(),
 				layout_apply_ms = duration_ms(apply_elapsed),
 				total_ms,
 				inserted_bytes = edit.inserted.len(),

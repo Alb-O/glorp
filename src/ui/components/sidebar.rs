@@ -55,8 +55,7 @@ pub(crate) fn view_sidebar(props: SidebarProps<'_>) -> Element<'_, Message> {
 fn view_sidebar_tabs(active_tab: SidebarTab) -> Element<'static, Message> {
 	row(SidebarTab::ALL
 		.into_iter()
-		.map(|tab| view_sidebar_tab(tab, tab == active_tab))
-		.collect::<Vec<_>>())
+		.map(|tab| view_sidebar_tab(tab, tab == active_tab)))
 	.spacing(2)
 	.into()
 }

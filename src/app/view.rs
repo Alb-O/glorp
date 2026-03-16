@@ -16,7 +16,7 @@ use {
 		Element, Length,
 		widget::{lazy, pane_grid, responsive},
 	},
-	std::{fmt::Write as _, ops::Range, sync::Arc},
+	std::{ops::Range, sync::Arc},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -197,32 +197,12 @@ fn interaction_details(
 	scene: &LayoutScene, editor: &EditorViewState, hovered_target: Option<crate::types::CanvasTarget>,
 	selected_target: Option<crate::types::CanvasTarget>, undo_depth: usize, redo_depth: usize,
 ) -> String {
-	let mut details = String::new();
-	let _ = writeln!(details, "editor");
-	let _ = writeln!(
-		details,
-		"{}",
-		editor_selection_details(&scene.text, editor, undo_depth, redo_depth)
-	);
-	let _ = writeln!(details);
-	let _ = writeln!(details, "hover");
-	let _ = writeln!(
-		details,
-		"{}",
-		scene
-			.target_details(hovered_target)
-			.unwrap_or_else(|| Arc::<str>::from("  none"))
-	);
-	let _ = writeln!(details);
-	let _ = writeln!(details, "selection");
-	let _ = writeln!(
-		details,
-		"{}",
-		scene
-			.target_details(selected_target)
-			.unwrap_or_else(|| Arc::<str>::from("  none"))
-	);
-	details
+	format!(
+		"editor\n{}\n\nhover\n{}\n\nselection\n{}",
+		editor_selection_details(&scene.text, editor, undo_depth, redo_depth),
+		target_details_or_none(scene, hovered_target),
+		target_details_or_none(scene, selected_target),
+	)
 }
 
 fn editor_selection_details(text: &str, editor: &EditorViewState, undo_depth: usize, redo_depth: usize) -> String {
@@ -261,4 +241,10 @@ fn editor_selection_details(text: &str, editor: &EditorViewState, undo_depth: us
 fn preview_range(text: &str, range: &Range<usize>) -> String {
 	text.get(range.start..range.end)
 		.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
+}
+
+fn target_details_or_none(scene: &LayoutScene, target: Option<crate::types::CanvasTarget>) -> Arc<str> {
+	scene
+		.target_details(target)
+		.unwrap_or_else(|| Arc::<str>::from("  none"))
 }

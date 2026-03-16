@@ -109,7 +109,7 @@ impl LayoutScene {
 					OverlayLayer::OverText,
 				)]
 			}
-			CanvasTarget::Glyph { run_index, glyph_index } => {
+			CanvasTarget::Glyph { .. } => {
 				let Some(rect) = self.target_rect(target) else {
 					return Vec::new();
 				};
@@ -134,11 +134,6 @@ impl LayoutScene {
 						OverlayLayer::OverText,
 					));
 				}
-
-				if self.glyph(run_index, glyph_index).is_some() {
-					return overlays;
-				}
-
 				overlays
 			}
 		}

@@ -62,7 +62,7 @@ fn view_perf_panel(content: String) -> Element<'static, Message> {
 }
 
 fn view_graph_grid(graphs: Vec<PerfGraphSeries>) -> Element<'static, Message> {
-	column(graphs.into_iter().map(view_graph_panel).collect::<Vec<_>>())
+	column(graphs.into_iter().map(view_graph_panel))
 		.spacing(12)
 		.width(Length::Fill)
 		.into()

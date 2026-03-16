@@ -30,6 +30,14 @@ const HEADLESS_DELETE_SEED_REPEAT: usize = 24;
 const HEADLESS_MOTION_SWEEP_REPEATS: usize = 48;
 const HEADLESS_RESIZE_SETTLE_DELAY: Duration = Duration::from_millis(16);
 const HEADLESS_RESIZE_WIDTHS: [f32; 7] = [1600.0, 1240.0, 980.0, 780.0, 1120.0, 900.0, 1360.0];
+const HEADLESS_MOTION_SEQUENCE: [EditorMotion; 6] = [
+	EditorMotion::Down,
+	EditorMotion::Right,
+	EditorMotion::LineEnd,
+	EditorMotion::Up,
+	EditorMotion::LineStart,
+	EditorMotion::Left,
+];
 const HEADLESS_POINTER_SWEEP_POINTS: [((f32, f32), (f32, f32)); 4] = [
 	((32.0, 32.0), (240.0, 32.0)),
 	((48.0, 64.0), (320.0, 64.0)),
@@ -94,11 +102,11 @@ impl Playground {
 			| HeadlessScriptScenario::UndoRedoBurst => self.position_headless_insert_point(),
 			HeadlessScriptScenario::BackspaceBurst => {
 				self.position_headless_insert_point();
-				self.apply_headless_insert(headless_delete_seed_chunk().to_owned());
+				self.apply_headless_insert(headless_delete_seed_chunk());
 			}
 			HeadlessScriptScenario::DeleteForwardBurst => {
 				self.position_headless_insert_point();
-				self.apply_headless_insert(headless_delete_seed_chunk().to_owned());
+				self.apply_headless_insert(headless_delete_seed_chunk());
 				self.rewind_insert_caret(delete_seed_char_count());
 			}
 			HeadlessScriptScenario::MotionSweep
@@ -147,7 +155,7 @@ impl Playground {
 	pub fn run_headless_script_scenario(&mut self, scenario: HeadlessScriptScenario) -> usize {
 		match scenario {
 			HeadlessScriptScenario::LargePaste => {
-				self.apply_headless_insert(headless_large_paste_chunk().to_owned());
+				self.apply_headless_insert(headless_large_paste_chunk());
 			}
 			HeadlessScriptScenario::IncrementalTyping => {
 				for step in 0..HEADLESS_INCREMENTAL_TYPING_STEPS {
@@ -236,8 +244,8 @@ impl Playground {
 		}
 	}
 
-	fn apply_headless_insert(&mut self, text: String) {
-		self.apply_headless_edit(EditorEditIntent::InsertText(text));
+	fn apply_headless_insert(&mut self, text: impl Into<String>) {
+		self.apply_headless_edit(EditorEditIntent::InsertText(text.into()));
 	}
 
 	fn apply_headless_edit(&mut self, intent: EditorEditIntent) {
@@ -254,7 +262,7 @@ impl Playground {
 
 	fn perform_motion_sweep(&mut self) {
 		for _ in 0..HEADLESS_MOTION_SWEEP_REPEATS {
-			for step in 0..headless_motion_sequence().len() {
+			for step in 0..HEADLESS_MOTION_SEQUENCE.len() {
 				self.perform_motion_sweep_step(step);
 			}
 		}
@@ -295,7 +303,7 @@ impl Playground {
 	}
 
 	fn perform_motion_sweep_step(&mut self, step: usize) {
-		self.apply_headless_motion(headless_motion_sequence()[step % headless_motion_sequence().len()]);
+		self.apply_headless_motion(HEADLESS_MOTION_SEQUENCE[step % HEADLESS_MOTION_SEQUENCE.len()]);
 	}
 
 	fn perform_resize_reflow_step(&mut self, step: usize) {
@@ -424,17 +432,6 @@ fn headless_incremental_line_break(step: usize) -> String {
 
 fn delete_seed_char_count() -> usize {
 	headless_delete_seed_chunk().chars().count()
-}
-
-fn headless_motion_sequence() -> [EditorMotion; 6] {
-	[
-		EditorMotion::Down,
-		EditorMotion::Right,
-		EditorMotion::LineEnd,
-		EditorMotion::Up,
-		EditorMotion::LineStart,
-		EditorMotion::Left,
-	]
 }
 
 #[cfg(test)]
