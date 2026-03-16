@@ -159,6 +159,19 @@ impl Playground {
 		self.headless_observation()
 	}
 
+	pub(crate) fn reset_perf_monitor(&mut self) {
+		self.perf = PerfMonitor::default();
+	}
+
+	pub(crate) fn flush_perf_metrics(&mut self) {
+		self.perf.flush_canvas_metrics();
+	}
+
+	pub(crate) fn perf_dashboard(&self) -> crate::perf::PerfDashboard {
+		self.perf
+			.dashboard(self.session.scene(), self.session.mode(), self.session.text().len())
+	}
+
 	fn configure_headless_viewport(&mut self) {
 		self.perf = PerfMonitor::default();
 		let _ = self.update(Message::Viewport(ViewportMessage::CanvasResized(

@@ -1,12 +1,11 @@
 mod geometry;
 mod input;
-mod render;
 mod state;
 
 use {
-	self::{geometry::max_scroll, input::decode_event, render::draw_static_scene},
+	self::{geometry::max_scroll, input::decode_event},
 	crate::{editor::EditorViewState, perf::CanvasPerfSink, scene::LayoutScene, types::Message},
-	iced::{Rectangle, Theme, Vector, mouse, widget::canvas},
+	iced::{Rectangle, Theme, mouse, widget::canvas},
 	std::time::Instant,
 	tracing::trace_span,
 };
@@ -19,11 +18,7 @@ pub(crate) use {
 pub(crate) struct GlyphCanvas {
 	pub(crate) scene: LayoutScene,
 	pub(crate) layout_width: f32,
-	pub(crate) show_baselines: bool,
-	pub(crate) show_hitboxes: bool,
 	pub(crate) editor: EditorViewState,
-	pub(crate) scene_revision: u64,
-	pub(crate) scroll: Vector,
 	pub(crate) perf: CanvasPerfSink,
 }
 
@@ -35,7 +30,6 @@ impl canvas::Program<Message> for GlyphCanvas {
 	) -> Option<canvas::Action<Message>> {
 		let _span = trace_span!(
 			"canvas.update",
-			scene_revision = self.scene_revision,
 			bounds_width = bounds.width,
 			bounds_height = bounds.height
 		)
@@ -59,36 +53,10 @@ impl canvas::Program<Message> for GlyphCanvas {
 	}
 
 	fn draw(
-		&self, state: &Self::State, renderer: &iced::Renderer, _theme: &Theme, bounds: Rectangle,
+		&self, _state: &Self::State, _renderer: &iced::Renderer, _theme: &Theme, _bounds: Rectangle,
 		_cursor: iced::mouse::Cursor,
 	) -> Vec<canvas::Geometry> {
-		let started = Instant::now();
-		let cache_miss = state.cache_miss(self.scene_revision, self.scroll);
-		let _span = trace_span!(
-			"canvas.draw",
-			scene_revision = self.scene_revision,
-			cache_miss,
-			scroll_x = self.scroll.x,
-			scroll_y = self.scroll.y,
-			bounds_width = bounds.width,
-			bounds_height = bounds.height
-		)
-		.entered();
-
-		if cache_miss {
-			state.refresh_cache_key(self.scene_revision, self.scroll);
-		}
-
-		let mut static_build = None;
-		let static_layer = state.scene_cache().draw(renderer, bounds.size(), |frame| {
-			let build_started = Instant::now();
-			draw_static_scene(frame, bounds, self, self.scroll);
-			static_build = Some(build_started.elapsed());
-		});
-
-		self.perf
-			.record_canvas_draw(started.elapsed(), static_build, cache_miss);
-		vec![static_layer]
+		Vec::new()
 	}
 
 	fn mouse_interaction(&self, _state: &Self::State, bounds: Rectangle, cursor: mouse::Cursor) -> mouse::Interaction {

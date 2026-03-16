@@ -6,6 +6,7 @@ use {
 		overlay_view::{EditorUnderlayLayer, SceneOverlayLayer},
 		perf::CanvasPerfSink,
 		scene::LayoutScene,
+		scene_view::StaticSceneLayer,
 		text_view::SceneTextLayer,
 		types::{Message, ViewportMessage},
 		ui::tokens::{SIDEBAR_WIDTH, surface_style},
@@ -74,6 +75,17 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 		.text_only()
 		.width(Length::Fill)
 		.height(Length::Fill);
+	let static_scene = StaticSceneLayer::new(
+		props.scene.clone(),
+		props.layout_width,
+		props.show_baselines,
+		props.show_hitboxes,
+		props.scene_revision,
+		props.scroll,
+		props.perf.clone(),
+	)
+	.width(Length::Fill)
+	.height(Length::Fill);
 	let overlay = SceneOverlayLayer::new(
 		props.scene.clone(),
 		props.layout_width,
@@ -89,11 +101,7 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	let canvas_view = canvas(GlyphCanvas {
 		scene: props.scene,
 		layout_width: props.layout_width,
-		show_baselines: props.show_baselines,
-		show_hitboxes: props.show_hitboxes,
 		editor: props.editor,
-		scene_revision: props.scene_revision,
-		scroll: props.scroll,
 		perf: props.perf,
 	})
 	.width(Length::Fill)
@@ -105,6 +113,7 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 				backdrop.into(),
 				underlay.into(),
 				text_layer.into(),
+				static_scene.into(),
 				canvas_view.into(),
 				overlay.into(),
 			])

@@ -6,13 +6,13 @@ edition = "2024"
 [dependencies]
 cosmic-text = true
 iced = { features = ["advanced", "canvas"] }
+iced_runtime = true
+pollster = true
 tracing = true
 tracing-subscriber = { features = ["env-filter"] }
 
 [dev-dependencies]
 criterion = true
-iced_runtime = true
-pollster = true
 
 [[bench]]
 name = "headless"

@@ -72,17 +72,22 @@
 mod app;
 mod canvas_view;
 mod editor;
+mod headless_perf;
 mod overlay;
 mod overlay_view;
 mod perf;
 mod scene;
+mod scene_view;
 mod telemetry;
 mod text_view;
 mod types;
 mod ui;
 
 pub use app::Playground;
-use iced::{Font, Theme};
+use {
+	iced::{Font, Theme},
+	std::process::ExitCode,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeadlessScenario {
@@ -101,6 +106,16 @@ impl HeadlessScenario {
 			Self::Tall => "tall",
 			Self::TallInspect => "tall-inspect",
 			Self::TallPerf => "tall-perf",
+		}
+	}
+
+	pub fn parse_label(label: &str) -> Option<Self> {
+		match label {
+			"default" => Some(Self::Default),
+			"tall" => Some(Self::Tall),
+			"tall-inspect" => Some(Self::TallInspect),
+			"tall-perf" => Some(Self::TallPerf),
+			_ => None,
 		}
 	}
 }
@@ -162,6 +177,20 @@ pub fn run() -> iced::Result {
 		.theme(app_theme)
 		.settings(settings)
 		.run()
+}
+
+pub fn main_entry() -> ExitCode {
+	if let Some(code) = headless_perf::run_from_env() {
+		return code;
+	}
+
+	match run() {
+		Ok(()) => ExitCode::SUCCESS,
+		Err(error) => {
+			eprintln!("{error}");
+			ExitCode::FAILURE
+		}
+	}
 }
 
 pub fn init_tracing() {

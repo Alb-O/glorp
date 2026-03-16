@@ -7,7 +7,7 @@ use {
 		types::{CanvasEvent, CanvasTarget, Message},
 	},
 	iced::{Point, Vector, widget::canvas},
-	std::{cell::Cell, time::Instant},
+	std::time::Instant,
 };
 
 #[derive(Debug, Default)]
@@ -18,9 +18,6 @@ pub(crate) struct CanvasState {
 	target_scroll: Vector,
 	pointer_selecting: bool,
 	last_click: Option<(Instant, Point)>,
-	scene_cache: canvas::Cache,
-	cached_scene_revision: Cell<Option<u64>>,
-	cached_scroll: Cell<Option<(i32, i32)>>,
 }
 
 #[derive(Debug, Clone)]
@@ -202,22 +199,6 @@ impl CanvasState {
 			CanvasIntent::RetainFocus => CanvasAction::None,
 		}
 	}
-
-	pub(super) fn scene_cache(&self) -> &canvas::Cache {
-		&self.scene_cache
-	}
-
-	pub(super) fn cache_miss(&self, scene_revision: u64, scroll: Vector) -> bool {
-		let cached_scroll = (scroll.x.round() as i32, scroll.y.round() as i32);
-		self.cached_scene_revision.get() != Some(scene_revision) || self.cached_scroll.get() != Some(cached_scroll)
-	}
-
-	pub(super) fn refresh_cache_key(&self, scene_revision: u64, scroll: Vector) {
-		self.scene_cache.clear();
-		self.cached_scene_revision.set(Some(scene_revision));
-		self.cached_scroll
-			.set(Some((scroll.x.round() as i32, scroll.y.round() as i32)));
-	}
 }
 
 #[cfg(test)]
@@ -334,17 +315,6 @@ mod tests {
 			action,
 			CanvasAction::Publish(Message::Canvas(CanvasEvent::Hovered(None)), false)
 		));
-	}
-
-	#[test]
-	fn cache_invalidates_on_scene_revision_or_scroll_change() {
-		let state = CanvasState::default();
-
-		assert!(state.cache_miss(1, Vector::ZERO));
-		state.refresh_cache_key(1, Vector::ZERO);
-		assert!(!state.cache_miss(1, Vector::ZERO));
-		assert!(state.cache_miss(2, Vector::ZERO));
-		assert!(state.cache_miss(1, Vector::new(10.0, 0.0)));
 	}
 
 	#[test]

@@ -1,3 +1,3 @@
-fn main() -> iced::Result {
-	glorp::run()
+fn main() -> std::process::ExitCode {
+	glorp::main_entry()
 }

@@ -1,5 +1,5 @@
 use {
-	crate::scene::{GlyphInfo, LayoutScene, RunInfo},
+	crate::scene::LayoutScene,
 	iced::{Point, Rectangle, Size, Vector, mouse},
 	std::time::Duration,
 };
@@ -60,29 +60,6 @@ pub(super) fn to_scene_local(position: Point, scroll: Vector) -> Point {
 		position.x - scene_origin().x + scroll.x,
 		position.y - scene_origin().y + scroll.y,
 	)
-}
-
-pub(super) fn scrolled_origin(scroll: Vector) -> Point {
-	Point::new(scene_origin().x - scroll.x, scene_origin().y - scroll.y)
-}
-
-pub(super) fn visible_scene_bounds(bounds: Rectangle, scroll: Vector) -> Rectangle {
-	Rectangle::new(Point::new(scroll.x, scroll.y), viewport_size(bounds))
-}
-
-pub(super) fn run_intersects_viewport(run: &RunInfo, viewport: Rectangle) -> bool {
-	let run_bottom = run.line_top + run.line_height;
-	run_bottom >= viewport.y && run.line_top <= viewport.y + viewport.height
-}
-
-pub(super) fn glyph_intersects_viewport(glyph: &GlyphInfo, viewport: Rectangle) -> bool {
-	let glyph_right = glyph.x + glyph.width.max(1.0);
-	let glyph_bottom = glyph.y + glyph.height.max(1.0);
-
-	glyph_right >= viewport.x
-		&& glyph.x <= viewport.x + viewport.width
-		&& glyph_bottom >= viewport.y
-		&& glyph.y <= viewport.y + viewport.height
 }
 
 fn scene_content_width(scene: &LayoutScene, layout_width: f32) -> f32 {
