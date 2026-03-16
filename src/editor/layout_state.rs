@@ -94,10 +94,9 @@ impl EditorLayout {
 	}
 
 	pub(super) fn text_layer_state(&self) -> EditorTextLayerState {
-		let metrics = self.viewport_metrics();
 		EditorTextLayerState {
 			buffer: Arc::downgrade(&self.buffer),
-			measured_height: metrics.measured_height,
+			measured_height: measure_buffer_height(&self.buffer),
 		}
 	}
 
@@ -207,4 +206,14 @@ fn measure_buffer(buffer: &Buffer) -> (f32, f32) {
 	}
 
 	(measured_width, measured_height)
+}
+
+fn measure_buffer_height(buffer: &Buffer) -> f32 {
+	let mut measured_height: f32 = 0.0;
+
+	for run in buffer.layout_runs() {
+		measured_height = measured_height.max(run.line_top + run.line_height);
+	}
+
+	measured_height
 }

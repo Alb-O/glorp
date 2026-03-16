@@ -214,10 +214,9 @@ pub(super) fn percentile_ms(values: &VecDeque<f32>, percentile_percent: usize) -
 	}
 
 	let mut sorted = values.iter().copied().collect::<Vec<_>>();
-	sorted.sort_by(f32::total_cmp);
-
 	let index = ((sorted.len() - 1) * percentile_percent + 50) / 100;
-	sorted[index]
+	let (_, sample, _) = sorted.select_nth_unstable_by(index, f32::total_cmp);
+	*sample
 }
 
 fn push_bounded<T>(items: &mut VecDeque<T>, value: T, limit: usize) {

@@ -186,13 +186,13 @@ where
 fn interaction_details(
 	scene: &LayoutScene, editor: &EditorViewState, hovered_target: Option<CanvasTarget>,
 	selected_target: Option<CanvasTarget>, undo_depth: usize, redo_depth: usize,
-) -> String {
-	format!(
+) -> Arc<str> {
+	Arc::<str>::from(format!(
 		"editor\n{}\n\nhover\n{}\n\nselection\n{}",
 		editor_selection_details(&scene.text, editor, undo_depth, redo_depth),
 		target_details_or_none(scene, hovered_target),
 		target_details_or_none(scene, selected_target),
-	)
+	))
 }
 
 fn editor_selection_details(text: &str, editor: &EditorViewState, undo_depth: usize, redo_depth: usize) -> String {

@@ -34,7 +34,7 @@ impl LayoutSceneModel {
 	pub(crate) fn new(font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig) -> Self {
 		let scene = LayoutScene::from_buffer(font_system, text, buffer, config);
 
-		Self { config, scene }
+		Self { scene }
 	}
 
 	pub(crate) fn scene(&self) -> &LayoutScene {
@@ -44,7 +44,6 @@ impl LayoutSceneModel {
 	pub(crate) fn rebuild(
 		&mut self, font_system: &mut FontSystem, text: &str, buffer: Arc<Buffer>, config: SceneConfig,
 	) {
-		self.config = config;
 		self.scene = LayoutScene::from_buffer(font_system, text, buffer, config);
 	}
 }

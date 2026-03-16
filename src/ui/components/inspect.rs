@@ -13,7 +13,7 @@ use {
 /// Props for the inspect tab.
 pub(crate) struct InspectTabProps {
 	pub(crate) warnings: Arc<[String]>,
-	pub(crate) interaction_details: String,
+	pub(crate) interaction_details: Arc<str>,
 }
 
 pub(crate) fn view_inspect_tab(props: InspectTabProps) -> Element<'static, Message> {
@@ -65,10 +65,10 @@ fn view_warnings_panel(warnings: &[String]) -> Element<'static, Message> {
 		.into()
 }
 
-fn view_interaction_panel(interaction_details: String) -> Element<'static, Message> {
+fn view_interaction_panel(interaction_details: Arc<str>) -> Element<'static, Message> {
 	container(
 		panel_scrollable(
-			text(interaction_details)
+			text(interaction_details.as_ref().to_owned())
 				.font(Font::MONOSPACE)
 				.size(14)
 				.width(Length::Fill),

@@ -472,11 +472,11 @@ impl EditorEngine {
 		let selection = self.selection().cloned();
 		let selection_head = selection.as_ref().map(EditorSelection::head);
 		let tone = EditorOverlayTone::from(self.mode());
-		let insert_cursor = matches!(self.mode(), EditorMode::Insert)
-			.then(|| {
-				selection_head.and_then(|head| self.layout_model.layout.insert_cursor_rectangle(self.text(), head))
-			})
-			.flatten();
+		let insert_cursor = if matches!(self.mode(), EditorMode::Insert) {
+			selection_head.and_then(|head| self.layout_model.layout.insert_cursor_rectangle(self.text(), head))
+		} else {
+			None
+		};
 		let viewport_target = self.active_viewport_target(&layout);
 		let overlay_started = Instant::now();
 		let overlays = self.build_overlays(&layout, selection.as_ref(), insert_cursor, viewport_target, tone);

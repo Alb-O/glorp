@@ -4,13 +4,13 @@ use {
 		percentile_ms,
 	},
 	crate::{editor::EditorMode, scene::LayoutScene},
-	std::fmt::Write as _,
+	std::{fmt::Write as _, sync::Arc},
 };
 
 #[derive(Debug, Clone)]
 pub(crate) struct PerfGraphSeries {
 	pub(crate) title: &'static str,
-	pub(crate) samples_ms: Vec<f32>,
+	pub(crate) samples_ms: Arc<[f32]>,
 	pub(crate) ceiling_ms: f32,
 	pub(crate) latest_ms: f32,
 	pub(crate) avg_ms: f32,
@@ -86,7 +86,7 @@ impl PerfMetricSummary {
 #[derive(Debug, Clone)]
 pub(crate) struct PerfRecentActivity {
 	pub(crate) label: &'static str,
-	pub(crate) recent_ms: Vec<f32>,
+	pub(crate) recent_ms: Arc<[f32]>,
 }
 
 impl PerfRecentActivity {
@@ -117,7 +117,7 @@ pub(crate) struct PerfFramePacingSummary {
 	pub(crate) severe_jank: u64,
 	pub(crate) cache_hits: u64,
 	pub(crate) cache_misses: u64,
-	pub(crate) recent_ms: Vec<f32>,
+	pub(crate) recent_ms: Arc<[f32]>,
 }
 
 impl PerfFramePacingSummary {
@@ -311,7 +311,7 @@ pub(super) fn graph_ceiling(max_sample_ms: f32, keep_low_range: bool) -> f32 {
 		.unwrap_or_else(|| (max_sample_ms.max(0.1) * 1.2).ceil())
 }
 
-fn recent_values(values: &std::collections::VecDeque<f32>) -> Vec<f32> {
+fn recent_values(values: &std::collections::VecDeque<f32>) -> Arc<[f32]> {
 	values.iter().rev().take(RECENT_LIMIT).copied().collect()
 }
 

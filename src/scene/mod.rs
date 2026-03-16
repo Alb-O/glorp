@@ -40,7 +40,6 @@ impl SceneConfig {
 
 #[derive(Debug)]
 pub(crate) struct LayoutSceneModel {
-	config: SceneConfig,
 	scene: LayoutScene,
 }
 

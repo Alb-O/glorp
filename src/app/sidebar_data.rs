@@ -21,7 +21,7 @@ pub(super) struct ControlsSidebarData {
 #[derive(Debug, Clone)]
 pub(super) struct InspectSidebarData {
 	pub(super) warnings: Arc<[String]>,
-	pub(super) interaction_details: String,
+	pub(super) interaction_details: Arc<str>,
 }
 
 #[derive(Debug, Clone)]
