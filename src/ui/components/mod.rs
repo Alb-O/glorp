@@ -1,6 +1,6 @@
 //! Props-based composed views.
 //!
-//! This is the default UI boundary in `liney`: the parent owns state, and each
+//! This is the default UI boundary in `glorp`: the parent owns state, and each
 //! module renders from explicit props.
 
 mod controls;

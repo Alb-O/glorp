@@ -2,13 +2,13 @@
 
 use {
 	criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main},
+	glorp::{HeadlessScenario, HeadlessScriptScenario, Playground},
 	iced::{
 		Color, Font, Pixels, Size, Theme,
 		advanced::renderer::{Headless, Style},
 		mouse,
 	},
 	iced_runtime::{UserInterface, user_interface},
-	liney::{HeadlessScenario, HeadlessScriptScenario, Playground},
 	pollster::block_on,
 	std::{env, hint::black_box, time::Duration},
 };
@@ -25,7 +25,7 @@ const VIEWPORT_PHYSICAL_WIDTH: u32 = 1600;
 const VIEWPORT_PHYSICAL_HEIGHT: u32 = 1000;
 
 fn configured_criterion() -> Criterion {
-	liney::init_tracing();
+	glorp::init_tracing();
 
 	Criterion::default()
 		.sample_size(10)
@@ -84,7 +84,7 @@ struct Harness {
 
 impl Harness {
 	fn new(scenario: HeadlessScenario) -> Self {
-		let backend = env::var("LINEY_HEADLESS_BACKEND").ok();
+		let backend = env::var("GLORP_HEADLESS_BACKEND").ok();
 		let renderer = block_on(<iced::Renderer as Headless>::new(
 			Font::DEFAULT,
 			Pixels::from(16),

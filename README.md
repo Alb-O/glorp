@@ -1,4 +1,4 @@
-# liney
+# glorp
 
 Text layout and editor playground built on `iced` and `cosmic-text`.
 
@@ -34,9 +34,9 @@ cargo bench --bench headless -- --noplot 'playground/headless-script/resize-refl
 Use tracing to inspect where edit time goes:
 
 ```bash
-LINEY_TRACE=liney=trace cargo bench --bench headless -- --noplot 'playground/headless-script/large-paste'
-LINEY_TRACE='liney::editor=trace,liney::app::update=warn' cargo bench --bench headless -- --noplot 'playground/headless-script/incremental-typing' 2>&1 | rg 'apply buffer edit|layout edit updated retained buffer|layout edit rebuilt full buffer|refresh view state|editor apply|editor command over'
-LINEY_TRACE=liney=trace cargo bench --bench headless -- --noplot 'playground/headless-script/resize-reflow-sweep'
+GLORP_TRACE=glorp=trace cargo bench --bench headless -- --noplot 'playground/headless-script/large-paste'
+GLORP_TRACE='glorp::editor=trace,glorp::app::update=warn' cargo bench --bench headless -- --noplot 'playground/headless-script/incremental-typing' 2>&1 | rg 'apply buffer edit|layout edit updated retained buffer|layout edit rebuilt full buffer|refresh view state|editor apply|editor command over'
+GLORP_TRACE=glorp=trace cargo bench --bench headless -- --noplot 'playground/headless-script/resize-reflow-sweep'
 ```
 
 ## Current Read

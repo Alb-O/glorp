@@ -1,4 +1,4 @@
-//! UI composition rules for `liney`.
+//! UI composition rules for `glorp`.
 //!
 //! Reusable UI lives in normal Rust modules with explicit inputs. The app keeps
 //! state ownership in one place instead of turning each section into an

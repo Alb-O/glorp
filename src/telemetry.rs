@@ -3,7 +3,7 @@ use {
 	tracing_subscriber::EnvFilter,
 };
 
-const DEFAULT_TRACE_FILTER: &str = "liney=trace";
+const DEFAULT_TRACE_FILTER: &str = "glorp=trace";
 static INIT_TRACING: Once = Once::new();
 
 pub(crate) fn init_tracing() {
@@ -27,14 +27,14 @@ pub(crate) fn duration_ms(duration: Duration) -> f64 {
 }
 
 fn tracing_filter() -> Option<EnvFilter> {
-	let liney_trace = std::env::var("LINEY_TRACE").ok();
+	let glorp_trace = std::env::var("GLORP_TRACE").ok();
 	let rust_log = std::env::var("RUST_LOG").ok();
 
-	if liney_trace.is_none() && rust_log.is_none() {
+	if glorp_trace.is_none() && rust_log.is_none() {
 		return None;
 	}
 
-	if let Some(value) = liney_trace.as_deref() {
+	if let Some(value) = glorp_trace.as_deref() {
 		let directive = match value.trim() {
 			"" | "1" | "true" | "TRUE" => DEFAULT_TRACE_FILTER,
 			"0" | "false" | "FALSE" => return None,

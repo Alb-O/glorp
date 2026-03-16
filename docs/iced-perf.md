@@ -135,10 +135,10 @@ Add a CLI mode that launches the normal app, runs a fixed scenario, prints JSON,
 
 Example shapes:
 
-- `liney --perf-scenario edit-tall --samples 200 --warmup 30`
-- `liney --perf-scenario scroll-text --samples 300`
-- `liney --perf-scenario scroll-outlines --samples 300`
-- `liney --perf-scenario resize-pane --samples 180`
+- `glorp --perf-scenario edit-tall --samples 200 --warmup 30`
+- `glorp --perf-scenario scroll-text --samples 300`
+- `glorp --perf-scenario scroll-outlines --samples 300`
+- `glorp --perf-scenario resize-pane --samples 180`
 
 Each scenario should pin:
 
