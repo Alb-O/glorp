@@ -2,10 +2,11 @@ use {
 	crate::{
 		editor::{EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorViewportMetrics},
 		overlay::LayoutRect,
-		presentation::DocumentPresentation,
+		presentation::{DerivedScenePresentation, EditorPresentation},
 		scene::{DocumentLayout, SceneConfig, make_font_system},
 	},
 	cosmic_text::FontSystem,
+	std::time::{Duration, Instant},
 };
 
 #[cfg(test)]
@@ -47,13 +48,17 @@ impl From<EditorOutcome> for DocumentUpdate {
 
 /// Owns the editable document and its synchronized presentation snapshot.
 ///
-/// The session is the only place where mutations occur. After each mutation it
-/// refreshes either the full presentation or only the editor-facing slice,
-/// depending on whether scene data actually changed.
+/// The session is the only place where mutations occur. The editor-facing
+/// presentation is refreshed eagerly, while the heavier derived scene is built
+/// only for inspect/perf/debug consumers.
 pub(super) struct DocumentSession {
 	editor: EditorEngine,
-	presentation: DocumentPresentation,
+	editor_presentation: EditorPresentation,
+	derived_scene: Option<DerivedScenePresentation>,
+	next_derived_scene_revision: u64,
 	font_system: FontSystem,
+	#[cfg(test)]
+	derived_scene_build_count: usize,
 }
 
 impl DocumentSession {
@@ -61,28 +66,33 @@ impl DocumentSession {
 	pub(super) fn new(text: &str, config: SceneConfig) -> Self {
 		let mut font_system = make_font_system();
 		let editor = EditorEngine::new(&mut font_system, text, config);
-		let presentation = build_presentation(&editor, 1);
+		let editor_presentation = build_editor_presentation(&editor, 1);
 
 		Self {
 			editor,
-			presentation,
+			editor_presentation,
+			derived_scene: None,
+			next_derived_scene_revision: 0,
 			font_system,
+			#[cfg(test)]
+			derived_scene_build_count: 0,
 		}
 	}
 
-	/// Returns the latest synchronized presentation snapshot.
-	pub(super) fn presentation(&self) -> &DocumentPresentation {
-		&self.presentation
+	/// Returns the latest synchronized editor presentation snapshot.
+	pub(super) fn editor_presentation(&self) -> &EditorPresentation {
+		&self.editor_presentation
+	}
+
+	/// Returns the latest derived scene snapshot if one is currently
+	/// materialized.
+	pub(super) fn derived_scene(&self) -> Option<&DerivedScenePresentation> {
+		self.derived_scene.as_ref()
 	}
 
 	/// Returns the current document text.
 	pub(super) fn text(&self) -> &str {
 		self.editor.text()
-	}
-
-	/// Returns the current shared layout for the active presentation.
-	pub(super) fn layout(&self) -> &DocumentLayout {
-		self.presentation.layout.as_ref()
 	}
 
 	/// Returns the current editor mode.
@@ -93,12 +103,12 @@ impl DocumentSession {
 	/// Returns a clone of the current editor view state.
 	#[cfg(test)]
 	pub(super) fn view_state(&self) -> EditorViewState {
-		self.presentation.editor.clone()
+		self.editor_presentation.editor.clone()
 	}
 
 	/// Returns the latest measured viewport metrics.
 	pub(super) fn viewport_metrics(&self) -> EditorViewportMetrics {
-		self.presentation.viewport_metrics
+		self.editor_presentation.viewport_metrics
 	}
 
 	/// Returns the undo and redo stack depths.
@@ -106,22 +116,31 @@ impl DocumentSession {
 		self.editor.history_depths()
 	}
 
-	/// Applies a width change and refreshes the full presentation if needed.
+	/// Applies a width change and refreshes the hot presentation if needed.
 	pub(super) fn sync_width(&mut self, width: f32) -> bool {
 		let changed = self.editor.sync_buffer_width(&mut self.font_system, width);
-		self.refresh_if(changed)
+		if changed {
+			self.refresh_editor_presentation();
+			self.invalidate_derived_scene();
+		}
+		changed
 	}
 
-	/// Applies a config change and refreshes the full presentation if needed.
+	/// Applies a config change and refreshes the hot presentation if needed.
 	pub(super) fn sync_config(&mut self, config: SceneConfig) -> bool {
 		let changed = self.editor.sync_buffer_config(&mut self.font_system, config);
-		self.refresh_if(changed)
+		if changed {
+			self.refresh_editor_presentation();
+			self.invalidate_derived_scene();
+		}
+		changed
 	}
 
-	/// Replaces the document contents and rebuilds the full presentation.
+	/// Replaces the document contents and refreshes the hot presentation.
 	pub(super) fn reset_with_preset(&mut self, text: &str, config: SceneConfig) {
 		self.editor.reset(&mut self.font_system, text, config);
-		self.refresh_presentation();
+		self.refresh_editor_presentation();
+		self.invalidate_derived_scene();
 	}
 
 	/// Applies an editor intent and returns the app-facing change summary.
@@ -129,44 +148,65 @@ impl DocumentSession {
 		let outcome = self.editor.apply(&mut self.font_system, intent);
 		let update = DocumentUpdate::from(outcome);
 
+		if update.changed() {
+			self.refresh_editor_presentation();
+		}
+
 		if update.document_changed {
-			self.refresh_presentation();
-		} else if update.changed() {
-			self.refresh_editor_view();
+			self.invalidate_derived_scene();
 		}
 
 		update
 	}
 
-	fn refresh_presentation(&mut self) {
-		let revision = self.presentation.revision + 1;
-		self.presentation = build_presentation(&self.editor, revision);
-	}
-
-	fn refresh_editor_view(&mut self) {
-		// Selection/mode-only edits can reuse the existing scene metadata and
-		// text buffer; only the editor-facing slice needs to move forward.
-		self.presentation.revision += 1;
-		self.presentation.editor = self.editor.view_state();
-	}
-
-	fn refresh_if(&mut self, changed: bool) -> bool {
-		if changed {
-			self.refresh_presentation();
+	pub(super) fn ensure_derived_scene(&mut self) -> Option<Duration> {
+		if self.derived_scene.is_some() {
+			return None;
 		}
 
-		changed
+		// The hot path is allowed to invalidate scene data aggressively because
+		// scene consumers opt back in explicitly through this gate.
+		let revision = self.next_derived_scene_revision + 1;
+		let started = Instant::now();
+		self.derived_scene = Some(build_derived_scene(&self.editor, revision));
+		self.next_derived_scene_revision = revision;
+		#[cfg(test)]
+		{
+			self.derived_scene_build_count += 1;
+		}
+		Some(started.elapsed())
+	}
+
+	pub(super) fn derived_scene_layout(&self) -> Option<&DocumentLayout> {
+		self.derived_scene.as_ref().map(|scene| scene.layout.as_ref())
+	}
+
+	#[cfg(test)]
+	pub(super) fn derived_scene_build_count(&self) -> usize {
+		self.derived_scene_build_count
+	}
+
+	fn refresh_editor_presentation(&mut self) {
+		// Keep the always-visible editor surface fully synchronized even when the
+		// heavier inspect/perf scene stays cold.
+		let revision = self.editor_presentation.revision + 1;
+		self.editor_presentation = build_editor_presentation(&self.editor, revision);
+	}
+
+	fn invalidate_derived_scene(&mut self) {
+		self.derived_scene = None;
 	}
 }
 
-/// Rebuilds the full layout/editor presentation from the editor snapshot.
-fn build_presentation(editor: &EditorEngine, revision: u64) -> DocumentPresentation {
-	// Pull the shared layout first: it also backfills the editor-side cache for
-	// this revision, which keeps the text layer and metrics aligned to one build.
-	let layout = editor.shared_document_layout();
+fn build_editor_presentation(editor: &EditorEngine, revision: u64) -> EditorPresentation {
 	let text_layer = editor.text_layer_state();
 	let viewport_metrics = editor.viewport_metrics();
 	let editor_view = editor.view_state();
 
-	DocumentPresentation::new(revision, viewport_metrics, text_layer, layout, editor_view)
+	EditorPresentation::new(revision, viewport_metrics, text_layer, editor_view, editor.text().len())
+}
+
+fn build_derived_scene(editor: &EditorEngine, revision: u64) -> DerivedScenePresentation {
+	let layout = editor.shared_document_layout();
+	DerivedScenePresentation::new(revision, layout)
 }

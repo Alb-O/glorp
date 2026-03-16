@@ -205,9 +205,17 @@ impl EditorApp {
 		self.perf.flush_canvas_metrics();
 	}
 
-	pub(crate) fn perf_dashboard(&self) -> crate::perf::PerfDashboard {
-		self.perf
-			.dashboard(self.session.layout(), self.session.mode(), self.session.text().len())
+	pub(crate) fn perf_dashboard(&mut self) -> crate::perf::PerfDashboard {
+		let _ = self.session.ensure_derived_scene();
+		let scene = self
+			.session
+			.derived_scene()
+			.expect("perf dashboard requires a materialized derived scene");
+		self.perf.dashboard(
+			scene.layout.as_ref(),
+			self.session.mode(),
+			self.session.editor_presentation().editor_bytes(),
+		)
 	}
 
 	fn configure_headless_viewport(&mut self) {
@@ -227,9 +235,9 @@ impl EditorApp {
 		self.controls.preset = SamplePreset::Custom;
 		self.sidebar.set_active_tab(SidebarTab::Controls);
 		self.session.reset_with_preset(text, self.scene_config());
-		self.sidebar.sync_after_scene_refresh();
 		self.viewport.mark_scene_applied();
-		self.viewport.finish_scene_refresh(self.session.layout(), true);
+		self.viewport
+			.finish_editor_refresh(self.session.viewport_metrics(), true);
 	}
 
 	fn position_headless_insert_point(&mut self) {
@@ -340,7 +348,7 @@ impl EditorApp {
 	}
 
 	fn headless_observation(&self) -> usize {
-		let view = &self.session.presentation().editor;
+		let view = &self.session.editor_presentation().editor;
 		let selection_end = view.selection.as_ref().map_or(0, |selection| selection.end);
 		let selection_head = view.selection_head.unwrap_or(0);
 

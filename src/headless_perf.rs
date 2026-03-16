@@ -253,7 +253,7 @@ impl Harness {
 		self.app.reset_perf_monitor();
 	}
 
-	fn dashboard(&self) -> PerfDashboard {
+	fn dashboard(&mut self) -> PerfDashboard {
 		self.app.perf_dashboard()
 	}
 }

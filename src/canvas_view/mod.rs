@@ -4,7 +4,11 @@ mod state;
 
 use {
 	self::{geometry::max_scroll, input::decode_event},
-	crate::{perf::CanvasPerfSink, presentation::DocumentPresentation, types::Message},
+	crate::{
+		perf::CanvasPerfSink,
+		presentation::{DerivedScenePresentation, EditorPresentation},
+		types::Message,
+	},
 	iced::{Rectangle, Theme, mouse, widget::canvas},
 	std::time::Instant,
 	tracing::trace_span,
@@ -16,9 +20,22 @@ pub(crate) use {
 
 #[derive(Debug, Clone)]
 pub(crate) struct GlyphCanvas {
-	pub(crate) presentation: DocumentPresentation,
+	pub(crate) editor_presentation: EditorPresentation,
+	pub(crate) derived_scene: Option<DerivedScenePresentation>,
 	pub(crate) layout_width: f32,
+	pub(crate) inspect_targets_active: bool,
 	pub(crate) perf: CanvasPerfSink,
+}
+
+impl GlyphCanvas {
+	fn inspect_layout(&self) -> Option<&crate::scene::DocumentLayout> {
+		// Scene data may already be materialized for debug/perf consumers, but
+		// inspect hit testing should still stay off unless the Inspect path is
+		// explicitly active.
+		self.inspect_targets_active
+			.then(|| self.derived_scene.as_ref().map(|scene| scene.layout.as_ref()))
+			.flatten()
+	}
 }
 
 impl canvas::Program<Message> for GlyphCanvas {
@@ -34,12 +51,12 @@ impl canvas::Program<Message> for GlyphCanvas {
 		)
 		.entered();
 		let started = Instant::now();
-		let max_scroll = max_scroll(bounds, self.presentation.layout.as_ref(), self.layout_width);
+		let max_scroll = max_scroll(bounds, self.editor_presentation.viewport_metrics, self.layout_width);
 		let action = decode_event(
-			self.presentation.mode(),
+			self.editor_presentation.mode(),
 			state.focused(),
 			event,
-			self.presentation.layout.as_ref(),
+			self.inspect_layout(),
 			bounds,
 			cursor,
 			state.scroll(),
@@ -63,5 +80,87 @@ impl canvas::Program<Message> for GlyphCanvas {
 			.position_in(bounds)
 			.map(|_| mouse::Interaction::Text)
 			.unwrap_or_default()
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use {
+		super::GlyphCanvas,
+		crate::{
+			editor::{EditorMode, EditorTextLayerState, EditorViewState, EditorViewportMetrics},
+			perf::CanvasPerfSink,
+			presentation::{DerivedScenePresentation, EditorPresentation},
+			scene::{DocumentLayout, DocumentLayoutTestSpec},
+			types::WrapChoice,
+		},
+		std::sync::Arc,
+	};
+
+	fn editor_presentation() -> EditorPresentation {
+		EditorPresentation::new(
+			1,
+			EditorViewportMetrics {
+				wrapping: WrapChoice::Word,
+				measured_width: 10.0,
+				measured_height: 20.0,
+			},
+			EditorTextLayerState {
+				buffer: std::sync::Weak::new(),
+				measured_height: 20.0,
+			},
+			EditorViewState {
+				mode: EditorMode::Normal,
+				selection: None,
+				selection_head: None,
+				pointer_anchor: None,
+				overlays: Arc::from([]),
+				viewport_target: None,
+			},
+			0,
+		)
+	}
+
+	fn derived_scene() -> DerivedScenePresentation {
+		DerivedScenePresentation::new(
+			1,
+			Arc::new(DocumentLayout::new_for_test(DocumentLayoutTestSpec {
+				text: Arc::<str>::from("abc"),
+				wrapping: WrapChoice::Word,
+				max_width: 20.0,
+				measured_width: 20.0,
+				measured_height: 20.0,
+				glyph_count: 0,
+				font_count: 0,
+				runs: Vec::new(),
+				clusters: Vec::new(),
+			})),
+		)
+	}
+
+	#[test]
+	fn inspect_layout_depends_on_activation_not_existing_overlays() {
+		let canvas = GlyphCanvas {
+			editor_presentation: editor_presentation(),
+			derived_scene: Some(derived_scene()),
+			layout_width: 20.0,
+			inspect_targets_active: true,
+			perf: CanvasPerfSink::default(),
+		};
+
+		assert!(canvas.inspect_layout().is_some());
+	}
+
+	#[test]
+	fn inspect_layout_stays_disabled_off_the_inspect_path() {
+		let canvas = GlyphCanvas {
+			editor_presentation: editor_presentation(),
+			derived_scene: Some(derived_scene()),
+			layout_width: 20.0,
+			inspect_targets_active: false,
+			perf: CanvasPerfSink::default(),
+		};
+
+		assert!(canvas.inspect_layout().is_none());
 	}
 }

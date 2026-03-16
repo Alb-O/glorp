@@ -4,7 +4,7 @@ use {
 		overlay::OverlayPrimitive,
 		overlay_view::{EditorUnderlayLayer, SceneOverlayLayer},
 		perf::CanvasPerfSink,
-		presentation::DocumentPresentation,
+		presentation::{DerivedScenePresentation, EditorPresentation},
 		scene_view::StaticSceneLayer,
 		text_view::SceneTextLayer,
 		types::{Message, ViewportMessage},
@@ -29,17 +29,21 @@ pub(crate) struct CanvasDecorations {
 
 /// Immutable inputs for rendering the stacked canvas surface.
 ///
-/// The pane is driven from a single [`DocumentPresentation`] plus a small set
-/// of view-local flags such as scroll position and focus state.
+/// The pane is driven from the hot editor presentation plus an optional lazily
+/// materialized scene snapshot for inspect/perf/debug consumers.
 pub(crate) struct CanvasPaneProps {
-	/// Shared presentation snapshot for all canvas sublayers.
-	pub(crate) presentation: DocumentPresentation,
+	/// Shared hot-path presentation snapshot for all canvas sublayers.
+	pub(crate) editor_presentation: EditorPresentation,
+	/// Optional derived scene snapshot for inspect/perf/debug consumers.
+	pub(crate) derived_scene: Option<DerivedScenePresentation>,
 	/// Current visible layout width after shell sizing and padding.
 	pub(crate) layout_width: f32,
 	/// Optional static scene decorations.
 	pub(crate) decorations: CanvasDecorations,
 	/// Transient inspect overlays derived from hover/selection state.
 	pub(crate) inspect_overlays: std::sync::Arc<[OverlayPrimitive]>,
+	/// Whether inspect hit testing should be active on the canvas path.
+	pub(crate) inspect_targets_active: bool,
 	/// Whether the canvas currently owns keyboard focus.
 	pub(crate) focused: bool,
 	/// Revision key for static-scene cache invalidation.
@@ -75,30 +79,20 @@ pub(crate) fn view_stacked_shell<'a>(
 
 /// Renders the canvas pane inside the shared app surface.
 pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
-	let backdrop = SceneTextLayer::new(props.presentation.clone(), props.layout_width, props.scroll)
+	let backdrop = SceneTextLayer::new(props.editor_presentation.clone(), props.layout_width, props.scroll)
 		.backdrop_only()
 		.width(Length::Fill)
 		.height(Length::Fill);
-	let underlay = EditorUnderlayLayer::new(props.presentation.clone(), props.scroll, props.perf.clone())
+	let underlay = EditorUnderlayLayer::new(props.editor_presentation.clone(), props.scroll, props.perf.clone())
 		.width(Length::Fill)
 		.height(Length::Fill);
-	let text_layer = SceneTextLayer::new(props.presentation.clone(), props.layout_width, props.scroll)
+	let text_layer = SceneTextLayer::new(props.editor_presentation.clone(), props.layout_width, props.scroll)
 		.text_only()
 		.width(Length::Fill)
 		.height(Length::Fill);
-	let static_scene = StaticSceneLayer::new(
-		props.presentation.clone(),
-		props.layout_width,
-		props.decorations.show_baselines,
-		props.decorations.show_hitboxes,
-		props.scene_revision,
-		props.scroll,
-		props.perf.clone(),
-	)
-	.width(Length::Fill)
-	.height(Length::Fill);
 	let overlay = SceneOverlayLayer::new(
-		props.presentation.clone(),
+		props.editor_presentation.clone(),
+		props.derived_scene.clone(),
 		props.layout_width,
 		props.inspect_overlays,
 		props.focused,
@@ -109,27 +103,45 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	.height(Length::Fill);
 
 	let canvas_view = canvas(GlyphCanvas {
-		presentation: props.presentation,
+		editor_presentation: props.editor_presentation,
+		derived_scene: props.derived_scene.clone(),
 		layout_width: props.layout_width,
-		perf: props.perf,
+		inspect_targets_active: props.inspect_targets_active,
+		perf: props.perf.clone(),
 	})
 	.width(Length::Fill)
 	.height(Length::Fill);
 
-	container(
-		sensor(
-			Stack::with_children([
-				backdrop.into(),
-				underlay.into(),
-				text_layer.into(),
-				static_scene.into(),
-				canvas_view.into(),
-				overlay.into(),
-			])
+	let mut children = vec![backdrop.into(), underlay.into(), text_layer.into()];
+
+	if let Some(derived_scene) = props.derived_scene
+		&& (props.decorations.show_baselines || props.decorations.show_hitboxes)
+	{
+		// The static scene cache only exists for debug geometry. Inspect overlays
+		// and the footer can still use the derived scene without paying for this
+		// extra layer.
+		children.push(
+			StaticSceneLayer::new(
+				derived_scene,
+				props.layout_width,
+				props.decorations.show_baselines,
+				props.decorations.show_hitboxes,
+				props.scene_revision,
+				props.scroll,
+				props.perf.clone(),
+			)
 			.width(Length::Fill)
-			.height(Length::Fill),
-		)
-		.on_resize(|size| Message::Viewport(ViewportMessage::CanvasResized(size))),
+			.height(Length::Fill)
+			.into(),
+		);
+	}
+
+	children.push(canvas_view.into());
+	children.push(overlay.into());
+
+	container(
+		sensor(Stack::with_children(children).width(Length::Fill).height(Length::Fill))
+			.on_resize(|size| Message::Viewport(ViewportMessage::CanvasResized(size))),
 	)
 	.padding(8)
 	.width(Length::Fill)

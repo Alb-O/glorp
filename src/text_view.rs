@@ -1,5 +1,5 @@
 use {
-	crate::{canvas_view::scene_origin, editor::EditorMode, presentation::DocumentPresentation, types::Message},
+	crate::{canvas_view::scene_origin, editor::EditorMode, presentation::EditorPresentation, types::Message},
 	iced::{
 		Color, Element, Length, Point, Rectangle, Size, Theme, Vector,
 		advanced::{Layout, Renderer as _, Widget, graphics::text::Renderer as _, layout, mouse, renderer},
@@ -15,7 +15,7 @@ const BORDER_COLOR: Color = Color::from_rgba(0.8, 0.8, 0.9, 0.65);
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneTextLayer {
-	presentation: DocumentPresentation,
+	presentation: EditorPresentation,
 	layout_width: f32,
 	scroll: Vector,
 	draw_backdrop: bool,
@@ -25,7 +25,7 @@ pub(crate) struct SceneTextLayer {
 }
 
 impl SceneTextLayer {
-	pub(crate) fn new(presentation: DocumentPresentation, layout_width: f32, scroll: Vector) -> Self {
+	pub(crate) fn new(presentation: EditorPresentation, layout_width: f32, scroll: Vector) -> Self {
 		Self {
 			presentation,
 			layout_width,

@@ -1,5 +1,5 @@
 use {
-	crate::scene::DocumentLayout,
+	crate::{editor::EditorViewportMetrics, types::WrapChoice},
 	iced::{Point, Rectangle, Size, Vector, mouse},
 	std::time::Duration,
 };
@@ -30,11 +30,11 @@ pub(super) fn animate_scroll(current: Vector, target: Vector) -> Vector {
 	current + ((target - current) * 0.22)
 }
 
-pub(super) fn max_scroll(bounds: Rectangle, layout: &DocumentLayout, layout_width: f32) -> Vector {
+pub(super) fn max_scroll(bounds: Rectangle, metrics: EditorViewportMetrics, layout_width: f32) -> Vector {
 	let viewport = viewport_size(bounds);
 	Vector::new(
-		(scene_content_width(layout, layout_width) - viewport.width).max(0.0),
-		(layout.measured_height - viewport.height).max(0.0),
+		(scene_content_width(metrics, layout_width) - viewport.width).max(0.0),
+		(metrics.measured_height - viewport.height).max(0.0),
 	)
 }
 
@@ -62,9 +62,9 @@ pub(super) fn to_scene_local(position: Point, scroll: Vector) -> Point {
 	)
 }
 
-fn scene_content_width(layout: &DocumentLayout, layout_width: f32) -> f32 {
-	if matches!(layout.wrapping, crate::types::WrapChoice::None) {
-		layout.measured_width.max(layout_width)
+fn scene_content_width(metrics: EditorViewportMetrics, layout_width: f32) -> f32 {
+	if matches!(metrics.wrapping, WrapChoice::None) {
+		metrics.measured_width.max(layout_width)
 	} else {
 		layout_width
 	}
@@ -74,23 +74,16 @@ fn scene_content_width(layout: &DocumentLayout, layout_width: f32) -> f32 {
 mod tests {
 	use {
 		super::{clamp_scroll, max_scroll},
-		crate::scene::{DocumentLayout, DocumentLayoutTestSpec},
+		crate::{editor::EditorViewportMetrics, types::WrapChoice},
 		iced::{Rectangle, Vector},
-		std::sync::Arc,
 	};
 
-	fn scene(width: f32, height: f32) -> DocumentLayout {
-		DocumentLayout::new_for_test(DocumentLayoutTestSpec {
-			text: Arc::<str>::from(""),
-			wrapping: crate::types::WrapChoice::Word,
-			max_width: width,
+	fn scene(width: f32, height: f32) -> EditorViewportMetrics {
+		EditorViewportMetrics {
+			wrapping: WrapChoice::Word,
 			measured_width: width,
 			measured_height: height,
-			glyph_count: 0,
-			font_count: 0,
-			runs: Vec::new(),
-			clusters: Vec::new(),
-		})
+		}
 	}
 
 	#[test]
@@ -103,7 +96,7 @@ mod tests {
 			height: 700.0,
 		};
 
-		let max = max_scroll(bounds, &scene, scene.max_width);
+		let max = max_scroll(bounds, scene, 1200.0);
 		assert!(max.x > 0.0);
 		assert!(max.y > 0.0);
 		assert_eq!(clamp_scroll(Vector::new(-10.0, 2000.0), max), Vector::new(0.0, max.y));

@@ -18,12 +18,12 @@ use {
 };
 
 pub(super) fn decode_event(
-	mode: EditorMode, focused: bool, event: &canvas::Event, layout: &DocumentLayout, bounds: Rectangle,
+	mode: EditorMode, focused: bool, event: &canvas::Event, layout: Option<&DocumentLayout>, bounds: Rectangle,
 	cursor: mouse::Cursor, scroll: iced::Vector,
 ) -> Option<DecodedEvent> {
 	let cursor_position = cursor.position_in(bounds);
 	let cursor_local = cursor_position.map(|position| to_scene_local(position, scroll));
-	let cursor_target = cursor_local.and_then(|position| layout.hit_test(position));
+	let cursor_target = layout.and_then(|layout| cursor_local.and_then(|position| layout.hit_test(position)));
 
 	match event {
 		canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) if cursor.is_over(bounds) => {

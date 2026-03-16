@@ -140,7 +140,7 @@ impl ViewportState {
 			canvas_viewport: Size::new(layout_width, DEFAULT_CANVAS_HEIGHT),
 			canvas_focused: false,
 			canvas_scroll: Vector::ZERO,
-			scene_revision: 1,
+			scene_revision: 0,
 			resize_coalescer: ResizeCoalescer::new(layout_width),
 		}
 	}
@@ -209,7 +209,14 @@ impl ViewportState {
 		}
 
 		self.clamp_scroll(layout);
-		self.scene_revision += 1;
+	}
+
+	pub(super) fn finish_editor_refresh(&mut self, metrics: EditorViewportMetrics, reset_scroll: bool) {
+		if reset_scroll {
+			self.canvas_scroll = Vector::ZERO;
+		}
+
+		self.clamp_scroll_to_metrics(metrics);
 	}
 
 	fn clamped_scroll(&self, scroll: Vector, layout: &DocumentLayout) -> Vector {

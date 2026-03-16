@@ -72,6 +72,14 @@ impl PerfMonitor {
 	) -> PerfDashboard {
 		build_dashboard(&self.store, layout, editor_mode, editor_bytes)
 	}
+
+	#[cfg(test)]
+	pub(crate) fn metric_total_samples(&self, label: &str) -> u64 {
+		store::MetricKind::ALL
+			.into_iter()
+			.find(|kind| kind.label() == label)
+			.map_or(0, |kind| self.store.metrics[kind.index()].total_samples)
+	}
 }
 
 fn perf_key(store: &PerfStore) -> PerfSnapshotKey {

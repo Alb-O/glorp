@@ -144,6 +144,9 @@ impl EditorApp {
 				if was_inspect || tab == SidebarTab::Inspect {
 					self.sidebar_cache.invalidate_inspect();
 				}
+				if matches!(tab, SidebarTab::Inspect | SidebarTab::Perf) {
+					self.ensure_scene_for_active_consumers(None);
+				}
 			}
 		}
 	}
@@ -151,6 +154,7 @@ impl EditorApp {
 	fn handle_canvas_message(&mut self, message: CanvasEvent) {
 		match message {
 			CanvasEvent::Hovered(target) => {
+				let target = self.inspect_target(target);
 				let previous = self.sidebar.hovered_target;
 				self.sidebar.set_hovered_target(target);
 				if self.sidebar.hovered_target != previous {
@@ -166,6 +170,7 @@ impl EditorApp {
 			}
 			CanvasEvent::PointerSelectionStarted { target, intent } => {
 				self.viewport.canvas_focused = true;
+				let target = self.inspect_target(target);
 				let previous = self.sidebar.selected_target;
 				self.sidebar.set_selected_target(target);
 				// Selection can be normalized inside the sidebar state, so compare the
@@ -199,8 +204,8 @@ impl EditorApp {
 		let started = Instant::now();
 		self.session.reset_with_preset(preset.text(), self.scene_config());
 		self.viewport.mark_scene_applied();
+		self.finish_session_refresh(SceneRefreshReason::PresetLoaded);
 		let elapsed = started.elapsed();
-		self.finish_presentation_refresh(SceneRefreshReason::PresetLoaded, Some(elapsed));
 		trace!(
 			preset = %preset,
 			duration_ms = duration_ms(elapsed),
@@ -226,15 +231,12 @@ impl EditorApp {
 	}
 
 	fn refresh_session_config(&mut self, reason: SceneRefreshReason) {
-		let started = Instant::now();
 		if !self.session.sync_config(self.scene_config()) {
 			return;
 		}
 
 		self.viewport.mark_scene_applied();
-		let elapsed = started.elapsed();
-		self.finish_presentation_refresh(reason, Some(elapsed));
-		log_scene_refresh("scene rebuilt", elapsed, self.session.layout());
+		self.finish_session_refresh(reason);
 	}
 
 	fn sync_editor_width(&mut self, width: f32) {
@@ -246,8 +248,7 @@ impl EditorApp {
 		let elapsed = started.elapsed();
 		self.perf.record_editor_width_sync(elapsed);
 		self.viewport.mark_scene_applied();
-		self.finish_presentation_refresh(SceneRefreshReason::ResizeReflow, Some(elapsed));
-		log_scene_refresh("scene rebuilt", elapsed, self.session.layout());
+		self.finish_session_refresh(SceneRefreshReason::ResizeReflow);
 	}
 
 	fn dispatch_editor_intent(&mut self, intent: EditorIntent, source: EditorDispatchSource) {
@@ -307,7 +308,7 @@ impl EditorApp {
 	fn handle_document_update(&mut self, outcome: &DocumentUpdate, source: EditorDispatchSource) {
 		if outcome.document_changed {
 			self.controls.preset = SamplePreset::Custom;
-			self.finish_presentation_refresh(SceneRefreshReason::DocumentEdited, None);
+			self.finish_session_refresh(SceneRefreshReason::DocumentEdited);
 			self.sidebar_cache.invalidate_perf();
 		}
 
@@ -326,9 +327,12 @@ impl EditorApp {
 	}
 
 	fn finish_presentation_refresh(&mut self, reason: SceneRefreshReason, duration: Option<Duration>) {
+		let Some(layout) = self.session.derived_scene_layout() else {
+			return;
+		};
 		self.sidebar.sync_after_scene_refresh();
-		self.viewport
-			.finish_scene_refresh(self.session.layout(), reason.resets_scroll());
+		self.viewport.finish_scene_refresh(layout, reason.resets_scroll());
+		self.viewport.scene_revision += 1;
 		self.sidebar_cache.invalidate_scene_derived();
 
 		if let Some(duration) = duration {
@@ -336,12 +340,72 @@ impl EditorApp {
 			if reason.records_resize_reflow() {
 				self.perf.record_resize_reflow(duration);
 			}
+			log_scene_refresh("scene rebuilt", duration, layout);
 		}
 	}
 
 	fn finish_decoration_toggle(&mut self) {
-		self.viewport.scene_revision += 1;
 		self.sidebar_cache.invalidate_scene_derived();
+		if self.derived_scene_consumer_active() {
+			if self.ensure_scene_for_active_consumers(None) {
+				return;
+			}
+			self.viewport.scene_revision += 1;
+		}
+	}
+
+	fn finish_editor_refresh(&mut self, reset_scroll: bool) {
+		self.viewport
+			.finish_editor_refresh(self.session.viewport_metrics(), reset_scroll);
+		self.sidebar_cache.invalidate_scene_derived();
+	}
+
+	fn finish_session_refresh(&mut self, reason: SceneRefreshReason) {
+		// Prefer the hot path by default. The scene is only rebuilt when a live
+		// consumer is active; otherwise editor metrics are enough to keep the UI
+		// coherent.
+		if !self.ensure_scene_for_active_consumers(Some(reason)) {
+			self.finish_editor_refresh(reason.resets_scroll());
+		}
+	}
+
+	fn ensure_scene_for_active_consumers(&mut self, reason: Option<SceneRefreshReason>) -> bool {
+		if !self.derived_scene_consumer_active() {
+			return false;
+		}
+
+		let Some(duration) = self.session.ensure_derived_scene() else {
+			return false;
+		};
+
+		if let Some(reason) = reason {
+			// Width/config/document-driven scene work is still worth recording as a
+			// real scene build when it happens for an active consumer.
+			self.finish_presentation_refresh(reason, Some(duration));
+		} else {
+			// Tab switches and similar "cold start" accesses should refresh the
+			// scene cache without back-filling perf metrics that imply an edit or
+			// resize caused the work.
+			self.finish_presentation_refresh(SceneRefreshReason::DocumentEdited, None);
+		}
+
+		true
+	}
+
+	fn derived_scene_consumer_active(&self) -> bool {
+		matches!(self.sidebar.active_tab, SidebarTab::Inspect | SidebarTab::Perf)
+			|| self.controls.show_baselines
+			|| self.controls.show_hitboxes
+	}
+
+	fn inspect_targeting_active(&self) -> bool {
+		self.sidebar.active_tab == SidebarTab::Inspect
+	}
+
+	fn inspect_target(&self, target: Option<crate::types::CanvasTarget>) -> Option<crate::types::CanvasTarget> {
+		// Keep inspect hover/selection state fully dormant outside the Inspect
+		// tab so normal editing never depends on scene hit testing.
+		target.filter(|_| self.inspect_targeting_active())
 	}
 }
 

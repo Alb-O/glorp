@@ -2,7 +2,7 @@ use {
 	crate::{
 		canvas_view::scene_origin,
 		perf::CanvasPerfSink,
-		presentation::DocumentPresentation,
+		presentation::DerivedScenePresentation,
 		types::{Message, WrapChoice},
 	},
 	iced::{
@@ -25,7 +25,7 @@ struct StaticSceneState {
 
 #[derive(Debug, Clone)]
 pub(crate) struct StaticSceneLayer {
-	presentation: DocumentPresentation,
+	scene: DerivedScenePresentation,
 	layout_width: f32,
 	show_baselines: bool,
 	show_hitboxes: bool,
@@ -38,11 +38,11 @@ pub(crate) struct StaticSceneLayer {
 
 impl StaticSceneLayer {
 	pub(crate) fn new(
-		presentation: DocumentPresentation, layout_width: f32, show_baselines: bool, show_hitboxes: bool,
+		scene: DerivedScenePresentation, layout_width: f32, show_baselines: bool, show_hitboxes: bool,
 		scene_revision: u64, scroll: Vector, perf: CanvasPerfSink,
 	) -> Self {
 		Self {
-			presentation,
+			scene,
 			layout_width,
 			show_baselines,
 			show_hitboxes,
@@ -120,8 +120,8 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 		let scene_bounds = Rectangle::new(
 			Point::ORIGIN,
 			Size::new(
-				scene_content_width(self.presentation.layout.as_ref(), self.layout_width),
-				self.presentation.layout.measured_height.max(1.0),
+				scene_content_width(self.scene.layout.as_ref(), self.layout_width),
+				self.scene.layout.measured_height.max(1.0),
 			),
 		);
 		let scene_size_key = (
@@ -174,7 +174,7 @@ impl From<StaticSceneLayer> for Element<'_, Message> {
 
 fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 	if layer.show_baselines {
-		for run in layer.presentation.layout.runs.iter() {
+		for run in layer.scene.layout.runs.iter() {
 			let top_line = canvas::Path::line(
 				Point::new(0.0, run.line_top),
 				Point::new(layer.layout_width, run.line_top),
@@ -200,7 +200,7 @@ fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 	}
 
 	if layer.show_hitboxes {
-		for cluster in layer.presentation.layout.clusters.iter() {
+		for cluster in layer.scene.layout.clusters.iter() {
 			frame.stroke_rectangle(
 				Point::new(cluster.x, cluster.y),
 				Size::new(cluster.width.max(0.5), cluster.height.max(0.5)),

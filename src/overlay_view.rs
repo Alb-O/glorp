@@ -6,7 +6,7 @@ use {
 			OverlaySpace,
 		},
 		perf::CanvasPerfSink,
-		presentation::DocumentPresentation,
+		presentation::{DerivedScenePresentation, EditorPresentation},
 		types::Message,
 	},
 	iced::{
@@ -23,7 +23,8 @@ use {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneOverlayLayer {
-	presentation: DocumentPresentation,
+	editor_presentation: EditorPresentation,
+	derived_scene: Option<DerivedScenePresentation>,
 	layout_width: f32,
 	inspect_overlays: Arc<[OverlayPrimitive]>,
 	focused: bool,
@@ -35,11 +36,12 @@ pub(crate) struct SceneOverlayLayer {
 
 impl SceneOverlayLayer {
 	pub(crate) fn new(
-		presentation: DocumentPresentation, layout_width: f32, inspect_overlays: Arc<[OverlayPrimitive]>,
-		focused: bool, scroll: Vector, perf: CanvasPerfSink,
+		editor_presentation: EditorPresentation, derived_scene: Option<DerivedScenePresentation>, layout_width: f32,
+		inspect_overlays: Arc<[OverlayPrimitive]>, focused: bool, scroll: Vector, perf: CanvasPerfSink,
 	) -> Self {
 		Self {
-			presentation,
+			editor_presentation,
+			derived_scene,
 			layout_width,
 			inspect_overlays,
 			focused,
@@ -63,7 +65,7 @@ impl SceneOverlayLayer {
 
 #[derive(Debug, Clone)]
 pub(crate) struct EditorUnderlayLayer {
-	presentation: DocumentPresentation,
+	presentation: EditorPresentation,
 	scroll: Vector,
 	perf: CanvasPerfSink,
 	width: Length,
@@ -71,7 +73,7 @@ pub(crate) struct EditorUnderlayLayer {
 }
 
 impl EditorUnderlayLayer {
-	pub(crate) fn new(presentation: DocumentPresentation, scroll: Vector, perf: CanvasPerfSink) -> Self {
+	pub(crate) fn new(presentation: EditorPresentation, scroll: Vector, perf: CanvasPerfSink) -> Self {
 		Self {
 			presentation,
 			scroll,
@@ -98,13 +100,16 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 	}
 
 	fn layout(&mut self, _tree: &mut Tree, _renderer: &iced::Renderer, limits: &layout::Limits) -> layout::Node {
+		let measured_height = self
+			.derived_scene
+			.as_ref()
+			.map_or(self.editor_presentation.viewport_metrics.measured_height, |scene| {
+				scene.layout.measured_height
+			});
 		layout::Node::new(limits.resolve(
 			self.width,
 			self.height,
-			Size::new(
-				self.layout_width.max(1.0),
-				self.presentation.layout.measured_height.max(1.0),
-			),
+			Size::new(self.layout_width.max(1.0), measured_height.max(1.0)),
 		))
 	}
 
@@ -133,6 +138,12 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 		}
 
 		if self.focused {
+			let measured_height = self
+				.derived_scene
+				.as_ref()
+				.map_or(self.editor_presentation.viewport_metrics.measured_height, |scene| {
+					scene.layout.measured_height
+				});
 			draw_rect_primitive(
 				renderer,
 				bounds,
@@ -141,21 +152,33 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 					x: 0.0,
 					y: 0.0,
 					width: self.layout_width.max(1.0),
-					height: self.presentation.layout.measured_height.max(1.0),
+					height: measured_height.max(1.0),
 				},
-				OverlayRectKind::EditorFocusFrame(EditorOverlayTone::from(self.presentation.editor.mode)),
+				OverlayRectKind::EditorFocusFrame(EditorOverlayTone::from(self.editor_presentation.editor.mode)),
 				OverlaySpace::Scene,
 			);
 		}
 
-		let scene_footer = format!(
-			"runs={} glyphs={} clusters={} fonts={} width={:.1} height={:.1}",
-			self.presentation.layout.runs.len(),
-			self.presentation.layout.glyph_count,
-			self.presentation.layout.cluster_count,
-			self.presentation.layout.font_count,
-			self.presentation.layout.measured_width,
-			self.presentation.layout.measured_height,
+		let scene_footer = self.derived_scene.as_ref().map_or_else(
+			|| {
+				format!(
+					"bytes={} width={:.1} height={:.1}",
+					self.editor_presentation.editor_bytes,
+					self.editor_presentation.viewport_metrics.measured_width,
+					self.editor_presentation.viewport_metrics.measured_height,
+				)
+			},
+			|scene| {
+				format!(
+					"runs={} glyphs={} clusters={} fonts={} width={:.1} height={:.1}",
+					scene.layout.runs.len(),
+					scene.layout.glyph_count,
+					scene.layout.cluster_count,
+					scene.layout.font_count,
+					scene.layout.measured_width,
+					scene.layout.measured_height,
+				)
+			},
 		);
 		draw_label_primitive(
 			renderer,
@@ -169,7 +192,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 
 		let canvas_status = format!(
 			"mode={} focus={} scroll={:.0},{:.0}",
-			self.presentation.editor.mode, self.focused, self.scroll.x, self.scroll.y
+			self.editor_presentation.editor.mode, self.focused, self.scroll.x, self.scroll.y
 		);
 		draw_label_primitive(
 			renderer,

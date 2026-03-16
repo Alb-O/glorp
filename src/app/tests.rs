@@ -16,12 +16,7 @@ fn assert_approx_eq(left: f32, right: f32) {
 }
 
 fn metric_samples(app: &EditorApp, label: &str) -> u64 {
-	app.perf
-		.dashboard(app.session.layout(), app.session.mode(), app.session.text().len())
-		.hot_paths
-		.iter()
-		.find(|summary| summary.label == label)
-		.map_or(0, |summary| summary.total_samples)
+	app.perf.metric_total_samples(label)
 }
 
 fn editor(intent: EditorIntent) -> Message {
@@ -106,23 +101,30 @@ fn text_edits_flip_the_preset_to_custom() {
 }
 
 #[test]
-fn controls_tab_keeps_presentation_in_sync_after_text_edits() {
+fn controls_tab_keeps_text_edits_on_the_hot_path() {
 	let (mut app, _) = EditorApp::new();
 	let revision_before = app.viewport.scene_revision;
+	let scene_builds_before = app.session.derived_scene_build_count();
 
 	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
 	let _ = app.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
 		"!".to_string(),
 	))));
 
-	assert!(app.viewport.scene_revision > revision_before);
+	assert_eq!(app.viewport.scene_revision, revision_before);
+	assert_eq!(app.session.derived_scene_build_count(), scene_builds_before);
+	assert!(app.session.derived_scene().is_none());
 	assert!(app.session.text().contains('!'));
-	assert_eq!(app.session.layout().text.as_ref(), app.session.text());
+	assert_eq!(
+		app.session.editor_presentation().editor_bytes(),
+		app.session.text().len()
+	);
 }
 
 #[test]
-fn resize_reflow_updates_scene_immediately() {
+fn resize_reflow_updates_scene_when_inspect_is_active() {
 	let (mut app, _) = EditorApp::new();
+	let _ = app.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
 	let revision_before = app.viewport.scene_revision;
 
 	let _ = app.update(resize(Size::new(980.0, 280.0)));
@@ -131,7 +133,14 @@ fn resize_reflow_updates_scene_immediately() {
 	)));
 
 	assert!(app.viewport.scene_revision > revision_before);
-	assert_approx_eq(app.session.layout().max_width, app.viewport.layout_width);
+	assert_approx_eq(
+		app.session
+			.derived_scene()
+			.expect("inspect mode should materialize a derived scene")
+			.layout
+			.max_width,
+		app.viewport.layout_width,
+	);
 }
 
 #[test]
@@ -243,6 +252,6 @@ fn repeated_no_op_inputs_do_not_churn_scene_state() {
 		"!".to_string(),
 	))));
 
-	assert!(app.viewport.scene_revision > revision_before);
-	assert_eq!(app.session.layout().text.as_ref(), app.session.text());
+	assert_eq!(app.viewport.scene_revision, revision_before);
+	assert!(app.session.derived_scene().is_none());
 }

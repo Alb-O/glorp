@@ -9,10 +9,6 @@ use {
 	crate::{HeadlessScriptScenario, types::SidebarTab},
 };
 
-fn assert_approx_eq(left: f32, right: f32) {
-	assert!((left - right).abs() <= 0.001, "left={left} right={right}");
-}
-
 #[test]
 fn large_paste_script_scenario_applies_one_large_edit() {
 	let mut app = EditorApp::headless();
@@ -134,8 +130,9 @@ fn resize_reflow_script_scenario_changes_layout_width_and_revisions() {
 
 	let _ = app.run_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
 
-	assert!(app.viewport.scene_revision > revision_before);
-	assert_approx_eq(app.session.layout().max_width, app.viewport.layout_width);
+	assert_eq!(app.viewport.scene_revision, revision_before);
+	assert!(app.perf.metric_total_samples("editor.width_sync") > 0);
+	assert!(app.session.derived_scene().is_none());
 }
 
 #[test]
@@ -149,7 +146,7 @@ fn perf_incremental_typing_step_mutates_editor_state() {
 
 	assert_eq!(app.session.text().len(), before + 1);
 	assert_eq!(app.session.history_depths().0, history_before + 1);
-	assert_eq!(app.session.layout().text.as_ref(), app.session.text());
+	assert!(app.session.derived_scene().is_none());
 }
 
 #[test]

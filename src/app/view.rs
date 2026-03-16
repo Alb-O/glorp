@@ -56,7 +56,7 @@ impl EditorApp {
 
 	fn view_sidebar(&self, stacked: bool) -> Element<'_, Message> {
 		let (undo_depth, redo_depth) = self.session.history_depths();
-		let presentation = self.session.presentation();
+		let presentation = self.session.editor_presentation();
 		let body = render_sidebar_body(self.sidebar_body_data(undo_depth, redo_depth));
 		view_sidebar(SidebarProps {
 			active_tab: self.sidebar.active_tab,
@@ -75,26 +75,34 @@ impl EditorApp {
 	}
 
 	fn view_canvas(&self, stacked: bool) -> Element<'static, Message> {
-		let presentation = self.session.presentation();
+		let editor_presentation = self.session.editor_presentation();
+		let derived_scene = self.session.derived_scene().cloned();
 		let inspect_overlays = if self.sidebar.active_tab == SidebarTab::Inspect {
-			presentation.inspect_overlay_primitives(
-				self.sidebar.hovered_target,
-				self.sidebar.selected_target,
-				self.viewport.layout_width,
-				self.controls.show_hitboxes,
+			derived_scene.as_ref().map_or_else(
+				|| Arc::from([]),
+				|scene| {
+					scene.layout.inspect_overlay_primitives(
+						self.sidebar.hovered_target,
+						self.sidebar.selected_target,
+						self.viewport.layout_width,
+						self.controls.show_hitboxes,
+					)
+				},
 			)
 		} else {
 			Arc::from([])
 		};
 
 		view_canvas_pane(CanvasPaneProps {
-			presentation: presentation.clone(),
+			editor_presentation: editor_presentation.clone(),
+			derived_scene,
 			layout_width: self.viewport.layout_width,
 			decorations: CanvasDecorations {
 				show_baselines: self.controls.show_baselines,
 				show_hitboxes: self.controls.show_hitboxes,
 			},
 			inspect_overlays,
+			inspect_targets_active: self.sidebar.active_tab == SidebarTab::Inspect,
 			focused: self.viewport.canvas_focused,
 			scene_revision: self.viewport.scene_revision,
 			scroll: self.viewport.canvas_scroll,
@@ -121,10 +129,16 @@ impl EditorApp {
 	}
 
 	fn inspect_sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
+		let scene = self
+			.session
+			.derived_scene()
+			.expect("inspect view requires a materialized derived scene");
 		SidebarBodyData::Inspect(
 			self.sidebar_cache
 				.inspect_model(InspectSidebarArgs {
-					presentation: self.session.presentation(),
+					editor: self.session.editor_presentation(),
+					scene,
+					text: self.session.text(),
 					hovered_target: self.sidebar.hovered_target,
 					selected_target: self.sidebar.selected_target,
 					undo_depth,
@@ -135,9 +149,13 @@ impl EditorApp {
 	}
 
 	fn perf_sidebar_body_data(&self) -> SidebarBodyData {
+		let scene = self
+			.session
+			.derived_scene()
+			.expect("perf view requires a materialized derived scene");
 		SidebarBodyData::Perf(
 			self.sidebar_cache
-				.perf_model(self.session.presentation(), &self.perf)
+				.perf_model(self.session.editor_presentation(), scene, &self.perf)
 				.data,
 		)
 	}
