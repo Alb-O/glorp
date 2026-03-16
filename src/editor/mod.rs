@@ -221,14 +221,7 @@ impl EditorOutcome {
 
 impl EditorViewState {
 	pub(crate) fn overlay_count(&self, kind: OverlayRectKind) -> usize {
-		self.overlays
-			.iter()
-			.filter(|primitive| {
-				primitive
-					.as_rect()
-					.is_some_and(|(_, primitive_kind, ..)| primitive_kind == kind)
-			})
-			.count()
+		self.overlays.iter().filter(|primitive| primitive.kind == kind).count()
 	}
 }
 

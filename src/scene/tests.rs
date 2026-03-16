@@ -1,7 +1,7 @@
 use {
 	super::{LayoutScene, make_font_system, scene_config},
 	crate::{
-		overlay::{OverlayLayer, OverlayPrimitive, OverlayRectKind},
+		overlay::{OverlayLayer, OverlayRectKind},
 		types::{CanvasTarget, FontChoice, ShapingChoice, WrapChoice},
 	},
 	std::sync::Arc,
@@ -70,28 +70,16 @@ fn inspect_overlays_emit_run_and_glyph_primitives() {
 	);
 
 	assert!(overlays.iter().any(|primitive| matches!(
-		primitive,
-		OverlayPrimitive::Rect {
-			kind: OverlayRectKind::InspectRunHover,
-			layer: OverlayLayer::OverText,
-			..
-		}
+		(primitive.kind, primitive.layer),
+		(OverlayRectKind::InspectRunHover, OverlayLayer::OverText)
 	)));
 	assert!(overlays.iter().any(|primitive| matches!(
-		primitive,
-		OverlayPrimitive::Rect {
-			kind: OverlayRectKind::InspectGlyphSelected,
-			layer: OverlayLayer::OverText,
-			..
-		}
+		(primitive.kind, primitive.layer),
+		(OverlayRectKind::InspectGlyphSelected, OverlayLayer::OverText)
 	)));
 	assert!(overlays.iter().any(|primitive| matches!(
-		primitive,
-		OverlayPrimitive::Rect {
-			kind: OverlayRectKind::InspectGlyphHitboxSelected,
-			layer: OverlayLayer::OverText,
-			..
-		}
+		(primitive.kind, primitive.layer),
+		(OverlayRectKind::InspectGlyphHitboxSelected, OverlayLayer::OverText)
 	)));
 }
 
@@ -129,12 +117,8 @@ fn inspect_overlays_fall_back_to_clusters_without_lazy_runs() {
 
 	assert_eq!(overlays.len(), 1);
 	assert!(matches!(
-		&overlays[0],
-		OverlayPrimitive::Rect {
-			kind: OverlayRectKind::InspectGlyphSelected,
-			layer: OverlayLayer::OverText,
-			..
-		}
+		(overlays[0].kind, overlays[0].layer),
+		(OverlayRectKind::InspectGlyphSelected, OverlayLayer::OverText)
 	));
 }
 

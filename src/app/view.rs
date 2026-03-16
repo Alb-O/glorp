@@ -1,7 +1,7 @@
 use {
 	super::{
 		Playground,
-		sidebar_cache::{InspectSidebarModel, PerfSidebarModel},
+		sidebar_cache::{InspectSidebarArgs, InspectSidebarModel, PerfSidebarModel},
 		sidebar_data::{ControlsSidebarData, SidebarBodyData},
 		state::ShellPane,
 	},
@@ -124,15 +124,15 @@ impl Playground {
 
 	fn inspect_sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
 		let editor = self.session.view_state();
-		let model = self.sidebar_cache.inspect_model(
-			self.viewport.scene_revision,
-			self.session.scene(),
-			&editor,
-			self.sidebar.hovered_target,
-			self.sidebar.selected_target,
+		let model = self.sidebar_cache.inspect_model(InspectSidebarArgs {
+			scene_revision: self.viewport.scene_revision,
+			scene: self.session.scene(),
+			editor: &editor,
+			hovered_target: self.sidebar.hovered_target,
+			selected_target: self.sidebar.selected_target,
 			undo_depth,
 			redo_depth,
-		);
+		});
 
 		let InspectSidebarModel { data, .. } = model;
 		SidebarBodyData::Inspect(data)

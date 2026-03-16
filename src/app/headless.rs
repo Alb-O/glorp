@@ -29,7 +29,7 @@ const HEADLESS_UNDO_REDO_STEPS: usize = 48;
 const HEADLESS_INSERT_POSITION_ROWS: usize = 8;
 const HEADLESS_DELETE_SEED_REPEAT: usize = 24;
 const HEADLESS_MOTION_SWEEP_REPEATS: usize = 48;
-const HEADLESS_RESIZE_DRAG_EVENTS: usize = 4;
+const HEADLESS_RESIZE_PROGRESS: [f32; 4] = [0.25, 0.5, 0.75, 1.0];
 const HEADLESS_RESIZE_SETTLE_DELAY: Duration = Duration::from_millis(16);
 const HEADLESS_RESIZE_WIDTHS: [f32; 7] = [1600.0, 1240.0, 980.0, 780.0, 1120.0, 900.0, 1360.0];
 const HEADLESS_MOTION_SEQUENCE: [EditorMotion; 6] = [
@@ -324,8 +324,7 @@ impl Playground {
 		let start = HEADLESS_RESIZE_WIDTHS[step % width_count];
 		let target = HEADLESS_RESIZE_WIDTHS[(step + 1) % width_count];
 
-		for drag_step in 1..=HEADLESS_RESIZE_DRAG_EVENTS {
-			let progress = drag_step as f32 / HEADLESS_RESIZE_DRAG_EVENTS as f32;
+		for progress in HEADLESS_RESIZE_PROGRESS {
 			let width = start + ((target - start) * progress);
 			let _ = self.update(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
 				width,

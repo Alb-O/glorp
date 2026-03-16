@@ -119,24 +119,67 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 			bounds.y + scene_origin().y - self.scroll.y,
 		);
 
-		for primitive in overlay_primitives(bounds, self) {
-			match primitive {
-				OverlayPrimitive::Rect {
-					rect,
-					kind,
-					space,
-					layer: OverlayLayer::OverText,
-				} => draw_rect_primitive(renderer, bounds, origin, rect, kind, space),
-				OverlayPrimitive::Label {
-					position,
-					kind,
-					text,
-					space,
-					layer: OverlayLayer::OverText,
-				} => draw_label_primitive(renderer, bounds, origin, position, kind, &text, space),
-				_ => {}
+		for primitive in self.inspect_overlays.iter() {
+			if primitive.layer == OverlayLayer::OverText {
+				draw_rect_primitive(
+					renderer,
+					bounds,
+					origin,
+					primitive.rect,
+					primitive.kind,
+					primitive.space,
+				);
 			}
 		}
+
+		if self.focused {
+			draw_rect_primitive(
+				renderer,
+				bounds,
+				origin,
+				LayoutRect {
+					x: 0.0,
+					y: 0.0,
+					width: self.layout_width.max(1.0),
+					height: self.scene.measured_height.max(1.0),
+				},
+				OverlayRectKind::EditorFocusFrame(EditorOverlayTone::from(self.editor.mode)),
+				OverlaySpace::Scene,
+			);
+		}
+
+		let scene_footer = format!(
+			"runs={} glyphs={} clusters={} fonts={} width={:.1} height={:.1}",
+			self.scene.runs.len(),
+			self.scene.glyph_count,
+			self.scene.cluster_count,
+			self.scene.font_count,
+			self.scene.measured_width,
+			self.scene.measured_height,
+		);
+		draw_label_primitive(
+			renderer,
+			bounds,
+			origin,
+			Point::new(24.0, bounds.height - 24.0),
+			OverlayLabelKind::SceneFooter,
+			&scene_footer,
+			OverlaySpace::Viewport,
+		);
+
+		let canvas_status = format!(
+			"mode={} focus={} scroll={:.0},{:.0}",
+			self.editor.mode, self.focused, self.scroll.x, self.scroll.y
+		);
+		draw_label_primitive(
+			renderer,
+			bounds,
+			origin,
+			Point::new(bounds.width - 170.0, bounds.height - 24.0),
+			OverlayLabelKind::CanvasStatus,
+			&canvas_status,
+			OverlaySpace::Viewport,
+		);
 
 		self.perf.record_canvas_overlay(started.elapsed());
 	}
@@ -170,19 +213,18 @@ impl Widget<Message, Theme, iced::Renderer> for EditorUnderlayLayer {
 			.iter()
 			.filter(|primitive| primitive.layer() == OverlayLayer::UnderText)
 		{
-			if matches!(
-				primitive,
-				OverlayPrimitive::Rect {
-					kind: OverlayRectKind::EditorSelection(_),
-					..
-				}
-			) {
+			if matches!(primitive.kind, OverlayRectKind::EditorSelection(_)) {
 				continue;
 			}
 
-			if let OverlayPrimitive::Rect { rect, kind, space, .. } = primitive {
-				draw_rect_primitive(renderer, bounds, origin, *rect, *kind, *space);
-			}
+			draw_rect_primitive(
+				renderer,
+				bounds,
+				origin,
+				primitive.rect,
+				primitive.kind,
+				primitive.space,
+			);
 		}
 
 		self.perf.record_canvas_underlay(started.elapsed());
@@ -199,50 +241,6 @@ impl From<EditorUnderlayLayer> for Element<'_, Message> {
 	fn from(widget: EditorUnderlayLayer) -> Self {
 		Element::new(widget)
 	}
-}
-
-fn overlay_primitives(bounds: Rectangle, overlay: &SceneOverlayLayer) -> Vec<OverlayPrimitive> {
-	let mut primitives = Vec::with_capacity(overlay.inspect_overlays.len() + 3);
-	primitives.extend(overlay.inspect_overlays.iter().cloned());
-
-	if overlay.focused {
-		primitives.push(OverlayPrimitive::scene_rect(
-			LayoutRect {
-				x: 0.0,
-				y: 0.0,
-				width: overlay.layout_width.max(1.0),
-				height: overlay.scene.measured_height.max(1.0),
-			},
-			OverlayRectKind::EditorFocusFrame(EditorOverlayTone::from(overlay.editor.mode)),
-			OverlayLayer::OverText,
-		));
-	}
-
-	primitives.push(OverlayPrimitive::viewport_label(
-		Point::new(24.0, bounds.height - 24.0),
-		OverlayLabelKind::SceneFooter,
-		format!(
-			"runs={} glyphs={} clusters={} fonts={} width={:.1} height={:.1}",
-			overlay.scene.runs.len(),
-			overlay.scene.glyph_count,
-			overlay.scene.cluster_count,
-			overlay.scene.font_count,
-			overlay.scene.measured_width,
-			overlay.scene.measured_height,
-		),
-		OverlayLayer::OverText,
-	));
-	primitives.push(OverlayPrimitive::viewport_label(
-		Point::new(bounds.width - 170.0, bounds.height - 24.0),
-		OverlayLabelKind::CanvasStatus,
-		format!(
-			"mode={} focus={} scroll={:.0},{:.0}",
-			overlay.editor.mode, overlay.focused, overlay.scroll.x, overlay.scroll.y
-		),
-		OverlayLayer::OverText,
-	));
-
-	primitives
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -340,17 +338,11 @@ fn draw_selection_underlay(
 		.iter()
 		.filter(|primitive| primitive.layer() == OverlayLayer::UnderText)
 	{
-		let OverlayPrimitive::Rect {
-			rect,
-			kind: OverlayRectKind::EditorSelection(tone),
-			space,
-			..
-		} = primitive
-		else {
+		let OverlayRectKind::EditorSelection(tone) = primitive.kind else {
 			continue;
 		};
 
-		let rect = rect_bounds(bounds, origin, *rect, *space);
+		let rect = rect_bounds(bounds, origin, primitive.rect, primitive.space);
 		let rect = LayoutRect {
 			x: rect.x,
 			y: rect.y,

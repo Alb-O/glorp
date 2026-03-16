@@ -1,5 +1,3 @@
-use {iced::Point, std::sync::Arc};
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct LayoutRect {
 	pub(crate) x: f32,
@@ -57,25 +55,16 @@ pub(crate) enum OverlayLabelKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum OverlayPrimitive {
-	Rect {
-		rect: LayoutRect,
-		kind: OverlayRectKind,
-		space: OverlaySpace,
-		layer: OverlayLayer,
-	},
-	Label {
-		position: Point,
-		kind: OverlayLabelKind,
-		text: Arc<str>,
-		space: OverlaySpace,
-		layer: OverlayLayer,
-	},
+pub(crate) struct OverlayPrimitive {
+	pub(crate) rect: LayoutRect,
+	pub(crate) kind: OverlayRectKind,
+	pub(crate) space: OverlaySpace,
+	pub(crate) layer: OverlayLayer,
 }
 
 impl OverlayPrimitive {
 	pub(crate) fn scene_rect(rect: LayoutRect, kind: OverlayRectKind, layer: OverlayLayer) -> Self {
-		Self::Rect {
+		Self {
 			rect,
 			kind,
 			space: OverlaySpace::Scene,
@@ -83,33 +72,7 @@ impl OverlayPrimitive {
 		}
 	}
 
-	pub(crate) fn viewport_label(
-		position: Point, kind: OverlayLabelKind, text: impl Into<Arc<str>>, layer: OverlayLayer,
-	) -> Self {
-		Self::Label {
-			position,
-			kind,
-			text: text.into(),
-			space: OverlaySpace::Viewport,
-			layer,
-		}
-	}
-
-	pub(crate) fn as_rect(&self) -> Option<(LayoutRect, OverlayRectKind, OverlaySpace, OverlayLayer)> {
-		match self {
-			Self::Rect {
-				rect,
-				kind,
-				space,
-				layer,
-			} => Some((*rect, *kind, *space, *layer)),
-			Self::Label { .. } => None,
-		}
-	}
-
 	pub(crate) fn layer(&self) -> OverlayLayer {
-		match self {
-			Self::Rect { layer, .. } | Self::Label { layer, .. } => *layer,
-		}
+		self.layer
 	}
 }

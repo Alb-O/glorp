@@ -64,29 +64,30 @@ impl LayoutScene {
 		&self, hovered_target: Option<CanvasTarget>, selected_target: Option<CanvasTarget>, layout_width: f32,
 		show_hitboxes: bool,
 	) -> Arc<[OverlayPrimitive]> {
-		let mut overlays = Vec::new();
+		let mut overlays = Vec::with_capacity(4);
 
 		if let Some(target) = hovered_target {
-			overlays.extend(self.target_overlay_primitives(target, false, layout_width, show_hitboxes));
+			self.append_target_overlay_primitives(&mut overlays, target, false, layout_width, show_hitboxes);
 		}
 
 		if let Some(target) = selected_target {
-			overlays.extend(self.target_overlay_primitives(target, true, layout_width, show_hitboxes));
+			self.append_target_overlay_primitives(&mut overlays, target, true, layout_width, show_hitboxes);
 		}
 
 		overlays.into()
 	}
 
-	fn target_overlay_primitives(
-		&self, target: CanvasTarget, selected: bool, layout_width: f32, show_hitboxes: bool,
-	) -> Vec<OverlayPrimitive> {
+	fn append_target_overlay_primitives(
+		&self, overlays: &mut Vec<OverlayPrimitive>, target: CanvasTarget, selected: bool, layout_width: f32,
+		show_hitboxes: bool,
+	) {
 		match target {
 			CanvasTarget::Run(run_index) => {
 				let Some(run) = self.runs.get(run_index) else {
-					return Vec::new();
+					return;
 				};
 
-				vec![OverlayPrimitive::scene_rect(
+				overlays.push(OverlayPrimitive::scene_rect(
 					LayoutRect {
 						x: 0.0,
 						y: run.line_top,
@@ -99,13 +100,13 @@ impl LayoutScene {
 						OverlayRectKind::InspectRunHover
 					},
 					OverlayLayer::OverText,
-				)]
+				));
 			}
 			CanvasTarget::Glyph { .. } => {
 				let Some(rect) = self.target_rect(target) else {
-					return Vec::new();
+					return;
 				};
-				let mut overlays = vec![OverlayPrimitive::scene_rect(
+				overlays.push(OverlayPrimitive::scene_rect(
 					rect,
 					if selected {
 						OverlayRectKind::InspectGlyphSelected
@@ -113,7 +114,7 @@ impl LayoutScene {
 						OverlayRectKind::InspectGlyphHover
 					},
 					OverlayLayer::OverText,
-				)];
+				));
 
 				if show_hitboxes {
 					overlays.push(OverlayPrimitive::scene_rect(
@@ -126,7 +127,6 @@ impl LayoutScene {
 						OverlayLayer::OverText,
 					));
 				}
-				overlays
 			}
 		}
 	}

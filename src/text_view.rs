@@ -88,6 +88,8 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 		_style: &renderer::Style, layout: Layout<'_>, _cursor: mouse::Cursor, _viewport: &Rectangle,
 	) {
 		let bounds = layout.bounds();
+		let content_width = self.layout_width.max(1.0);
+		let text_height = self.text_layer.measured_height.max(1.0);
 		let origin = Point::new(
 			bounds.x + scene_origin().x - self.scroll.x,
 			bounds.y + scene_origin().y - self.scroll.y,
@@ -107,10 +109,8 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 					bounds: Rectangle::new(
 						origin,
 						Size::new(
-							self.layout_width.max(1.0),
-							self.text_layer
-								.measured_height
-								.max(bounds.height - origin.y + bounds.y - 24.0),
+							content_width,
+							text_height.max(bounds.height - origin.y + bounds.y - 24.0),
 						),
 					),
 					..renderer::Quad::default()
@@ -128,10 +128,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 
 			renderer.fill_quad(
 				renderer::Quad {
-					bounds: Rectangle::new(
-						origin,
-						Size::new(self.layout_width.max(1.0), self.text_layer.measured_height.max(1.0)),
-					),
+					bounds: Rectangle::new(origin, Size::new(content_width, text_height)),
 					border: iced::Border {
 						width: 1.0,
 						color: BORDER_COLOR,
@@ -144,15 +141,16 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 		}
 
 		if self.draw_text {
+			let buffer = self.text_layer.buffer.clone();
 			renderer.fill_raw(iced::advanced::graphics::text::Raw {
-				buffer: self.text_layer.buffer.clone(),
+				buffer: buffer.clone(),
 				position: origin,
 				color: TEXT_COLOR,
 				clip_bounds: bounds,
 			});
 			if let Some(clip) = insert_repaint_clip(origin, self.editor.mode, self.editor.viewport_target) {
 				renderer.fill_raw(iced::advanced::graphics::text::Raw {
-					buffer: self.text_layer.buffer.clone(),
+					buffer,
 					position: origin,
 					color: INSERT_GLYPH_COLOR,
 					clip_bounds: clip,

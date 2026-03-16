@@ -4,7 +4,7 @@ use {
 		EditorPointerIntent, TextEdit, geometry::selection_rectangles,
 	},
 	crate::{
-		overlay::{EditorOverlayTone, LayoutRect, OverlayPrimitive, OverlayRectKind},
+		overlay::{EditorOverlayTone, LayoutRect, OverlayRectKind},
 		scene::{LayoutScene, make_font_system, scene_config},
 		types::{FontChoice, ShapingChoice, WrapChoice},
 	},
@@ -52,14 +52,8 @@ fn pointer(intent: EditorPointerIntent) -> EditorIntent {
 fn rects(view: &super::EditorViewState, kind: OverlayRectKind) -> Vec<LayoutRect> {
 	view.overlays
 		.iter()
-		.filter_map(|primitive| match primitive {
-			OverlayPrimitive::Rect {
-				rect,
-				kind: primitive_kind,
-				..
-			} if *primitive_kind == kind => Some(*rect),
-			_ => None,
-		})
+		.filter(|primitive| primitive.kind == kind)
+		.map(|primitive| primitive.rect)
 		.collect()
 }
 

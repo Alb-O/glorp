@@ -206,7 +206,7 @@ pub(super) fn build_dashboard(
 }
 
 fn metric_summary(store: &PerfStore, kind: MetricKind) -> PerfMetricSummary {
-	let series = &store.metrics[kind_index(kind)];
+	let series = &store.metrics[kind.index()];
 	PerfMetricSummary {
 		label: kind.label(),
 		last_ms: series.window.back().copied().unwrap_or_default(),
@@ -222,7 +222,7 @@ fn metric_summary(store: &PerfStore, kind: MetricKind) -> PerfMetricSummary {
 fn recent_metric_activity(store: &PerfStore, kind: MetricKind) -> PerfRecentActivity {
 	PerfRecentActivity {
 		label: kind.label(),
-		recent_ms: recent_values(&store.metrics[kind_index(kind)].window),
+		recent_ms: recent_values(&store.metrics[kind.index()].window),
 	}
 }
 
@@ -282,7 +282,7 @@ fn graphs(store: &PerfStore) -> Vec<PerfGraphSeries> {
 		let summary = metric_summary(store, kind);
 		graphs.push(PerfGraphSeries {
 			title: kind.label(),
-			samples_ms: store.metrics[kind_index(kind)].window.iter().copied().collect(),
+			samples_ms: store.metrics[kind.index()].window.iter().copied().collect(),
 			ceiling_ms: graph_ceiling(summary.max_ms.max(summary.p95_ms), true),
 			latest_ms: summary.last_ms,
 			avg_ms: summary.avg_ms,
@@ -314,13 +314,6 @@ pub(super) fn graph_ceiling(max_sample_ms: f32, keep_low_range: bool) -> f32 {
 
 fn recent_values(values: &std::collections::VecDeque<f32>) -> Vec<f32> {
 	values.iter().rev().take(RECENT_LIMIT).copied().collect()
-}
-
-fn kind_index(kind: MetricKind) -> usize {
-	MetricKind::ALL
-		.into_iter()
-		.position(|candidate| candidate == kind)
-		.expect("metric kind should be indexed")
 }
 
 #[cfg(test)]

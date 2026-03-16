@@ -74,43 +74,24 @@ impl SidebarCache {
 		self.invalidate_perf();
 	}
 
-	pub(super) fn inspect_model(
-		&self, scene_revision: u64, scene: &LayoutScene, editor: &EditorViewState,
-		hovered_target: Option<CanvasTarget>, selected_target: Option<CanvasTarget>, undo_depth: usize,
-		redo_depth: usize,
-	) -> InspectSidebarModel {
-		let key = InspectSidebarKey {
-			scene_revision,
-			hovered_target,
-			selected_target,
-			editor_mode: editor.mode,
-			selection_start: editor.selection.as_ref().map(|range| range.start),
-			selection_end: editor.selection.as_ref().map(|range| range.end),
-			selection_head: editor.selection_head,
-			pointer_anchor: editor.pointer_anchor,
-			undo_depth,
-			redo_depth,
-		};
+	pub(super) fn inspect_model(&self, args: InspectSidebarArgs<'_>) -> InspectSidebarModel {
+		let key = args.key();
 
-		if !self.inspect_dirty.get() {
-			if let Some(model) = self.inspect.borrow().as_ref() {
-				if model.key == key {
-					return model.clone();
-				}
-			}
+		if let Some(model) = cached_model(&self.inspect, &self.inspect_dirty, key, |model| model.key) {
+			return model;
 		}
 
 		let model = InspectSidebarModel {
 			key,
 			data: Arc::new(InspectSidebarData {
-				warnings: scene.warnings.clone(),
+				warnings: args.scene.warnings.clone(),
 				interaction_details: interaction_details(
-					scene,
-					editor,
-					hovered_target,
-					selected_target,
-					undo_depth,
-					redo_depth,
+					args.scene,
+					args.editor,
+					args.hovered_target,
+					args.selected_target,
+					args.undo_depth,
+					args.redo_depth,
 				),
 			}),
 		};
@@ -132,12 +113,8 @@ impl SidebarCache {
 			perf: perf.key(),
 		};
 
-		if !self.perf_dirty.get() {
-			if let Some(model) = self.perf.borrow().as_ref() {
-				if model.key == key {
-					return model.clone();
-				}
-			}
+		if let Some(model) = cached_model(&self.perf, &self.perf_dirty, key, |model| model.key) {
+			return model;
 		}
 
 		let model = PerfSidebarModel {
@@ -162,6 +139,48 @@ impl SidebarCache {
 	pub(super) fn perf_build_count(&self) -> usize {
 		self.perf_builds.get()
 	}
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct InspectSidebarArgs<'a> {
+	pub(super) scene_revision: u64,
+	pub(super) scene: &'a LayoutScene,
+	pub(super) editor: &'a EditorViewState,
+	pub(super) hovered_target: Option<CanvasTarget>,
+	pub(super) selected_target: Option<CanvasTarget>,
+	pub(super) undo_depth: usize,
+	pub(super) redo_depth: usize,
+}
+
+impl InspectSidebarArgs<'_> {
+	fn key(self) -> InspectSidebarKey {
+		InspectSidebarKey {
+			scene_revision: self.scene_revision,
+			hovered_target: self.hovered_target,
+			selected_target: self.selected_target,
+			editor_mode: self.editor.mode,
+			selection_start: self.editor.selection.as_ref().map(|range| range.start),
+			selection_end: self.editor.selection.as_ref().map(|range| range.end),
+			selection_head: self.editor.selection_head,
+			pointer_anchor: self.editor.pointer_anchor,
+			undo_depth: self.undo_depth,
+			redo_depth: self.redo_depth,
+		}
+	}
+}
+
+fn cached_model<T, K>(model: &RefCell<Option<T>>, dirty: &Cell<bool>, key: K, key_of: impl Fn(&T) -> K) -> Option<T>
+where
+	T: Clone,
+	K: Copy + Eq, {
+	if !dirty.get()
+		&& let Some(model) = model.borrow().as_ref()
+		&& key_of(model) == key
+	{
+		return Some(model.clone());
+	}
+
+	None
 }
 
 fn interaction_details(

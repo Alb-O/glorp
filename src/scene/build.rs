@@ -85,11 +85,7 @@ impl LayoutScene {
 			let cluster_start = cluster_count;
 			cluster_count += count_clusters(run.glyphs);
 
-			for glyph in run.glyphs {
-				if !font_ids.contains(&glyph.font_id) {
-					font_ids.push(glyph.font_id);
-				}
-			}
+			font_ids.extend(run.glyphs.iter().map(|glyph| glyph.font_id));
 
 			runs.push(RunInfo {
 				line_index: run.line_i,
@@ -102,6 +98,9 @@ impl LayoutScene {
 				glyph_count: run.glyphs.len(),
 			});
 		}
+
+		font_ids.sort_unstable();
+		font_ids.dedup();
 
 		let font_names = font_ids
 			.into_iter()
