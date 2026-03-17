@@ -16,7 +16,7 @@ fn assert_approx_eq(left: f32, right: f32) {
 }
 
 fn metric_samples(app: &EditorApp, label: &str) -> u64 {
-	app.perf.metric_total_samples(label)
+	app.model.perf.metric_total_samples(label)
 }
 
 fn editor(intent: EditorIntent) -> Message {
@@ -52,19 +52,20 @@ fn edits_preserve_visible_scroll_position() {
 	}
 
 	let target = app
+		.model
 		.session
 		.view_state()
 		.viewport_target
 		.expect("selection should expose a viewport target");
-	app.viewport.canvas_scroll = Vector::new(0.0, (target.y - 40.0).max(0.0));
-	let previous_scroll = app.viewport.canvas_scroll;
+	app.model.viewport.canvas_scroll = Vector::new(0.0, (target.y - 40.0).max(0.0));
+	let previous_scroll = app.model.viewport.canvas_scroll;
 
 	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
 	let _ = app.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
 		"!".to_string(),
 	))));
 
-	assert_eq!(app.viewport.canvas_scroll, previous_scroll);
+	assert_eq!(app.model.viewport.canvas_scroll, previous_scroll);
 }
 
 #[test]
@@ -76,7 +77,7 @@ fn keyboard_motion_reveals_caret_when_it_leaves_viewport() {
 		let _ = app.update(editor(EditorIntent::Motion(EditorMotion::Down)));
 	}
 
-	assert!(app.viewport.canvas_scroll.y > 0.0);
+	assert!(app.model.viewport.canvas_scroll.y > 0.0);
 }
 
 #[test]
@@ -85,7 +86,7 @@ fn keyboard_motion_keeps_the_selected_preset() {
 
 	let _ = app.update(editor(EditorIntent::Motion(EditorMotion::Right)));
 
-	assert_eq!(app.controls.preset, crate::types::SamplePreset::Tall);
+	assert_eq!(app.model.controls.preset, crate::types::SamplePreset::Tall);
 }
 
 #[test]
@@ -97,14 +98,14 @@ fn text_edits_flip_the_preset_to_custom() {
 		"!".to_string(),
 	))));
 
-	assert_eq!(app.controls.preset, crate::types::SamplePreset::Custom);
+	assert_eq!(app.model.controls.preset, crate::types::SamplePreset::Custom);
 }
 
 #[test]
 fn controls_tab_keeps_text_edits_on_the_hot_path() {
 	let (mut app, _) = EditorApp::new();
-	let revision_before = app.session.snapshot().scene.as_ref().map(|scene| scene.revision);
-	let scene_builds_before = app.session.derived_scene_build_count();
+	let revision_before = app.model.session.snapshot().scene.as_ref().map(|scene| scene.revision);
+	let scene_builds_before = app.model.session.derived_scene_build_count();
 
 	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
 	let _ = app.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
@@ -112,36 +113,54 @@ fn controls_tab_keeps_text_edits_on_the_hot_path() {
 	))));
 
 	assert_eq!(
-		app.session.snapshot().scene.as_ref().map(|scene| scene.revision),
+		app.model.session.snapshot().scene.as_ref().map(|scene| scene.revision),
 		revision_before
 	);
-	assert_eq!(app.session.derived_scene_build_count(), scene_builds_before);
-	assert!(app.session.snapshot().scene.is_none());
-	assert!(app.session.text().contains('!'));
-	assert_eq!(app.session.snapshot().editor.editor_bytes(), app.session.text().len());
+	assert_eq!(app.model.session.derived_scene_build_count(), scene_builds_before);
+	assert!(app.model.session.snapshot().scene.is_none());
+	assert!(app.model.session.text().contains('!'));
+	assert_eq!(
+		app.model.session.snapshot().editor.editor_bytes(),
+		app.model.session.text().len()
+	);
 }
 
 #[test]
 fn resize_reflow_updates_scene_when_inspect_is_active() {
 	let (mut app, _) = EditorApp::new();
 	let _ = app.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
-	let revision_before = app.session.snapshot().scene.as_ref().map_or(0, |scene| scene.revision);
+	let revision_before = app
+		.model
+		.session
+		.snapshot()
+		.scene
+		.as_ref()
+		.map_or(0, |scene| scene.revision);
 
 	let _ = app.update(resize(Size::new(980.0, 280.0)));
 	let _ = app.update(Message::Viewport(ViewportMessage::ResizeTick(
 		Instant::now() + RESIZE_REFLOW_INTERVAL,
 	)));
 
-	assert!(app.session.snapshot().scene.as_ref().map_or(0, |scene| scene.revision) > revision_before);
+	assert!(
+		app.model
+			.session
+			.snapshot()
+			.scene
+			.as_ref()
+			.map_or(0, |scene| scene.revision)
+			> revision_before
+	);
 	assert_approx_eq(
-		app.session
+		app.model
+			.session
 			.snapshot()
 			.scene
 			.as_ref()
 			.expect("inspect mode should materialize a derived scene")
 			.layout
 			.max_width,
-		app.viewport.layout_width,
+		app.model.viewport.layout_width,
 	);
 }
 
@@ -177,13 +196,13 @@ fn leaving_inspect_clears_hover_and_selection() {
 			select_word: false,
 		},
 	}));
-	assert!(app.sidebar.hovered_target.is_some());
-	assert!(app.sidebar.selected_target.is_some());
+	assert!(app.model.sidebar.hovered_target.is_some());
+	assert!(app.model.sidebar.selected_target.is_some());
 
 	let _ = app.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Controls)));
 
-	assert_eq!(app.sidebar.hovered_target, None);
-	assert_eq!(app.sidebar.selected_target, None);
+	assert_eq!(app.model.sidebar.hovered_target, None);
+	assert_eq!(app.model.sidebar.selected_target, None);
 }
 
 #[test]
@@ -202,7 +221,8 @@ fn canvas_generated_editor_intents_flow_through_session() {
 	))));
 
 	assert!(
-		app.session
+		app.model
+			.session
 			.view_state()
 			.selection
 			.is_some_and(|selection| selection.end > selection.start)
@@ -216,13 +236,13 @@ fn inspect_sidebar_cache_reuses_model_until_inputs_change() {
 
 	let _ = app.test_view_sidebar();
 	let _ = app.test_view_sidebar();
-	assert_eq!(app.sidebar_cache.inspect_build_count(), 1);
+	assert_eq!(app.model.sidebar_cache.inspect_build_count(), 1);
 
 	let _ = app.update(Message::Canvas(CanvasEvent::Hovered(Some(
 		crate::types::CanvasTarget::Run(0),
 	))));
 	let _ = app.test_view_sidebar();
-	assert_eq!(app.sidebar_cache.inspect_build_count(), 2);
+	assert_eq!(app.model.sidebar_cache.inspect_build_count(), 2);
 }
 
 #[test]
@@ -232,21 +252,23 @@ fn perf_sidebar_cache_reuses_model_until_metrics_change() {
 
 	let _ = app.test_view_sidebar();
 	let _ = app.test_view_sidebar();
-	assert_eq!(app.sidebar_cache.perf_build_count(), 1);
+	assert_eq!(app.model.sidebar_cache.perf_build_count(), 1);
 
 	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
 	let _ = app.test_view_sidebar();
-	assert_eq!(app.sidebar_cache.perf_build_count(), 2);
+	assert_eq!(app.model.sidebar_cache.perf_build_count(), 2);
 }
 
 #[test]
 fn repeated_no_op_inputs_do_not_churn_scene_state() {
 	let (mut app, _) = EditorApp::new();
-	let revision_before = app.session.snapshot().scene.as_ref().map(|scene| scene.revision);
+	let revision_before = app.model.session.snapshot().scene.as_ref().map(|scene| scene.revision);
 
-	let _ = app.update(Message::Controls(ControlsMessage::FontSelected(app.controls.font)));
+	let _ = app.update(Message::Controls(ControlsMessage::FontSelected(
+		app.model.controls.font,
+	)));
 	let _ = app.update(Message::Controls(ControlsMessage::ShowHitboxesChanged(
-		app.controls.show_hitboxes,
+		app.model.controls.show_hitboxes,
 	)));
 
 	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
@@ -255,8 +277,8 @@ fn repeated_no_op_inputs_do_not_churn_scene_state() {
 	))));
 
 	assert_eq!(
-		app.session.snapshot().scene.as_ref().map(|scene| scene.revision),
+		app.model.session.snapshot().scene.as_ref().map(|scene| scene.revision),
 		revision_before
 	);
-	assert!(app.session.snapshot().scene.is_none());
+	assert!(app.model.session.snapshot().scene.is_none());
 }

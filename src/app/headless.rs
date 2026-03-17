@@ -1,12 +1,9 @@
 use {
-	super::EditorApp,
+	super::{AppModel, EditorApp, update::AppAction},
 	crate::{
 		HeadlessScenario, HeadlessScriptScenario, PerfScenario,
-		app::session::SceneDemand,
-		editor::{
-			EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent,
-		},
-		perf::PerfMonitor,
+		editor::{EditorEditIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent},
+		perf::{PerfDashboard, PerfFramePacingSummary, PerfGraphSeries, PerfMonitor, PerfOverview, PerfRecentActivity},
 		types::{
 			CanvasEvent, CanvasTarget, ControlsMessage, Message, SamplePreset, SidebarMessage, SidebarTab,
 			ViewportMessage,
@@ -20,15 +17,23 @@ use {
 	},
 };
 
+#[cfg(test)]
+use crate::editor::EditorHistoryIntent;
+
 const HEADLESS_VIEWPORT_SIZE: Size = Size::new(1600.0, 1000.0);
 const HEADLESS_BENCH_DOCUMENT_LINES: usize = 768;
 const HEADLESS_LINE_BREAK_DOCUMENT_LINES: usize = 128;
+#[cfg(test)]
 const HEADLESS_LARGE_PASTE_LINES: usize = 96;
+#[cfg(test)]
 const HEADLESS_INCREMENTAL_TYPING_STEPS: usize = 256;
+#[cfg(test)]
 const HEADLESS_INCREMENTAL_LINE_BREAK_STEPS: usize = 48;
+#[cfg(test)]
 const HEADLESS_UNDO_REDO_STEPS: usize = 48;
 const HEADLESS_INSERT_POSITION_ROWS: usize = 8;
 const HEADLESS_DELETE_SEED_REPEAT: usize = 24;
+#[cfg(test)]
 const HEADLESS_MOTION_SWEEP_REPEATS: usize = 48;
 const HEADLESS_RESIZE_PROGRESS: [f32; 4] = [0.25, 0.5, 0.75, 1.0];
 const HEADLESS_RESIZE_SETTLE_DELAY: Duration = Duration::from_millis(16);
@@ -59,30 +64,78 @@ const HEADLESS_BENCH_LINE_SEEDS: [&str; 6] = [
 ];
 const ASCII_LOWERCASE: &[u8; 26] = b"abcdefghijklmnopqrstuvwxyz";
 
+pub(crate) struct HeadlessDriver<'a> {
+	app: &'a mut AppModel,
+}
+
 impl EditorApp {
-	pub fn configure_headless_scenario(&mut self, scenario: HeadlessScenario) {
-		self.configure_headless_viewport();
+	pub(crate) fn headless_driver(&mut self) -> HeadlessDriver<'_> {
+		HeadlessDriver { app: &mut self.model }
+	}
+
+	pub(crate) fn reset_perf_monitor(&mut self) {
+		self.model.perf = PerfMonitor::default();
+	}
+
+	pub(crate) fn record_headless_ui_build(&mut self, duration: Duration) {
+		self.model.perf.record_ui_build(duration);
+	}
+
+	pub(crate) fn record_headless_ui_draw(&mut self, duration: Duration) {
+		self.model.perf.record_ui_draw(duration);
+	}
+
+	pub(crate) fn flush_perf_metrics(&mut self) {
+		self.model.perf.flush_canvas_metrics();
+	}
+
+	pub(crate) fn perf_dashboard(&mut self) -> PerfDashboard {
+		self.model.ensure_scene_ready();
+		let snapshot = self.model.session.snapshot();
+
+		snapshot.scene.as_ref().map_or_else(
+			|| {
+				unavailable_perf_dashboard(
+					snapshot.mode(),
+					snapshot.editor_bytes(),
+					self.model.viewport.layout_width,
+				)
+			},
+			|scene| {
+				self.model.perf.dashboard(
+					scene.layout.as_ref(),
+					self.model.session.mode(),
+					snapshot.editor.editor_bytes(),
+				)
+			},
+		)
+	}
+}
+
+impl HeadlessDriver<'_> {
+	pub(crate) fn configure_scenario(&mut self, scenario: HeadlessScenario) {
+		self.configure_viewport();
 
 		match scenario {
 			HeadlessScenario::Default => {}
 			HeadlessScenario::Tall => {
-				self.dispatch_headless(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
+				self.dispatch_message(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)))
 			}
 			HeadlessScenario::TallInspect => {
-				self.dispatch_headless(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
-				self.enable_headless_inspect_mode();
-				self.dispatch_headless(Message::Canvas(CanvasEvent::Hovered(Some(CanvasTarget::Cluster(0)))));
+				self.dispatch_message(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
+				self.enable_inspect_mode();
+				self.dispatch_message(Message::Canvas(CanvasEvent::Hovered(Some(CanvasTarget::Cluster(0)))));
 			}
 			HeadlessScenario::TallPerf => {
-				self.dispatch_headless(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
-				self.dispatch_headless(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Perf)));
+				self.dispatch_message(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
+				self.dispatch_message(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Perf)));
 			}
 		}
 	}
 
-	pub fn configure_headless_script_scenario(&mut self, scenario: HeadlessScriptScenario) {
-		self.configure_headless_viewport();
-		self.load_headless_document(match scenario {
+	pub(crate) fn configure_script_scenario(&mut self, scenario: HeadlessScriptScenario) {
+		self.configure_viewport();
+		self.load_document(match scenario {
 			HeadlessScriptScenario::IncrementalLineBreaks => headless_line_break_document(),
 			_ => headless_bench_document(),
 		});
@@ -91,29 +144,29 @@ impl EditorApp {
 			HeadlessScriptScenario::LargePaste
 			| HeadlessScriptScenario::IncrementalTyping
 			| HeadlessScriptScenario::IncrementalLineBreaks
-			| HeadlessScriptScenario::UndoRedoBurst => self.position_headless_insert_point(),
+			| HeadlessScriptScenario::UndoRedoBurst => self.position_insert_point(),
 			HeadlessScriptScenario::BackspaceBurst => {
-				self.position_headless_insert_point();
-				self.apply_headless_insert(headless_delete_seed_chunk());
+				self.position_insert_point();
+				self.apply_insert(headless_delete_seed_chunk());
 			}
 			HeadlessScriptScenario::DeleteForwardBurst => {
-				self.position_headless_insert_point();
-				self.apply_headless_insert(headless_delete_seed_chunk());
+				self.position_insert_point();
+				self.apply_insert(headless_delete_seed_chunk());
 				self.rewind_insert_caret(delete_seed_char_count());
 			}
 			HeadlessScriptScenario::MotionSweep
 			| HeadlessScriptScenario::PointerSelectionSweep
 			| HeadlessScriptScenario::ResizeReflowSweep => {}
 			HeadlessScriptScenario::InspectInteractionSweep => {
-				self.enable_headless_inspect_mode();
+				self.enable_inspect_mode();
 			}
 		}
 	}
 
-	pub(crate) fn configure_headless_perf_scenario(&mut self, scenario: PerfScenario) {
+	pub(crate) fn configure_perf_scenario(&mut self, scenario: PerfScenario) {
 		match scenario {
 			PerfScenario::Default | PerfScenario::Tall | PerfScenario::TallInspect | PerfScenario::TallPerf => {
-				self.configure_headless_scenario(match scenario {
+				self.configure_scenario(match scenario {
 					PerfScenario::Default => HeadlessScenario::Default,
 					PerfScenario::Tall => HeadlessScenario::Tall,
 					PerfScenario::TallInspect => HeadlessScenario::TallInspect,
@@ -122,20 +175,20 @@ impl EditorApp {
 				});
 			}
 			PerfScenario::IncrementalTyping | PerfScenario::MotionSweep | PerfScenario::InspectInteraction => self
-				.configure_headless_script_scenario(match scenario {
+				.configure_script_scenario(match scenario {
 					PerfScenario::IncrementalTyping => HeadlessScriptScenario::IncrementalTyping,
 					PerfScenario::MotionSweep => HeadlessScriptScenario::MotionSweep,
 					PerfScenario::InspectInteraction => HeadlessScriptScenario::InspectInteractionSweep,
 					_ => unreachable!("handled by the outer match"),
 				}),
 			PerfScenario::ResizeReflow => {
-				self.configure_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
-				self.dispatch_headless(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+				self.configure_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
+				self.dispatch_message(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
 			}
 		}
 	}
 
-	pub(crate) fn run_headless_perf_step(&mut self, scenario: PerfScenario, step: usize) {
+	pub(crate) fn run_perf_step(&mut self, scenario: PerfScenario, step: usize) {
 		match scenario {
 			PerfScenario::Default | PerfScenario::Tall | PerfScenario::TallInspect | PerfScenario::TallPerf => {}
 			PerfScenario::IncrementalTyping => self.perform_incremental_typing_step(step),
@@ -145,29 +198,30 @@ impl EditorApp {
 		}
 	}
 
-	pub fn run_headless_script_scenario(&mut self, scenario: HeadlessScriptScenario) -> usize {
+	#[cfg(test)]
+	pub(crate) fn run_script_scenario(&mut self, scenario: HeadlessScriptScenario) -> usize {
 		match scenario {
-			HeadlessScriptScenario::LargePaste => self.apply_headless_insert(headless_large_paste_chunk()),
+			HeadlessScriptScenario::LargePaste => self.apply_insert(headless_large_paste_chunk()),
 			HeadlessScriptScenario::IncrementalTyping => {
 				for step in 0..HEADLESS_INCREMENTAL_TYPING_STEPS {
-					self.apply_headless_insert(headless_incremental_typing_char(step).to_string());
+					self.apply_insert(headless_incremental_typing_char(step).to_string());
 				}
 			}
 			HeadlessScriptScenario::IncrementalLineBreaks => {
 				for step in 0..HEADLESS_INCREMENTAL_LINE_BREAK_STEPS {
-					self.apply_headless_insert(headless_incremental_line_break(step));
+					self.apply_insert(headless_incremental_line_break(step));
 				}
 			}
 			HeadlessScriptScenario::UndoRedoBurst => {
 				for step in 0..HEADLESS_UNDO_REDO_STEPS {
-					self.apply_headless_insert(format!("u{step:02}"));
+					self.apply_insert(format!("u{step:02}"));
 				}
 
-				self.repeat_headless_history(EditorHistoryIntent::Undo, HEADLESS_UNDO_REDO_STEPS);
-				self.repeat_headless_history(EditorHistoryIntent::Redo, HEADLESS_UNDO_REDO_STEPS);
+				self.repeat_history(EditorHistoryIntent::Undo, HEADLESS_UNDO_REDO_STEPS);
+				self.repeat_history(EditorHistoryIntent::Redo, HEADLESS_UNDO_REDO_STEPS);
 			}
 			HeadlessScriptScenario::BackspaceBurst | HeadlessScriptScenario::DeleteForwardBurst => {
-				self.repeat_headless_edit(&delete_burst_intent(scenario), delete_seed_char_count())
+				self.repeat_edit(&delete_burst_intent(scenario), delete_seed_char_count())
 			}
 			HeadlessScriptScenario::MotionSweep => self.perform_motion_sweep(),
 			HeadlessScriptScenario::PointerSelectionSweep => self.perform_pointer_selection_sweep(),
@@ -175,117 +229,87 @@ impl EditorApp {
 			HeadlessScriptScenario::InspectInteractionSweep => self.perform_inspect_interaction_sweep(),
 		}
 
-		self.headless_observation()
+		self.observation()
 	}
 
-	pub(crate) fn reset_perf_monitor(&mut self) {
-		self.perf = PerfMonitor::default();
-	}
-
-	pub(crate) fn record_headless_ui_build(&mut self, duration: Duration) {
-		self.perf.record_ui_build(duration);
-	}
-
-	pub(crate) fn record_headless_ui_draw(&mut self, duration: Duration) {
-		self.perf.record_ui_draw(duration);
-	}
-
-	pub(crate) fn flush_perf_metrics(&mut self) {
-		self.perf.flush_canvas_metrics();
-	}
-
-	pub(crate) fn perf_dashboard(&mut self) -> crate::perf::PerfDashboard {
-		let _ = self.session.ensure_scene(SceneDemand::DerivedRequired);
-		let snapshot = self.session.snapshot();
-		let scene = snapshot
-			.scene
-			.as_ref()
-			.expect("perf dashboard requires a materialized derived scene");
-		self.perf.dashboard(
-			scene.layout.as_ref(),
-			self.session.mode(),
-			snapshot.editor.editor_bytes(),
-		)
-	}
-
-	fn configure_headless_viewport(&mut self) {
-		self.perf = PerfMonitor::default();
-		self.dispatch_headless(Message::Viewport(ViewportMessage::CanvasResized(
+	fn configure_viewport(&mut self) {
+		self.app.perf = PerfMonitor::default();
+		self.dispatch_message(Message::Viewport(ViewportMessage::CanvasResized(
 			HEADLESS_VIEWPORT_SIZE,
 		)));
 	}
 
-	fn enable_headless_inspect_mode(&mut self) {
-		self.dispatch_headless(Message::Controls(ControlsMessage::ShowHitboxesChanged(true)));
-		self.dispatch_headless(Message::Controls(ControlsMessage::ShowBaselinesChanged(true)));
-		self.dispatch_headless(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+	fn enable_inspect_mode(&mut self) {
+		self.dispatch_message(Message::Controls(ControlsMessage::ShowHitboxesChanged(true)));
+		self.dispatch_message(Message::Controls(ControlsMessage::ShowBaselinesChanged(true)));
+		self.dispatch_message(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
 	}
 
-	fn load_headless_document(&mut self, text: &str) {
-		self.controls.preset = SamplePreset::Custom;
-		self.sidebar.set_active_tab(SidebarTab::Controls);
-		let update = self
-			.session
-			.reset_with_preset(text, self.scene_config(), SceneDemand::HotOnly);
-		self.viewport.mark_scene_applied();
-		self.viewport.finish_editor_refresh(
-			self.session.viewport_metrics(),
-			matches!(update.scroll_intent, super::session::ScrollIntent::ResetScroll),
-		);
+	fn load_document(&mut self, text: &str) {
+		self.dispatch_message(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Controls)));
+		let _ = self.app.dispatch(AppAction::ReplaceDocument {
+			text: text.to_string(),
+			preset: SamplePreset::Custom,
+		});
 	}
 
-	fn position_headless_insert_point(&mut self) {
-		self.repeat_headless_motion(EditorMotion::Down, HEADLESS_INSERT_POSITION_ROWS);
-		self.apply_headless_motion(EditorMotion::LineEnd);
-		self.dispatch_headless(Message::Editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+	fn position_insert_point(&mut self) {
+		self.repeat_motion(EditorMotion::Down, HEADLESS_INSERT_POSITION_ROWS);
+		self.apply_motion(EditorMotion::LineEnd);
+		self.dispatch_message(Message::Editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
 	}
 
 	fn rewind_insert_caret(&mut self, steps: usize) {
-		self.repeat_headless_motion(EditorMotion::Left, steps);
+		self.repeat_motion(EditorMotion::Left, steps);
 	}
 
-	fn apply_headless_insert(&mut self, text: impl Into<String>) {
-		self.apply_headless_edit(EditorEditIntent::InsertText(text.into()));
+	fn apply_insert(&mut self, text: impl Into<String>) {
+		self.apply_edit(EditorEditIntent::InsertText(text.into()));
 	}
 
-	fn apply_headless_edit(&mut self, intent: EditorEditIntent) {
-		self.dispatch_headless(Message::Editor(EditorIntent::Edit(intent)));
+	fn apply_edit(&mut self, intent: EditorEditIntent) {
+		self.dispatch_message(Message::Editor(EditorIntent::Edit(intent)));
 	}
 
-	fn apply_headless_history(&mut self, intent: EditorHistoryIntent) {
-		self.dispatch_headless(Message::Editor(EditorIntent::History(intent)));
+	#[cfg(test)]
+	fn apply_history(&mut self, intent: EditorHistoryIntent) {
+		self.dispatch_message(Message::Editor(EditorIntent::History(intent)));
 	}
 
-	fn apply_headless_motion(&mut self, intent: EditorMotion) {
-		self.dispatch_headless(Message::Editor(EditorIntent::Motion(intent)));
+	fn apply_motion(&mut self, intent: EditorMotion) {
+		self.dispatch_message(Message::Editor(EditorIntent::Motion(intent)));
 	}
 
-	fn repeat_headless_edit(&mut self, intent: &EditorEditIntent, steps: usize) {
+	#[cfg(test)]
+	fn repeat_edit(&mut self, intent: &EditorEditIntent, steps: usize) {
 		for _ in 0..steps {
-			self.apply_headless_edit(intent.clone());
+			self.apply_edit(intent.clone());
 		}
 	}
 
-	fn repeat_headless_history(&mut self, intent: EditorHistoryIntent, steps: usize) {
+	#[cfg(test)]
+	fn repeat_history(&mut self, intent: EditorHistoryIntent, steps: usize) {
 		for _ in 0..steps {
-			self.apply_headless_history(intent);
+			self.apply_history(intent);
 		}
 	}
 
-	fn repeat_headless_motion(&mut self, intent: EditorMotion, steps: usize) {
+	fn repeat_motion(&mut self, intent: EditorMotion, steps: usize) {
 		for _ in 0..steps {
-			self.apply_headless_motion(intent);
+			self.apply_motion(intent);
 		}
 	}
 
+	#[cfg(test)]
 	fn perform_motion_sweep(&mut self) {
 		for _ in 0..HEADLESS_MOTION_SWEEP_REPEATS {
 			for motion in HEADLESS_MOTION_SEQUENCE {
-				self.apply_headless_motion(motion);
+				self.apply_motion(motion);
 			}
 		}
 	}
 
+	#[cfg(test)]
 	fn perform_pointer_selection_sweep(&mut self) {
 		for (start, end) in HEADLESS_POINTER_SWEEP_POINTS {
 			self.begin_pointer_selection(CanvasTarget::Run(0), start);
@@ -294,12 +318,14 @@ impl EditorApp {
 		}
 	}
 
+	#[cfg(test)]
 	fn perform_resize_reflow_sweep(&mut self) {
 		for step in 0..HEADLESS_RESIZE_WIDTHS.len() {
 			self.perform_resize_reflow_step(step);
 		}
 	}
 
+	#[cfg(test)]
 	fn perform_inspect_interaction_sweep(&mut self) {
 		let steps = HEADLESS_INSPECT_HOVERS.len() + (HEADLESS_POINTER_SWEEP_POINTS.len() * 3);
 		for step in 0..steps {
@@ -308,11 +334,11 @@ impl EditorApp {
 	}
 
 	fn perform_incremental_typing_step(&mut self, step: usize) {
-		self.apply_headless_insert(headless_incremental_typing_char(step).to_string());
+		self.apply_insert(headless_incremental_typing_char(step).to_string());
 	}
 
 	fn perform_motion_sweep_step(&mut self, step: usize) {
-		self.apply_headless_motion(HEADLESS_MOTION_SEQUENCE[step % HEADLESS_MOTION_SEQUENCE.len()]);
+		self.apply_motion(HEADLESS_MOTION_SEQUENCE[step % HEADLESS_MOTION_SEQUENCE.len()]);
 	}
 
 	fn perform_resize_reflow_step(&mut self, step: usize) {
@@ -322,20 +348,20 @@ impl EditorApp {
 
 		for progress in HEADLESS_RESIZE_PROGRESS {
 			let width = (target - start).mul_add(progress, start);
-			self.dispatch_headless(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
+			self.dispatch_message(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
 				width,
 				HEADLESS_VIEWPORT_SIZE.height,
 			))));
 		}
 
-		self.dispatch_headless(Message::Viewport(ViewportMessage::ResizeTick(
+		self.dispatch_message(Message::Viewport(ViewportMessage::ResizeTick(
 			Instant::now() + HEADLESS_RESIZE_SETTLE_DELAY,
 		)));
 	}
 
 	fn perform_inspect_interaction_step(&mut self, step: usize) {
 		if step < HEADLESS_INSPECT_HOVERS.len() {
-			self.dispatch_headless(Message::Canvas(CanvasEvent::Hovered(Some(
+			self.dispatch_message(Message::Canvas(CanvasEvent::Hovered(Some(
 				HEADLESS_INSPECT_HOVERS[step],
 			))));
 			return;
@@ -353,36 +379,36 @@ impl EditorApp {
 		}
 	}
 
-	fn headless_observation(&self) -> usize {
-		let snapshot = self.session.snapshot();
+	#[cfg(test)]
+	fn observation(&self) -> usize {
+		let snapshot = self.app.session.snapshot();
 		let view = &snapshot.editor.editor;
 		let selection_end = view.selection.as_ref().map_or(0, |selection| selection.end);
 		let selection_head = view.selection_head.unwrap_or(0);
 		let scene_revision = snapshot.scene.as_ref().map_or(0, |scene| scene.revision);
 
-		// This is only a cheap deterministic fingerprint for tests/bench scripts,
-		// not a durable serialization format.
 		fold_bytes_to_usize(
-			self.session
+			self.app
+				.session
 				.text()
 				.len()
 				.to_ne_bytes()
 				.into_iter()
 				.chain(selection_end.to_ne_bytes())
 				.chain(selection_head.to_ne_bytes())
-				.chain(self.viewport.canvas_scroll.x.max(0.0).to_bits().to_ne_bytes())
-				.chain(self.viewport.canvas_scroll.y.max(0.0).to_bits().to_ne_bytes())
-				.chain(self.viewport.layout_width.round().to_bits().to_ne_bytes())
+				.chain(self.app.viewport.canvas_scroll.x.max(0.0).to_bits().to_ne_bytes())
+				.chain(self.app.viewport.canvas_scroll.y.max(0.0).to_bits().to_ne_bytes())
+				.chain(self.app.viewport.layout_width.round().to_bits().to_ne_bytes())
 				.chain(scene_revision.to_ne_bytes()),
 		)
 	}
 
-	fn dispatch_headless(&mut self, message: Message) {
-		let _ = self.update(message);
+	fn dispatch_message(&mut self, message: Message) {
+		let _ = self.app.dispatch(message.into());
 	}
 
 	fn begin_pointer_selection(&mut self, target: CanvasTarget, position: (f32, f32)) {
-		self.dispatch_headless(Message::Canvas(CanvasEvent::PointerSelectionStarted {
+		self.dispatch_message(Message::Canvas(CanvasEvent::PointerSelectionStarted {
 			target: Some(target),
 			intent: EditorPointerIntent::Begin {
 				position: Point::new(position.0, position.1),
@@ -392,16 +418,65 @@ impl EditorApp {
 	}
 
 	fn drag_pointer_selection(&mut self, position: (f32, f32)) {
-		self.dispatch_headless(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
+		self.dispatch_message(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
 			Point::new(position.0, position.1),
 		))));
 	}
 
 	fn end_pointer_selection(&mut self) {
-		self.dispatch_headless(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::End)));
+		self.dispatch_message(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::End)));
 	}
 }
 
+fn unavailable_perf_dashboard(
+	editor_mode: crate::editor::EditorMode, editor_bytes: usize, layout_width: f32,
+) -> PerfDashboard {
+	PerfDashboard {
+		overview: PerfOverview {
+			editor_mode,
+			editor_bytes,
+			editor_chars: 0,
+			line_count: 0,
+			run_count: 0,
+			glyph_count: 0,
+			cluster_count: 0,
+			font_count: 0,
+			warning_count: 0,
+			scene_width: 0.0,
+			scene_height: 0.0,
+			layout_width,
+		},
+		hot_paths: Vec::new(),
+		recent_activity: vec![PerfRecentActivity {
+			label: "scene",
+			recent_ms: std::sync::Arc::from([]),
+		}],
+		frame_pacing: PerfFramePacingSummary {
+			fps: 0.0,
+			last_ms: 0.0,
+			avg_ms: 0.0,
+			max_ms: 0.0,
+			total_draws: 0,
+			over_budget: 0,
+			severe_jank: 0,
+			cache_hits: 0,
+			cache_misses: 0,
+			recent_ms: std::sync::Arc::from([]),
+		},
+		graphs: vec![PerfGraphSeries {
+			title: "scene",
+			samples_ms: std::sync::Arc::from([]),
+			ceiling_ms: 1.0,
+			latest_ms: 0.0,
+			avg_ms: 0.0,
+			p95_ms: 0.0,
+			warning_ms: None,
+			severe_ms: None,
+		}],
+	}
+}
+
+#[cfg(test)]
 fn fold_bytes_to_usize(bytes: impl IntoIterator<Item = u8>) -> usize {
 	bytes
 		.into_iter()
@@ -414,6 +489,7 @@ fn headless_bench_document() -> &'static str {
 	DOCUMENT.get_or_init(|| build_headless_bench_document(HEADLESS_BENCH_DOCUMENT_LINES))
 }
 
+#[cfg(test)]
 fn headless_large_paste_chunk() -> &'static str {
 	static CHUNK: OnceLock<String> = OnceLock::new();
 
@@ -443,6 +519,7 @@ fn build_headless_bench_document(lines: usize) -> String {
 	text
 }
 
+#[cfg(test)]
 fn build_headless_paste_chunk(lines: usize) -> String {
 	let mut text = String::with_capacity(lines * 72);
 
@@ -464,10 +541,12 @@ fn headless_incremental_typing_char(step: usize) -> char {
 	char::from(ASCII_LOWERCASE[step % ASCII_LOWERCASE.len()])
 }
 
+#[cfg(test)]
 fn headless_incremental_line_break(step: usize) -> String {
 	format!("\nbranch {step:04}: line break typing probe ffi 漢字")
 }
 
+#[cfg(test)]
 fn delete_burst_intent(scenario: HeadlessScriptScenario) -> EditorEditIntent {
 	match scenario {
 		HeadlessScriptScenario::BackspaceBurst => EditorEditIntent::Backspace,

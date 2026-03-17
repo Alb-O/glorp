@@ -17,10 +17,10 @@ use {
 		state::{ControlsState, ShellState, SidebarState, ViewportState},
 	},
 	crate::{perf::PerfMonitor, scene::SceneConfig, types::Message},
-	iced::Task,
+	iced::{Element, Subscription, Task},
 };
 
-pub struct EditorApp {
+pub(super) struct AppModel {
 	session: DocumentSession,
 	controls: ControlsState,
 	sidebar: SidebarState,
@@ -30,32 +30,60 @@ pub struct EditorApp {
 	sidebar_cache: SidebarCache,
 }
 
-impl EditorApp {
-	pub(crate) fn new() -> (Self, Task<Message>) {
+pub struct EditorApp {
+	model: AppModel,
+}
+
+impl AppModel {
+	fn new() -> Self {
 		let controls = ControlsState::new();
 		let viewport = ViewportState::new(ControlsState::initial_layout_width());
 		let session = DocumentSession::new(controls.preset.text(), controls.scene_config(viewport.layout_width));
 
-		(
-			Self {
-				session,
-				controls,
-				sidebar: SidebarState::new(),
-				viewport,
-				shell: ShellState::new(),
-				perf: PerfMonitor::default(),
-				sidebar_cache: SidebarCache::default(),
-			},
-			Task::none(),
-		)
+		Self {
+			session,
+			controls,
+			sidebar: SidebarState::new(),
+			viewport,
+			shell: ShellState::new(),
+			perf: PerfMonitor::default(),
+			sidebar_cache: SidebarCache::default(),
+		}
 	}
 
 	fn scene_config(&self) -> SceneConfig {
 		self.controls.scene_config(self.viewport.layout_width)
 	}
+}
+
+impl EditorApp {
+	pub(crate) fn new() -> (Self, Task<Message>) {
+		(Self { model: AppModel::new() }, Task::none())
+	}
 
 	#[must_use]
-	pub fn headless() -> Self {
+	pub(crate) fn headless() -> Self {
 		Self::new().0
+	}
+
+	pub(crate) fn subscription(&self) -> Subscription<Message> {
+		self.model.subscription()
+	}
+
+	pub(crate) fn update(&mut self, message: Message) -> Task<Message> {
+		self.model.update(message)
+	}
+
+	pub(crate) fn view(&self) -> Element<'_, Message> {
+		self.model.view()
+	}
+
+	pub(crate) fn headless_view(&self) -> Element<'_, ()> {
+		self.model.headless_view()
+	}
+
+	#[cfg(test)]
+	pub(super) fn test_view_sidebar(&self) -> Element<'_, Message> {
+		self.model.test_view_sidebar()
 	}
 }

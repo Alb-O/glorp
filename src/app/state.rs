@@ -68,14 +68,6 @@ impl ResizeCoalescer {
 	pub(super) fn has_pending(&self) -> bool {
 		self.pending_width.is_some()
 	}
-
-	pub(super) fn mark_applied(&mut self, width: f32) {
-		self.applied_width = width;
-
-		if self.pending_width.is_some_and(|pending| (pending - width).abs() < 0.5) {
-			self.pending_width = None;
-		}
-	}
 }
 
 #[derive(Debug)]
@@ -154,10 +146,6 @@ impl ViewportState {
 
 	pub(super) fn flush_resize(&mut self) -> Option<f32> {
 		self.resize_coalescer.flush()
-	}
-
-	pub(super) fn mark_scene_applied(&mut self) {
-		self.resize_coalescer.mark_applied(self.layout_width);
 	}
 
 	pub(super) fn clamp_scroll(&mut self, layout: &DocumentLayout) {

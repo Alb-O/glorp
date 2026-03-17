@@ -187,12 +187,12 @@ impl Harness {
 			theme: Theme::TokyoNightStorm,
 			scenario,
 		};
-		harness.app.configure_headless_perf_scenario(scenario);
+		harness.app.headless_driver().configure_perf_scenario(scenario);
 		Ok(harness)
 	}
 
 	fn step(&mut self, step: usize) {
-		self.app.run_headless_perf_step(self.scenario, step);
+		self.app.headless_driver().run_perf_step(self.scenario, step);
 	}
 
 	fn render_frame(&mut self) {

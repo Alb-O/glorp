@@ -1,6 +1,16 @@
 use {
-	super::{EditorApp, sidebar_cache::InspectSidebarArgs, sidebar_data::SidebarBodyData, state::ShellPane},
+	super::{
+		AppModel,
+		sidebar_cache::InspectSidebarArgs,
+		sidebar_data::{InspectSidebarData, SidebarBodyData},
+		state::ShellPane,
+	},
 	crate::{
+		overlay::OverlayPrimitive,
+		perf::{
+			CanvasPerfSink, PerfDashboard, PerfFramePacingSummary, PerfGraphSeries, PerfOverview, PerfRecentActivity,
+		},
+		presentation::SessionSnapshot,
 		types::{Message, ShellMessage, SidebarTab},
 		ui::{
 			CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, is_stacked_shell,
@@ -8,23 +18,54 @@ use {
 		},
 	},
 	iced::{
-		Element, Length,
+		Element, Length, Vector,
 		widget::{lazy, pane_grid, responsive},
 	},
 	std::sync::Arc,
 };
 
-impl EditorApp {
+#[derive(Debug, Clone)]
+struct SidebarRenderModel {
+	active_tab: SidebarTab,
+	editor_mode: crate::editor::EditorMode,
+	editor_bytes: usize,
+	undo_depth: usize,
+	redo_depth: usize,
+	body: SidebarBodyData,
+}
+
+#[derive(Debug, Clone)]
+struct AppRenderModel {
+	snapshot: SessionSnapshot,
+	layout_width: f32,
+	decorations: CanvasDecorations,
+	inspect_overlays: Arc<[OverlayPrimitive]>,
+	inspect_targets_active: bool,
+	focused: bool,
+	scroll: Vector,
+	perf: CanvasPerfSink,
+	sidebar: SidebarRenderModel,
+}
+
+impl AppModel {
 	pub(crate) fn view(&self) -> Element<'_, Message> {
-		responsive(|size| {
+		let render = self.render_model();
+
+		responsive(move |size| {
 			if is_stacked_shell(size) {
-				view_stacked_shell(self.view_sidebar(true), self.view_canvas(true))
+				view_stacked_shell(
+					render_sidebar(render.clone(), true),
+					render_canvas(render.clone(), true),
+				)
 			} else {
-				let grid = pane_grid(&self.shell.chrome, |_, pane, _| {
-					pane_grid::Content::new(match pane {
-						ShellPane::Sidebar => self.view_sidebar(false),
-						ShellPane::Canvas => self.view_canvas(false),
-					})
+				let render = render.clone();
+				let grid = pane_grid(&self.shell.chrome, move |_, pane, _| {
+					let content = match pane {
+						ShellPane::Sidebar => render_sidebar(render.clone(), false),
+						ShellPane::Canvas => render_canvas(render.clone(), false),
+					};
+
+					pane_grid::Content::new(content)
 				})
 				.width(Length::Fill)
 				.height(Length::Fill)
@@ -44,51 +85,43 @@ impl EditorApp {
 		.into()
 	}
 
-	pub fn headless_view(&self) -> Element<'_, ()> {
+	pub(crate) fn headless_view(&self) -> Element<'_, ()> {
 		self.view().map(|_| ())
-	}
-
-	fn view_sidebar(&self, stacked: bool) -> Element<'_, Message> {
-		let snapshot = self.session.snapshot();
-		let body = render_sidebar_body(self.sidebar_body_data());
-		view_sidebar(SidebarProps {
-			active_tab: self.sidebar.active_tab,
-			editor_mode: snapshot.mode(),
-			editor_bytes: snapshot.editor_bytes(),
-			undo_depth: snapshot.editor.undo_depth,
-			redo_depth: snapshot.editor.redo_depth,
-			body,
-			stacked,
-		})
 	}
 
 	#[cfg(test)]
 	pub(super) fn test_view_sidebar(&self) -> Element<'_, Message> {
-		self.view_sidebar(false)
+		render_sidebar(self.render_model(), false)
 	}
 
-	fn view_canvas(&self, stacked: bool) -> Element<'static, Message> {
+	fn render_model(&self) -> AppRenderModel {
 		let snapshot = self.session.snapshot().clone();
 		let inspect_targets_active = self.sidebar.active_tab == SidebarTab::Inspect;
-		let inspect_overlays = self.inspect_overlays(snapshot.scene.as_ref(), inspect_targets_active);
 
-		view_canvas_pane(CanvasPaneProps {
+		AppRenderModel {
+			inspect_overlays: self.inspect_overlays(&snapshot, inspect_targets_active),
+			sidebar: SidebarRenderModel {
+				active_tab: self.sidebar.active_tab,
+				editor_mode: snapshot.mode(),
+				editor_bytes: snapshot.editor_bytes(),
+				undo_depth: snapshot.editor.undo_depth,
+				redo_depth: snapshot.editor.redo_depth,
+				body: self.sidebar_body_data(&snapshot),
+			},
 			snapshot,
 			layout_width: self.viewport.layout_width,
 			decorations: CanvasDecorations {
 				show_baselines: self.controls.show_baselines,
 				show_hitboxes: self.controls.show_hitboxes,
 			},
-			inspect_overlays,
 			inspect_targets_active,
 			focused: self.viewport.canvas_focused,
 			scroll: self.viewport.canvas_scroll,
 			perf: self.perf.sink(),
-			stacked,
-		})
+		}
 	}
 
-	fn sidebar_body_data(&self) -> SidebarBodyData {
+	fn sidebar_body_data(&self, snapshot: &SessionSnapshot) -> SidebarBodyData {
 		match self.sidebar.active_tab {
 			SidebarTab::Controls => SidebarBodyData::Controls(ControlsTabProps {
 				preset: self.controls.preset,
@@ -100,33 +133,33 @@ impl EditorApp {
 				show_baselines: self.controls.show_baselines,
 				show_hitboxes: self.controls.show_hitboxes,
 			}),
-			SidebarTab::Inspect => self.inspect_sidebar_body_data(),
-			SidebarTab::Perf => self.perf_sidebar_body_data(),
+			SidebarTab::Inspect => snapshot.scene.as_ref().map_or_else(
+				|| SidebarBodyData::Inspect(Arc::new(unavailable_inspect_sidebar_data())),
+				|scene| {
+					SidebarBodyData::Inspect(self.sidebar_cache.inspect_data(InspectSidebarArgs {
+						editor: &snapshot.editor,
+						scene,
+						text: self.session.text(),
+						hovered_target: self.sidebar.hovered_target,
+						selected_target: self.sidebar.selected_target,
+					}))
+				},
+			),
+			SidebarTab::Perf => snapshot.scene.as_ref().map_or_else(
+				|| {
+					SidebarBodyData::Perf(Arc::new(unavailable_perf_dashboard(
+						snapshot.mode(),
+						snapshot.editor_bytes(),
+						self.viewport.layout_width,
+					)))
+				},
+				|scene| SidebarBodyData::Perf(self.sidebar_cache.perf_dashboard(&snapshot.editor, scene, &self.perf)),
+			),
 		}
 	}
 
-	fn inspect_sidebar_body_data(&self) -> SidebarBodyData {
-		let snapshot = self.session.snapshot();
-		let scene = self.required_derived_scene("inspect");
-		SidebarBodyData::Inspect(self.sidebar_cache.inspect_data(InspectSidebarArgs {
-			editor: &snapshot.editor,
-			scene,
-			text: self.session.text(),
-			hovered_target: self.sidebar.hovered_target,
-			selected_target: self.sidebar.selected_target,
-		}))
-	}
-
-	fn perf_sidebar_body_data(&self) -> SidebarBodyData {
-		let snapshot = self.session.snapshot();
-		let scene = self.required_derived_scene("perf");
-		SidebarBodyData::Perf(self.sidebar_cache.perf_dashboard(&snapshot.editor, scene, &self.perf))
-	}
-
-	fn inspect_overlays(
-		&self, scene: Option<&crate::presentation::ScenePresentation>, active: bool,
-	) -> Arc<[crate::overlay::OverlayPrimitive]> {
-		scene.filter(|_| active).map_or_else(
+	fn inspect_overlays(&self, snapshot: &SessionSnapshot, active: bool) -> Arc<[OverlayPrimitive]> {
+		snapshot.scene.as_ref().filter(|_| active).map_or_else(
 			|| Arc::from([]),
 			|scene| {
 				scene.layout.inspect_overlay_primitives(
@@ -138,14 +171,32 @@ impl EditorApp {
 			},
 		)
 	}
+}
 
-	fn required_derived_scene(&self, tab: &str) -> &crate::presentation::ScenePresentation {
-		self.session
-			.snapshot()
-			.scene
-			.as_ref()
-			.unwrap_or_else(|| panic!("{tab} view requires a materialized derived scene"))
-	}
+fn render_sidebar(render: AppRenderModel, stacked: bool) -> Element<'static, Message> {
+	view_sidebar(SidebarProps {
+		active_tab: render.sidebar.active_tab,
+		editor_mode: render.sidebar.editor_mode,
+		editor_bytes: render.sidebar.editor_bytes,
+		undo_depth: render.sidebar.undo_depth,
+		redo_depth: render.sidebar.redo_depth,
+		body: render_sidebar_body(render.sidebar.body.clone()),
+		stacked,
+	})
+}
+
+fn render_canvas(render: AppRenderModel, stacked: bool) -> Element<'static, Message> {
+	view_canvas_pane(CanvasPaneProps {
+		snapshot: render.snapshot.clone(),
+		layout_width: render.layout_width,
+		decorations: render.decorations,
+		inspect_overlays: render.inspect_overlays.clone(),
+		inspect_targets_active: render.inspect_targets_active,
+		focused: render.focused,
+		scroll: render.scroll,
+		perf: render.perf.clone(),
+		stacked,
+	})
 }
 
 fn render_sidebar_body(body: SidebarBodyData) -> Element<'static, Message> {
@@ -165,5 +216,60 @@ fn render_sidebar_body(body: SidebarBodyData) -> Element<'static, Message> {
 			let key = Arc::as_ptr(&data);
 			lazy(key, move |_| view_perf_tab(data.as_ref())).into()
 		}
+	}
+}
+
+fn unavailable_inspect_sidebar_data() -> InspectSidebarData {
+	InspectSidebarData {
+		warnings: Arc::from([]),
+		interaction_details: Arc::<str>::from("derived scene unavailable"),
+	}
+}
+
+fn unavailable_perf_dashboard(
+	editor_mode: crate::editor::EditorMode, editor_bytes: usize, layout_width: f32,
+) -> PerfDashboard {
+	PerfDashboard {
+		overview: PerfOverview {
+			editor_mode,
+			editor_bytes,
+			editor_chars: 0,
+			line_count: 0,
+			run_count: 0,
+			glyph_count: 0,
+			cluster_count: 0,
+			font_count: 0,
+			warning_count: 0,
+			scene_width: 0.0,
+			scene_height: 0.0,
+			layout_width,
+		},
+		hot_paths: Vec::new(),
+		recent_activity: vec![PerfRecentActivity {
+			label: "scene",
+			recent_ms: Arc::from([]),
+		}],
+		frame_pacing: PerfFramePacingSummary {
+			fps: 0.0,
+			last_ms: 0.0,
+			avg_ms: 0.0,
+			max_ms: 0.0,
+			total_draws: 0,
+			over_budget: 0,
+			severe_jank: 0,
+			cache_hits: 0,
+			cache_misses: 0,
+			recent_ms: Arc::from([]),
+		},
+		graphs: vec![PerfGraphSeries {
+			title: "scene",
+			samples_ms: Arc::from([]),
+			ceiling_ms: 1.0,
+			latest_ms: 0.0,
+			avg_ms: 0.0,
+			p95_ms: 0.0,
+			warning_ms: None,
+			severe_ms: None,
+		}],
 	}
 }
