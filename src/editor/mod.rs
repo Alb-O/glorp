@@ -189,12 +189,9 @@ impl EditorOutcome {
 		}
 	}
 
+	#[cfg(test)]
 	pub(crate) fn document_changed(&self) -> bool {
 		self.text_edit.is_some()
-	}
-
-	pub(crate) fn changed(&self) -> bool {
-		self.document_changed() || self.view_changed || self.selection_changed || self.mode_changed
 	}
 
 	#[cfg(test)]
