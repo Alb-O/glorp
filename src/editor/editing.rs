@@ -24,8 +24,9 @@ impl EditorEngine {
 		};
 
 		let before = self.history_snapshot();
+		let selection_start = selection.start;
 		let text_edit = TextEdit {
-			range: selection.clone(),
+			range: selection,
 			inserted: String::new(),
 		};
 		let inverse = self.apply_document_edit(
@@ -38,8 +39,8 @@ impl EditorEngine {
 		let next_layout = self.document_layout();
 		self.set_selection(
 			next_layout
-				.cluster_at_or_after(selection.start)
-				.or_else(|| next_layout.cluster_before(selection.start))
+				.cluster_at_or_after(selection_start)
+				.or_else(|| next_layout.cluster_before(selection_start))
 				.and_then(|index| next_layout.cluster(index))
 				.map(|cluster| EditorSelection::new(cluster.byte_range.clone(), cluster.byte_range.start)),
 		);

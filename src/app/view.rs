@@ -36,7 +36,7 @@ struct SidebarRenderModel {
 
 #[derive(Debug, Clone)]
 struct AppRenderModel {
-	snapshot: SessionSnapshot,
+	snapshot: Arc<SessionSnapshot>,
 	layout_width: f32,
 	decorations: CanvasDecorations,
 	inspect_overlays: Arc<[OverlayPrimitive]>,
@@ -95,18 +95,18 @@ impl AppModel {
 	}
 
 	fn render_model(&self) -> AppRenderModel {
-		let snapshot = self.session.snapshot().clone();
+		let snapshot = Arc::new(self.session.snapshot().clone());
 		let inspect_targets_active = self.sidebar.active_tab == SidebarTab::Inspect;
 
 		AppRenderModel {
-			inspect_overlays: self.inspect_overlays(&snapshot, inspect_targets_active),
+			inspect_overlays: self.inspect_overlays(snapshot.as_ref(), inspect_targets_active),
 			sidebar: SidebarRenderModel {
 				active_tab: self.sidebar.active_tab,
 				editor_mode: snapshot.mode(),
 				editor_bytes: snapshot.editor_bytes(),
 				undo_depth: snapshot.editor.undo_depth,
 				redo_depth: snapshot.editor.redo_depth,
-				body: self.sidebar_body_data(&snapshot),
+				body: self.sidebar_body_data(snapshot.as_ref()),
 			},
 			snapshot,
 			layout_width: self.viewport.layout_width,

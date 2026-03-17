@@ -23,7 +23,7 @@ use {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneOverlayLayer {
-	snapshot: SessionSnapshot,
+	snapshot: Arc<SessionSnapshot>,
 	layout_width: f32,
 	inspect_overlays: Arc<[OverlayPrimitive]>,
 	focused: bool,
@@ -35,7 +35,7 @@ pub(crate) struct SceneOverlayLayer {
 
 impl SceneOverlayLayer {
 	pub(crate) fn new(
-		snapshot: SessionSnapshot, layout_width: f32, inspect_overlays: Arc<[OverlayPrimitive]>, focused: bool,
+		snapshot: Arc<SessionSnapshot>, layout_width: f32, inspect_overlays: Arc<[OverlayPrimitive]>, focused: bool,
 		scroll: Vector, perf: CanvasPerfSink,
 	) -> Self {
 		Self {
@@ -72,7 +72,7 @@ impl SceneOverlayLayer {
 
 #[derive(Debug, Clone)]
 pub(crate) struct EditorUnderlayLayer {
-	snapshot: SessionSnapshot,
+	snapshot: Arc<SessionSnapshot>,
 	scroll: Vector,
 	perf: CanvasPerfSink,
 	width: Length,
@@ -80,7 +80,7 @@ pub(crate) struct EditorUnderlayLayer {
 }
 
 impl EditorUnderlayLayer {
-	pub(crate) fn new(snapshot: SessionSnapshot, scroll: Vector, perf: CanvasPerfSink) -> Self {
+	pub(crate) fn new(snapshot: Arc<SessionSnapshot>, scroll: Vector, perf: CanvasPerfSink) -> Self {
 		Self {
 			snapshot,
 			scroll,

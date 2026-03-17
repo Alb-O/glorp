@@ -128,7 +128,13 @@ impl DocumentSession {
 		self.editor.reset(&mut self.font_system, text, config);
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		self.transition(true, true, true, true)
+		SessionTransition {
+			text_changed: true,
+			view_changed: true,
+			selection_changed: true,
+			mode_changed: true,
+			..SessionTransition::default()
+		}
 	}
 
 	fn execute_sync_config(&mut self, config: SceneConfig) -> SessionTransition {
@@ -138,7 +144,10 @@ impl DocumentSession {
 
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		self.transition(false, true, false, false)
+		SessionTransition {
+			view_changed: true,
+			..SessionTransition::default()
+		}
 	}
 
 	fn execute_sync_width(&mut self, width: f32) -> SessionTransition {
@@ -149,7 +158,10 @@ impl DocumentSession {
 
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		let mut transition = self.transition(false, true, false, false);
+		let mut transition = SessionTransition {
+			view_changed: true,
+			..SessionTransition::default()
+		};
 		transition.width_sync = Some(started.elapsed());
 		transition
 	}
@@ -172,12 +184,6 @@ impl DocumentSession {
 			self.invalidate_scene();
 		}
 
-		self.transition(text_changed, view_changed, selection_changed, mode_changed)
-	}
-
-	fn transition(
-		&self, text_changed: bool, view_changed: bool, selection_changed: bool, mode_changed: bool,
-	) -> SessionTransition {
 		SessionTransition {
 			text_changed,
 			view_changed,
@@ -214,16 +220,12 @@ impl DocumentSession {
 }
 
 fn build_editor_presentation(editor: &EditorEngine, revision: u64) -> EditorPresentation {
-	let text_layer = editor.text_layer_state();
-	let viewport_metrics = editor.viewport_metrics();
-	let editor_view = editor.view_state();
 	let (undo_depth, redo_depth) = editor.history_depths();
-
 	EditorPresentation::new(
 		revision,
-		viewport_metrics,
-		text_layer,
-		editor_view,
+		editor.viewport_metrics(),
+		editor.text_layer_state(),
+		editor.view_state(),
 		editor.text().len(),
 		undo_depth,
 		redo_depth,

@@ -1,6 +1,6 @@
 use {
 	super::{
-		EditorMode, EditorTextLayerState, EditorViewState, EditorViewportMetrics, TextEdit,
+		EditorTextLayerState, EditorViewState, EditorViewportMetrics, TextEdit,
 		geometry::{insert_cursor_block, insert_cursor_rectangle},
 		text::byte_to_cursor,
 	},
@@ -41,7 +41,7 @@ impl EditorLayout {
 			config,
 			document_layout: RefCell::new(None),
 			viewport_metrics: Cell::new(None),
-			view_state: default_view_state(),
+			view_state: EditorViewState::default(),
 		}
 	}
 
@@ -92,7 +92,7 @@ impl EditorLayout {
 		self.config = config;
 		self.replace_buffer(font_system, text);
 		self.clear_snapshot();
-		self.view_state = default_view_state();
+		self.view_state = EditorViewState::default();
 	}
 
 	pub(super) fn document_layout(&self, text: &str) -> DocumentLayout {
@@ -232,17 +232,6 @@ pub(super) fn edit_changes_line_structure(text: &str, edit: &TextEdit) -> bool {
 	text.get(edit.range.clone())
 		.is_some_and(|removed| removed.contains('\n'))
 		|| edit.inserted.contains('\n')
-}
-
-fn default_view_state() -> EditorViewState {
-	EditorViewState {
-		mode: EditorMode::Normal,
-		selection: None,
-		selection_head: None,
-		pointer_anchor: None,
-		overlays: Arc::from([]),
-		viewport_target: None,
-	}
 }
 
 fn measure_buffer(buffer: &Buffer) -> (f32, f32) {

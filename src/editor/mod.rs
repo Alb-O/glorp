@@ -49,7 +49,7 @@ impl Display for EditorMode {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(crate) struct EditorViewState {
 	pub(crate) mode: EditorMode,
 	pub(crate) selection: Option<Range<usize>>,

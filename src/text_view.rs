@@ -4,6 +4,7 @@ use {
 		Color, Element, Length, Point, Rectangle, Size, Theme, Vector,
 		advanced::{Layout, Renderer as _, Widget, graphics::text::Renderer as _, layout, mouse, renderer},
 	},
+	std::sync::Arc,
 };
 
 const OUTER_BACKGROUND: Color = Color::from_rgb8(20, 24, 32);
@@ -15,7 +16,7 @@ const BORDER_COLOR: Color = Color::from_rgba(0.8, 0.8, 0.9, 0.65);
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneTextLayer {
-	snapshot: SessionSnapshot,
+	snapshot: Arc<SessionSnapshot>,
 	layout_width: f32,
 	scroll: Vector,
 	draw_backdrop: bool,
@@ -25,7 +26,7 @@ pub(crate) struct SceneTextLayer {
 }
 
 impl SceneTextLayer {
-	pub(crate) fn new(snapshot: SessionSnapshot, layout_width: f32, scroll: Vector) -> Self {
+	pub(crate) fn new(snapshot: Arc<SessionSnapshot>, layout_width: f32, scroll: Vector) -> Self {
 		Self {
 			snapshot,
 			layout_width,

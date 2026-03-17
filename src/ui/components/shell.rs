@@ -14,6 +14,7 @@ use {
 		Element, Length, Size, Vector,
 		widget::{Stack, canvas, column, container, sensor},
 	},
+	std::sync::Arc,
 };
 
 const STACK_LAYOUT_BREAKPOINT: f32 = 1120.0;
@@ -32,7 +33,7 @@ pub(crate) struct CanvasDecorations {
 /// The pane is driven from a single coherent session snapshot.
 pub(crate) struct CanvasPaneProps {
 	/// Shared session snapshot for all canvas sublayers.
-	pub(crate) snapshot: SessionSnapshot,
+	pub(crate) snapshot: Arc<SessionSnapshot>,
 	/// Current visible layout width after shell sizing and padding.
 	pub(crate) layout_width: f32,
 	/// Optional static scene decorations.

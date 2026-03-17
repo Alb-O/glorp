@@ -61,7 +61,7 @@ impl SidebarCache {
 			#[cfg(test)]
 			self.inspect_builds.set(self.inspect_builds.get() + 1);
 
-			Arc::new(InspectSidebarData {
+			InspectSidebarData {
 				warnings: args.scene.layout.warnings.clone(),
 				interaction_details: interaction_details(
 					args.editor,
@@ -70,7 +70,7 @@ impl SidebarCache {
 					args.hovered_target,
 					args.selected_target,
 				),
-			})
+			}
 		})
 	}
 
@@ -89,7 +89,7 @@ impl SidebarCache {
 			#[cfg(test)]
 			self.perf_builds.set(self.perf_builds.get() + 1);
 
-			Arc::new(perf.dashboard(scene.layout.as_ref(), editor.mode(), editor.editor_bytes()))
+			perf.dashboard(scene.layout.as_ref(), editor.mode(), editor.editor_bytes())
 		})
 	}
 
@@ -142,11 +142,11 @@ where
 		.map(|entry| entry.data.clone())
 }
 
-fn cached_or_build<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, key: K, build: impl FnOnce() -> Arc<V>) -> Arc<V>
+fn cached_or_build<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, key: K, build: impl FnOnce() -> V) -> Arc<V>
 where
 	K: Copy + Eq, {
 	cached_data(cache, key).unwrap_or_else(|| {
-		let data = build();
+		let data = Arc::new(build());
 		store_cached_data(cache, key, data.clone());
 		data
 	})

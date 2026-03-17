@@ -6,7 +6,7 @@ use {
 	self::{geometry::max_scroll, input::decode_event},
 	crate::{perf::CanvasPerfSink, presentation::SessionSnapshot, types::Message},
 	iced::{Rectangle, Theme, mouse, widget::canvas},
-	std::time::Instant,
+	std::{sync::Arc, time::Instant},
 	tracing::trace_span,
 };
 pub(crate) use {
@@ -16,7 +16,7 @@ pub(crate) use {
 
 #[derive(Debug, Clone)]
 pub(crate) struct GlyphCanvas {
-	pub(crate) snapshot: SessionSnapshot,
+	pub(crate) snapshot: Arc<SessionSnapshot>,
 	pub(crate) layout_width: f32,
 	pub(crate) inspect_targets_active: bool,
 	pub(crate) perf: CanvasPerfSink,
@@ -139,7 +139,7 @@ mod tests {
 	#[test]
 	fn inspect_layout_depends_on_activation_not_existing_overlays() {
 		let canvas = GlyphCanvas {
-			snapshot: snapshot(true),
+			snapshot: Arc::new(snapshot(true)),
 			layout_width: 20.0,
 			inspect_targets_active: true,
 			perf: CanvasPerfSink::default(),
@@ -151,7 +151,7 @@ mod tests {
 	#[test]
 	fn inspect_layout_stays_disabled_off_the_inspect_path() {
 		let canvas = GlyphCanvas {
-			snapshot: snapshot(true),
+			snapshot: Arc::new(snapshot(true)),
 			layout_width: 20.0,
 			inspect_targets_active: false,
 			perf: CanvasPerfSink::default(),
