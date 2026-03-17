@@ -297,5 +297,14 @@ fn format_duration_label(ms: f32) -> String {
 }
 
 fn join_lines(lines: impl IntoIterator<Item = String>) -> String {
-	lines.into_iter().collect::<Vec<_>>().join("\n")
+	let mut joined = String::new();
+
+	for line in lines {
+		if !joined.is_empty() {
+			joined.push('\n');
+		}
+		joined.push_str(&line);
+	}
+
+	joined
 }

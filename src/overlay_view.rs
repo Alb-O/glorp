@@ -368,7 +368,7 @@ fn draw_selection_underlay(
 		})
 		.collect::<Vec<_>>();
 
-	draw_selection_group(renderer, &rectangles, selection_palette(EditorOverlayTone::Normal));
+	draw_selection_group(renderer, &rectangles, selection_palette());
 }
 
 fn draw_selection_group(renderer: &mut iced::Renderer, rectangles: &[LayoutRect], palette: SelectionPalette) {
@@ -619,29 +619,29 @@ fn rect_style(kind: OverlayRectKind) -> RectStyle {
 			fill: Some(Color::from_rgba(0.28, 0.74, 1.0, 0.18)),
 			stroke: Some((Color::from_rgba(0.6, 0.9, 1.0, 0.66), 1.0)),
 		},
-		OverlayRectKind::EditorActive(tone) => {
-			let palette = selection_palette(tone);
+		OverlayRectKind::EditorActive(_) => {
+			let palette = selection_palette();
 			RectStyle {
 				fill: Some(palette.active_fill),
 				stroke: Some((palette.active_stroke, 1.5)),
 			}
 		}
-		OverlayRectKind::EditorInsertBlock(tone) => {
-			let palette = selection_palette(tone);
+		OverlayRectKind::EditorInsertBlock(_) => {
+			let palette = selection_palette();
 			RectStyle {
 				fill: Some(palette.caret_fill),
 				stroke: Some((palette.active_stroke, 1.5)),
 			}
 		}
-		OverlayRectKind::EditorCaret(tone) => {
-			let palette = selection_palette(tone);
+		OverlayRectKind::EditorCaret(_) => {
+			let palette = selection_palette();
 			RectStyle {
 				fill: Some(palette.caret_fill),
 				stroke: None,
 			}
 		}
-		OverlayRectKind::EditorFocusFrame(tone) => {
-			let palette = selection_palette(tone);
+		OverlayRectKind::EditorFocusFrame(_) => {
+			let palette = selection_palette();
 			RectStyle {
 				fill: None,
 				stroke: Some((palette.focus_stroke, 1.0)),
@@ -689,7 +689,7 @@ fn label_style(kind: OverlayLabelKind) -> LabelStyle {
 	}
 }
 
-fn selection_palette(_tone: EditorOverlayTone) -> SelectionPalette {
+fn selection_palette() -> SelectionPalette {
 	SelectionPalette {
 		selection_fill: Color::from_rgba(0.28, 0.74, 1.0, 0.18),
 		selection_stroke: Color::from_rgba(0.6, 0.9, 1.0, 0.66),

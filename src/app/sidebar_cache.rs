@@ -141,15 +141,15 @@ where
 		.filter(|entry| entry.key == key)
 		.map(|entry| Arc::clone(&entry.data))
 	{
-		data
-	} else {
-		let data = Arc::new(build());
-		cache.replace(Some(CachedEntry {
-			key,
-			data: Arc::clone(&data),
-		}));
-		data
+		return data;
 	}
+
+	let data = Arc::new(build());
+	cache.replace(Some(CachedEntry {
+		key,
+		data: Arc::clone(&data),
+	}));
+	data
 }
 
 fn interaction_details(

@@ -3,7 +3,7 @@ use {
 	crate::{
 		HeadlessScenario, HeadlessScriptScenario, PerfScenario,
 		editor::{EditorEditIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent},
-		perf::{PerfDashboard, PerfFramePacingSummary, PerfGraphSeries, PerfMonitor, PerfOverview, PerfRecentActivity},
+		perf::{PerfDashboard, PerfMonitor, unavailable_dashboard},
 		types::{CanvasTarget, ControlsMessage, SamplePreset, SidebarTab},
 	},
 	iced::{Point, Size},
@@ -87,7 +87,7 @@ impl EditorApp {
 
 		snapshot.scene.as_ref().map_or_else(
 			|| {
-				unavailable_perf_dashboard(
+				unavailable_dashboard(
 					snapshot.mode(),
 					snapshot.editor_bytes(),
 					self.model.viewport.layout_width,
@@ -410,54 +410,6 @@ impl HeadlessDriver<'_> {
 
 	fn end_pointer_selection(&mut self) {
 		self.dispatch_command(AppCommand::editor(EditorIntent::Pointer(EditorPointerIntent::End)));
-	}
-}
-
-fn unavailable_perf_dashboard(
-	editor_mode: crate::editor::EditorMode, editor_bytes: usize, layout_width: f32,
-) -> PerfDashboard {
-	PerfDashboard {
-		overview: PerfOverview {
-			editor_mode,
-			editor_bytes,
-			editor_chars: 0,
-			line_count: 0,
-			run_count: 0,
-			glyph_count: 0,
-			cluster_count: 0,
-			font_count: 0,
-			warning_count: 0,
-			scene_width: 0.0,
-			scene_height: 0.0,
-			layout_width,
-		},
-		hot_paths: Vec::new(),
-		recent_activity: vec![PerfRecentActivity {
-			label: "scene",
-			recent_ms: std::sync::Arc::from([]),
-		}],
-		frame_pacing: PerfFramePacingSummary {
-			fps: 0.0,
-			last_ms: 0.0,
-			avg_ms: 0.0,
-			max_ms: 0.0,
-			total_draws: 0,
-			over_budget: 0,
-			severe_jank: 0,
-			cache_hits: 0,
-			cache_misses: 0,
-			recent_ms: std::sync::Arc::from([]),
-		},
-		graphs: vec![PerfGraphSeries {
-			title: "scene",
-			samples_ms: std::sync::Arc::from([]),
-			ceiling_ms: 1.0,
-			latest_ms: 0.0,
-			avg_ms: 0.0,
-			p95_ms: 0.0,
-			warning_ms: None,
-			severe_ms: None,
-		}],
 	}
 }
 

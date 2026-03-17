@@ -303,7 +303,7 @@ fn append_overview(json: &mut String, dashboard: &PerfDashboard) {
 	let _ = writeln!(
 		json,
 		"    \"editor_mode\": {},",
-		json_string(editor_mode_label(dashboard.overview.editor_mode))
+		json_string(&dashboard.overview.editor_mode.to_string())
 	);
 	let _ = writeln!(json, "    \"editor_bytes\": {},", dashboard.overview.editor_bytes);
 	let _ = writeln!(json, "    \"editor_chars\": {},", dashboard.overview.editor_chars);
@@ -329,13 +329,6 @@ fn append_overview(json: &mut String, dashboard: &PerfDashboard) {
 		json_float(f64::from(dashboard.overview.layout_width))
 	);
 	json.push_str("  },\n");
-}
-
-fn editor_mode_label(mode: crate::editor::EditorMode) -> &'static str {
-	match mode {
-		crate::editor::EditorMode::Normal => "Normal",
-		crate::editor::EditorMode::Insert => "Insert",
-	}
 }
 
 fn append_frame_pacing(json: &mut String, dashboard: &PerfDashboard) {

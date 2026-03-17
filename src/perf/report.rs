@@ -189,6 +189,52 @@ pub(crate) struct PerfDashboard {
 	pub(crate) graphs: Vec<PerfGraphSeries>,
 }
 
+pub(crate) fn unavailable_dashboard(editor_mode: EditorMode, editor_bytes: usize, layout_width: f32) -> PerfDashboard {
+	PerfDashboard {
+		overview: PerfOverview {
+			editor_mode,
+			editor_bytes,
+			editor_chars: 0,
+			line_count: 0,
+			run_count: 0,
+			glyph_count: 0,
+			cluster_count: 0,
+			font_count: 0,
+			warning_count: 0,
+			scene_width: 0.0,
+			scene_height: 0.0,
+			layout_width,
+		},
+		hot_paths: Vec::new(),
+		recent_activity: vec![PerfRecentActivity {
+			label: "scene",
+			recent_ms: Arc::from([]),
+		}],
+		frame_pacing: PerfFramePacingSummary {
+			fps: 0.0,
+			last_ms: 0.0,
+			avg_ms: 0.0,
+			max_ms: 0.0,
+			total_draws: 0,
+			over_budget: 0,
+			severe_jank: 0,
+			cache_hits: 0,
+			cache_misses: 0,
+			recent_ms: Arc::from([]),
+		},
+		graphs: vec![PerfGraphSeries {
+			title: "scene",
+			samples_ms: Arc::from([]),
+			ceiling_ms: 1.0,
+			latest_ms: 0.0,
+			avg_ms: 0.0,
+			p95_ms: 0.0,
+			warning_ms: None,
+			severe_ms: None,
+		}],
+	}
+}
+
 pub(super) fn build_dashboard(
 	store: &PerfStore, layout: &DocumentLayout, editor_mode: EditorMode, editor_bytes: usize,
 ) -> PerfDashboard {

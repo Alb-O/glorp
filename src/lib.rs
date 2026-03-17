@@ -231,13 +231,17 @@ pub fn run() -> iced::Result {
 
 #[must_use]
 pub fn main_entry() -> ExitCode {
-	headless_perf::run_from_env().unwrap_or_else(|| match run() {
+	if let Some(exit_code) = headless_perf::run_from_env() {
+		return exit_code;
+	}
+
+	match run() {
 		Ok(()) => ExitCode::SUCCESS,
 		Err(error) => {
 			eprintln!("{error}");
 			ExitCode::FAILURE
 		}
-	})
+	}
 }
 
 pub fn init_tracing() {

@@ -9,9 +9,7 @@ use {
 };
 pub(crate) use {
 	bridge::CanvasPerfSink,
-	report::{
-		PerfDashboard, PerfFramePacingSummary, PerfGraphSeries, PerfMetricSummary, PerfOverview, PerfRecentActivity,
-	},
+	report::{PerfDashboard, PerfGraphSeries, PerfMetricSummary, PerfRecentActivity, unavailable_dashboard},
 };
 
 #[derive(Debug, Default)]
