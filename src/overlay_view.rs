@@ -298,7 +298,7 @@ fn draw_rect_primitive(
 			bounds: rect_bounds,
 			border: style
 				.stroke
-				.map_or_else(iced::Border::default, |(color, width)| iced::Border {
+				.map_or(iced::Border::default(), |(color, width)| iced::Border {
 					color,
 					width,
 					..iced::Border::default()

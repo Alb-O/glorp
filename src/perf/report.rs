@@ -4,7 +4,7 @@ use {
 		percentile_ms,
 	},
 	crate::{editor::EditorMode, scene::DocumentLayout},
-	std::{fmt::Write as _, sync::Arc},
+	std::sync::Arc,
 };
 
 const GRAPH_METRICS: [MetricKind; 12] = [
@@ -121,14 +121,15 @@ impl PerfRecentActivity {
 			return format!("{:<14} no samples", self.label);
 		}
 
-		let mut text = format!("{:<14} ", self.label);
-		for (index, value) in self.recent_ms.iter().enumerate() {
-			if index > 0 {
-				text.push_str("  ");
-			}
-			let _ = write!(text, "{value:>5.2}");
-		}
-		text
+		format!(
+			"{:<14} {}",
+			self.label,
+			self.recent_ms
+				.iter()
+				.map(|value| format!("{value:>5.2}"))
+				.collect::<Vec<_>>()
+				.join("  "),
+		)
 	}
 }
 

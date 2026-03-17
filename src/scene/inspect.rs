@@ -86,23 +86,26 @@ impl DocumentLayout {
 }
 
 fn run_overlay_kind(selected: bool) -> OverlayRectKind {
-	match selected {
-		true => OverlayRectKind::InspectRunSelected,
-		false => OverlayRectKind::InspectRunHover,
+	if selected {
+		OverlayRectKind::InspectRunSelected
+	} else {
+		OverlayRectKind::InspectRunHover
 	}
 }
 
 fn cluster_overlay_kind(selected: bool) -> OverlayRectKind {
-	match selected {
-		true => OverlayRectKind::InspectGlyphSelected,
-		false => OverlayRectKind::InspectGlyphHover,
+	if selected {
+		OverlayRectKind::InspectGlyphSelected
+	} else {
+		OverlayRectKind::InspectGlyphHover
 	}
 }
 
 fn cluster_hitbox_overlay_kind(selected: bool) -> OverlayRectKind {
-	match selected {
-		true => OverlayRectKind::InspectGlyphHitboxSelected,
-		false => OverlayRectKind::InspectGlyphHitboxHover,
+	if selected {
+		OverlayRectKind::InspectGlyphHitboxSelected
+	} else {
+		OverlayRectKind::InspectGlyphHitboxHover
 	}
 }
 

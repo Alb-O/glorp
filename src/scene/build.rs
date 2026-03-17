@@ -98,7 +98,7 @@ pub(crate) fn resolve_font_names_from_buffer(
 			let name = font_system
 				.db()
 				.face(font_id)
-				.map_or_else(|| "unknown-font", |face| face.post_script_name.as_str());
+				.map_or("unknown-font", |face| face.post_script_name.as_str());
 			(font_id, Arc::<str>::from(name))
 		})
 		.collect::<Arc<[_]>>()
@@ -148,9 +148,7 @@ fn build_clusters(
 		}
 	}
 
-	if let Some(cluster) = current {
-		clusters.push(cluster);
-	}
+	clusters.extend(current);
 
 	clusters
 }

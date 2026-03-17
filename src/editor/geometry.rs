@@ -272,9 +272,9 @@ fn for_each_cluster_rect(buffer: &Buffer, text: &str, mut f: impl FnMut(usize, R
 			}
 		}
 
-		current
-			.into_iter()
-			.for_each(|(byte_range, rect)| f(run_index, byte_range, rect));
+		if let Some((byte_range, rect)) = current {
+			f(run_index, byte_range, rect);
+		}
 	}
 }
 

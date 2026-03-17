@@ -288,7 +288,7 @@ impl SidebarState {
 	}
 
 	fn inspect_target(&self, target: Option<CanvasTarget>) -> Option<CanvasTarget> {
-		(self.active_tab == SidebarTab::Inspect).then_some(target).flatten()
+		target.filter(|_| self.active_tab == SidebarTab::Inspect)
 	}
 }
 

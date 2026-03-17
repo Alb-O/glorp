@@ -217,9 +217,8 @@ impl ShapingChoice {
 	pub(crate) fn to_cosmic(self, text: &str) -> cosmic_text::Shaping {
 		match self {
 			ShapingChoice::Auto if text.is_ascii() => cosmic_text::Shaping::Basic,
-			ShapingChoice::Auto => cosmic_text::Shaping::Advanced,
 			ShapingChoice::Basic => cosmic_text::Shaping::Basic,
-			ShapingChoice::Advanced => cosmic_text::Shaping::Advanced,
+			ShapingChoice::Auto | ShapingChoice::Advanced => cosmic_text::Shaping::Advanced,
 		}
 	}
 }

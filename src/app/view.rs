@@ -133,7 +133,7 @@ impl EditorApp {
 	fn inspect_overlays(
 		&self, scene: Option<&crate::presentation::DerivedScenePresentation>, active: bool,
 	) -> Arc<[crate::overlay::OverlayPrimitive]> {
-		let Some(scene) = active.then_some(scene).flatten() else {
+		let Some(scene) = scene.filter(|_| active) else {
 			return Arc::from([]);
 		};
 

@@ -9,13 +9,10 @@ pub(crate) fn debug_snippet(text: &str) -> String {
 }
 
 pub(crate) fn line_byte_offsets(text: &str) -> Vec<usize> {
-	let mut offsets = vec![0];
-
-	for (index, ch) in text.char_indices() {
-		if ch == '\n' {
-			offsets.push(index + ch.len_utf8());
-		}
-	}
-
-	offsets
+	std::iter::once(0)
+		.chain(
+			text.char_indices()
+				.filter_map(|(index, ch)| (ch == '\n').then_some(index + ch.len_utf8())),
+		)
+		.collect()
 }

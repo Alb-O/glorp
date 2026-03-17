@@ -148,7 +148,9 @@ impl PerfStore {
 	}
 
 	fn record_pending_durations(&mut self, kind: MetricKind, durations: VecDeque<Duration>) {
-		durations.into_iter().for_each(|duration| self.record(kind, duration));
+		for duration in durations {
+			self.record(kind, duration);
+		}
 	}
 }
 

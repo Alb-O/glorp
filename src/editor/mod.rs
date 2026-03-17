@@ -33,8 +33,9 @@ use {
 	tracing::{debug, trace, trace_span, warn},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub(crate) enum EditorMode {
+	#[default]
 	Normal,
 	Insert,
 }

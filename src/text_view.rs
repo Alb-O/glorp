@@ -177,8 +177,7 @@ impl From<SceneTextLayer> for Element<'_, Message> {
 fn insert_repaint_clip(
 	origin: Point, mode: EditorMode, target: Option<crate::overlay::LayoutRect>,
 ) -> Option<Rectangle> {
-	matches!(mode, EditorMode::Insert).then_some(())?;
-	let target = target?;
+	let target = target.filter(|_| matches!(mode, EditorMode::Insert))?;
 	Some(Rectangle::new(
 		Point::new(origin.x + target.x, origin.y + target.y),
 		Size::new(target.width.max(1.0), target.height.max(1.0)),

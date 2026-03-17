@@ -1,6 +1,6 @@
 use super::{EditorMode, EditorSelection, history::EditorSnapshot};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(super) struct EditorSession {
 	mode: EditorMode,
 	selection: Option<EditorSelection>,
@@ -10,12 +10,7 @@ pub(super) struct EditorSession {
 
 impl EditorSession {
 	pub(super) fn new() -> Self {
-		Self {
-			mode: EditorMode::Normal,
-			selection: None,
-			preferred_x: None,
-			pointer_anchor: None,
-		}
+		Self::default()
 	}
 
 	pub(super) fn mode(&self) -> EditorMode {

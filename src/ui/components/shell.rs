@@ -127,9 +127,7 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 
 	let mut children = vec![backdrop.into(), underlay.into(), text_layer.into()];
 
-	if let Some(derived_scene) = derived_scene
-		&& (decorations.show_baselines || decorations.show_hitboxes)
-	{
+	if let Some(derived_scene) = derived_scene.filter(|_| decorations.show_baselines || decorations.show_hitboxes) {
 		// The static scene cache only exists for debug geometry. Inspect overlays
 		// and the footer can still use the derived scene without paying for this
 		// extra layer.
