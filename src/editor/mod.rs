@@ -193,6 +193,10 @@ impl EditorOutcome {
 		self.text_edit.is_some()
 	}
 
+	pub(crate) fn changed(&self) -> bool {
+		self.document_changed() || self.view_changed || self.selection_changed || self.mode_changed
+	}
+
 	#[cfg(test)]
 	pub(crate) fn requires_scene_rebuild(&self) -> bool {
 		self.document_changed()

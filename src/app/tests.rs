@@ -2,10 +2,11 @@ use {
 	super::{
 		EditorApp,
 		state::{RESIZE_REFLOW_INTERVAL, ResizeCoalescer},
+		update::AppCommand,
 	},
 	crate::{
 		editor::{EditorEditIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent},
-		types::{CanvasEvent, ControlsMessage, Message, SidebarMessage, SidebarTab, ViewportMessage},
+		types::{ControlsMessage, Message, SidebarTab, ViewportMessage},
 	},
 	iced::{Size, Vector},
 	std::time::Instant,
@@ -19,12 +20,12 @@ fn metric_samples(app: &EditorApp, label: &str) -> u64 {
 	app.model.perf.metric_total_samples(label)
 }
 
-fn editor(intent: EditorIntent) -> Message {
-	Message::Editor(intent)
+fn editor(intent: EditorIntent) -> AppCommand {
+	AppCommand::editor(intent)
 }
 
-fn resize(size: Size) -> Message {
-	Message::Viewport(ViewportMessage::CanvasResized(size))
+fn resize(size: Size) -> AppCommand {
+	AppCommand::ObserveCanvasResize(size)
 }
 
 #[test]
@@ -42,13 +43,11 @@ fn resize_coalescer_limits_burst_reflows_and_flushes_latest_width() {
 #[test]
 fn edits_preserve_visible_scroll_position() {
 	let (mut app, _) = EditorApp::new();
-	let _ = app.update(resize(Size::new(760.0, 280.0)));
-	let _ = app.update(Message::Viewport(ViewportMessage::ResizeTick(
-		Instant::now() + RESIZE_REFLOW_INTERVAL,
-	)));
+	let _ = app.model.perform(resize(Size::new(760.0, 280.0)));
+	let _ = app.model.perform(AppCommand::FlushResizeReflow);
 
 	for _ in 0..5 {
-		let _ = app.update(editor(EditorIntent::Motion(EditorMotion::Down)));
+		let _ = app.model.perform(editor(EditorIntent::Motion(EditorMotion::Down)));
 	}
 
 	let target = app
@@ -60,10 +59,14 @@ fn edits_preserve_visible_scroll_position() {
 	app.model.viewport.canvas_scroll = Vector::new(0.0, (target.y - 40.0).max(0.0));
 	let previous_scroll = app.model.viewport.canvas_scroll;
 
-	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
-	let _ = app.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
-		"!".to_string(),
-	))));
+	let _ = app
+		.model
+		.perform(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+	let _ = app
+		.model
+		.perform(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
+			"!".to_string(),
+		))));
 
 	assert_eq!(app.model.viewport.canvas_scroll, previous_scroll);
 }
@@ -71,10 +74,10 @@ fn edits_preserve_visible_scroll_position() {
 #[test]
 fn keyboard_motion_reveals_caret_when_it_leaves_viewport() {
 	let (mut app, _) = EditorApp::new();
-	let _ = app.update(resize(Size::new(760.0, 220.0)));
+	let _ = app.model.perform(resize(Size::new(760.0, 220.0)));
 
 	for _ in 0..12 {
-		let _ = app.update(editor(EditorIntent::Motion(EditorMotion::Down)));
+		let _ = app.model.perform(editor(EditorIntent::Motion(EditorMotion::Down)));
 	}
 
 	assert!(app.model.viewport.canvas_scroll.y > 0.0);
@@ -84,7 +87,7 @@ fn keyboard_motion_reveals_caret_when_it_leaves_viewport() {
 fn keyboard_motion_keeps_the_selected_preset() {
 	let (mut app, _) = EditorApp::new();
 
-	let _ = app.update(editor(EditorIntent::Motion(EditorMotion::Right)));
+	let _ = app.model.perform(editor(EditorIntent::Motion(EditorMotion::Right)));
 
 	assert_eq!(app.model.controls.preset, crate::types::SamplePreset::Tall);
 }
@@ -93,10 +96,14 @@ fn keyboard_motion_keeps_the_selected_preset() {
 fn text_edits_flip_the_preset_to_custom() {
 	let (mut app, _) = EditorApp::new();
 
-	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
-	let _ = app.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
-		"!".to_string(),
-	))));
+	let _ = app
+		.model
+		.perform(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+	let _ = app
+		.model
+		.perform(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
+			"!".to_string(),
+		))));
 
 	assert_eq!(app.model.controls.preset, crate::types::SamplePreset::Custom);
 }
@@ -107,10 +114,14 @@ fn controls_tab_keeps_text_edits_on_the_hot_path() {
 	let revision_before = app.model.session.snapshot().scene.as_ref().map(|scene| scene.revision);
 	let scene_builds_before = app.model.session.derived_scene_build_count();
 
-	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
-	let _ = app.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
-		"!".to_string(),
-	))));
+	let _ = app
+		.model
+		.perform(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+	let _ = app
+		.model
+		.perform(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
+			"!".to_string(),
+		))));
 
 	assert_eq!(
 		app.model.session.snapshot().scene.as_ref().map(|scene| scene.revision),
@@ -128,7 +139,7 @@ fn controls_tab_keeps_text_edits_on_the_hot_path() {
 #[test]
 fn resize_reflow_updates_scene_when_inspect_is_active() {
 	let (mut app, _) = EditorApp::new();
-	let _ = app.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+	let _ = app.model.perform(AppCommand::SelectSidebarTab(SidebarTab::Inspect));
 	let revision_before = app
 		.model
 		.session
@@ -137,10 +148,8 @@ fn resize_reflow_updates_scene_when_inspect_is_active() {
 		.as_ref()
 		.map_or(0, |scene| scene.revision);
 
-	let _ = app.update(resize(Size::new(980.0, 280.0)));
-	let _ = app.update(Message::Viewport(ViewportMessage::ResizeTick(
-		Instant::now() + RESIZE_REFLOW_INTERVAL,
-	)));
+	let _ = app.model.perform(resize(Size::new(980.0, 280.0)));
+	let _ = app.model.perform(AppCommand::FlushResizeReflow);
 
 	assert!(
 		app.model
@@ -168,16 +177,14 @@ fn resize_reflow_updates_scene_when_inspect_is_active() {
 fn resize_bursts_only_sync_editor_width_on_coalesced_widths() {
 	let (mut app, _) = EditorApp::new();
 
-	let _ = app.update(resize(Size::new(980.0, 280.0)));
+	let _ = app.model.perform(resize(Size::new(980.0, 280.0)));
 	assert_eq!(metric_samples(&app, "editor.width_sync"), 0);
 
-	let _ = app.update(resize(Size::new(920.0, 280.0)));
-	let _ = app.update(resize(Size::new(860.0, 280.0)));
+	let _ = app.model.perform(resize(Size::new(920.0, 280.0)));
+	let _ = app.model.perform(resize(Size::new(860.0, 280.0)));
 	assert_eq!(metric_samples(&app, "editor.width_sync"), 0);
 
-	let _ = app.update(Message::Viewport(ViewportMessage::ResizeTick(
-		Instant::now() + RESIZE_REFLOW_INTERVAL,
-	)));
+	let _ = app.model.perform(AppCommand::FlushResizeReflow);
 	assert_eq!(metric_samples(&app, "editor.width_sync"), 1);
 }
 
@@ -185,21 +192,21 @@ fn resize_bursts_only_sync_editor_width_on_coalesced_widths() {
 fn leaving_inspect_clears_hover_and_selection() {
 	let (mut app, _) = EditorApp::new();
 
-	let _ = app.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
-	let _ = app.update(Message::Canvas(CanvasEvent::Hovered(Some(
-		crate::types::CanvasTarget::Run(0),
-	))));
-	let _ = app.update(Message::Canvas(CanvasEvent::PointerSelectionStarted {
+	let _ = app.model.perform(AppCommand::SelectSidebarTab(SidebarTab::Inspect));
+	let _ = app
+		.model
+		.perform(AppCommand::HoverCanvas(Some(crate::types::CanvasTarget::Run(0))));
+	let _ = app.model.perform(AppCommand::BeginPointerSelection {
 		target: Some(crate::types::CanvasTarget::Run(0)),
 		intent: EditorPointerIntent::Begin {
 			position: iced::Point::ORIGIN,
 			select_word: false,
 		},
-	}));
+	});
 	assert!(app.model.sidebar.hovered_target.is_some());
 	assert!(app.model.sidebar.selected_target.is_some());
 
-	let _ = app.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Controls)));
+	let _ = app.model.perform(AppCommand::SelectSidebarTab(SidebarTab::Controls));
 
 	assert_eq!(app.model.sidebar.hovered_target, None);
 	assert_eq!(app.model.sidebar.selected_target, None);
@@ -209,16 +216,18 @@ fn leaving_inspect_clears_hover_and_selection() {
 fn canvas_generated_editor_intents_flow_through_session() {
 	let (mut app, _) = EditorApp::new();
 
-	let _ = app.update(Message::Canvas(CanvasEvent::PointerSelectionStarted {
+	let _ = app.model.perform(AppCommand::BeginPointerSelection {
 		target: Some(crate::types::CanvasTarget::Run(0)),
 		intent: EditorPointerIntent::Begin {
 			position: iced::Point::new(30.0, 32.0),
 			select_word: false,
 		},
-	}));
-	let _ = app.update(editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
-		iced::Point::new(120.0, 32.0),
-	))));
+	});
+	let _ = app
+		.model
+		.perform(editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
+			iced::Point::new(120.0, 32.0),
+		))));
 
 	assert!(
 		app.model
@@ -232,15 +241,15 @@ fn canvas_generated_editor_intents_flow_through_session() {
 #[test]
 fn inspect_sidebar_cache_reuses_model_until_inputs_change() {
 	let (mut app, _) = EditorApp::new();
-	let _ = app.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+	let _ = app.model.perform(AppCommand::SelectSidebarTab(SidebarTab::Inspect));
 
 	let _ = app.test_view_sidebar();
 	let _ = app.test_view_sidebar();
 	assert_eq!(app.model.sidebar_cache.inspect_build_count(), 1);
 
-	let _ = app.update(Message::Canvas(CanvasEvent::Hovered(Some(
-		crate::types::CanvasTarget::Run(0),
-	))));
+	let _ = app
+		.model
+		.perform(AppCommand::HoverCanvas(Some(crate::types::CanvasTarget::Run(0))));
 	let _ = app.test_view_sidebar();
 	assert_eq!(app.model.sidebar_cache.inspect_build_count(), 2);
 }
@@ -248,13 +257,15 @@ fn inspect_sidebar_cache_reuses_model_until_inputs_change() {
 #[test]
 fn perf_sidebar_cache_reuses_model_until_metrics_change() {
 	let (mut app, _) = EditorApp::new();
-	let _ = app.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Perf)));
+	let _ = app.model.perform(AppCommand::SelectSidebarTab(SidebarTab::Perf));
 
 	let _ = app.test_view_sidebar();
 	let _ = app.test_view_sidebar();
 	assert_eq!(app.model.sidebar_cache.perf_build_count(), 1);
 
-	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+	let _ = app
+		.model
+		.perform(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
 	let _ = app.test_view_sidebar();
 	assert_eq!(app.model.sidebar_cache.perf_build_count(), 2);
 }
@@ -264,21 +275,80 @@ fn repeated_no_op_inputs_do_not_churn_scene_state() {
 	let (mut app, _) = EditorApp::new();
 	let revision_before = app.model.session.snapshot().scene.as_ref().map(|scene| scene.revision);
 
-	let _ = app.update(Message::Controls(ControlsMessage::FontSelected(
+	let _ = app.model.perform(AppCommand::Control(ControlsMessage::FontSelected(
 		app.model.controls.font,
 	)));
-	let _ = app.update(Message::Controls(ControlsMessage::ShowHitboxesChanged(
-		app.model.controls.show_hitboxes,
-	)));
+	let _ = app
+		.model
+		.perform(AppCommand::Control(ControlsMessage::ShowHitboxesChanged(
+			app.model.controls.show_hitboxes,
+		)));
 
-	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
-	let _ = app.update(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
-		"!".to_string(),
-	))));
+	let _ = app
+		.model
+		.perform(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+	let _ = app
+		.model
+		.perform(editor(EditorIntent::Edit(EditorEditIntent::InsertText(
+			"!".to_string(),
+		))));
 
 	assert_eq!(
 		app.model.session.snapshot().scene.as_ref().map(|scene| scene.revision),
 		revision_before
 	);
 	assert!(app.model.session.snapshot().scene.is_none());
+}
+
+#[test]
+fn width_sync_keeps_the_selected_preset() {
+	let (mut app, _) = EditorApp::new();
+
+	let _ = app.model.perform(resize(Size::new(980.0, 280.0)));
+	let _ = app.model.perform(AppCommand::FlushResizeReflow);
+
+	assert_eq!(app.model.controls.preset, crate::types::SamplePreset::Tall);
+}
+
+#[test]
+fn config_changes_keep_the_selected_preset() {
+	let (mut app, _) = EditorApp::new();
+
+	let _ = app.model.perform(AppCommand::Control(ControlsMessage::FontSelected(
+		crate::types::FontChoice::Monospace,
+	)));
+	let _ = app.model.perform(AppCommand::Control(ControlsMessage::WrappingSelected(
+		crate::types::WrapChoice::Glyph,
+	)));
+
+	assert_eq!(app.model.controls.preset, crate::types::SamplePreset::Tall);
+}
+
+#[test]
+fn update_maps_editor_messages_to_commands() {
+	let (mut app, _) = EditorApp::new();
+
+	let _ = app.update(Message::Editor(EditorIntent::Motion(EditorMotion::Right)));
+
+	assert!(
+		app.model
+			.session
+			.view_state()
+			.selection
+			.is_some_and(|selection| selection.end > selection.start)
+	);
+}
+
+#[test]
+fn update_maps_viewport_messages_to_commands() {
+	let (mut app, _) = EditorApp::new();
+
+	let _ = app.update(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
+		980.0, 280.0,
+	))));
+	let _ = app.update(Message::Viewport(ViewportMessage::ResizeTick(
+		Instant::now() + RESIZE_REFLOW_INTERVAL,
+	)));
+
+	assert_eq!(metric_samples(&app, "editor.width_sync"), 1);
 }

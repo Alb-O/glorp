@@ -1,20 +1,13 @@
 use {
-	super::{AppModel, EditorApp, update::AppAction},
+	super::{AppModel, EditorApp, update::AppCommand},
 	crate::{
 		HeadlessScenario, HeadlessScriptScenario, PerfScenario,
 		editor::{EditorEditIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent},
 		perf::{PerfDashboard, PerfFramePacingSummary, PerfGraphSeries, PerfMonitor, PerfOverview, PerfRecentActivity},
-		types::{
-			CanvasEvent, CanvasTarget, ControlsMessage, Message, SamplePreset, SidebarMessage, SidebarTab,
-			ViewportMessage,
-		},
+		types::{CanvasTarget, ControlsMessage, SamplePreset, SidebarTab},
 	},
 	iced::{Point, Size},
-	std::{
-		fmt::Write as _,
-		sync::OnceLock,
-		time::{Duration, Instant},
-	},
+	std::{fmt::Write as _, sync::OnceLock, time::Duration},
 };
 
 #[cfg(test)]
@@ -36,7 +29,6 @@ const HEADLESS_DELETE_SEED_REPEAT: usize = 24;
 #[cfg(test)]
 const HEADLESS_MOTION_SWEEP_REPEATS: usize = 48;
 const HEADLESS_RESIZE_PROGRESS: [f32; 4] = [0.25, 0.5, 0.75, 1.0];
-const HEADLESS_RESIZE_SETTLE_DELAY: Duration = Duration::from_millis(16);
 const HEADLESS_RESIZE_WIDTHS: [f32; 7] = [1600.0, 1240.0, 980.0, 780.0, 1120.0, 900.0, 1360.0];
 const HEADLESS_MOTION_SEQUENCE: [EditorMotion; 6] = [
 	EditorMotion::Down,
@@ -119,16 +111,16 @@ impl HeadlessDriver<'_> {
 		match scenario {
 			HeadlessScenario::Default => {}
 			HeadlessScenario::Tall => {
-				self.dispatch_message(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)))
+				self.dispatch_command(AppCommand::Control(ControlsMessage::LoadPreset(SamplePreset::Tall)))
 			}
 			HeadlessScenario::TallInspect => {
-				self.dispatch_message(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
+				self.dispatch_command(AppCommand::Control(ControlsMessage::LoadPreset(SamplePreset::Tall)));
 				self.enable_inspect_mode();
-				self.dispatch_message(Message::Canvas(CanvasEvent::Hovered(Some(CanvasTarget::Cluster(0)))));
+				self.dispatch_command(AppCommand::HoverCanvas(Some(CanvasTarget::Cluster(0))));
 			}
 			HeadlessScenario::TallPerf => {
-				self.dispatch_message(Message::Controls(ControlsMessage::LoadPreset(SamplePreset::Tall)));
-				self.dispatch_message(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Perf)));
+				self.dispatch_command(AppCommand::Control(ControlsMessage::LoadPreset(SamplePreset::Tall)));
+				self.dispatch_command(AppCommand::SelectSidebarTab(SidebarTab::Perf));
 			}
 		}
 	}
@@ -183,7 +175,7 @@ impl HeadlessDriver<'_> {
 				}),
 			PerfScenario::ResizeReflow => {
 				self.configure_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
-				self.dispatch_message(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+				self.dispatch_command(AppCommand::SelectSidebarTab(SidebarTab::Inspect));
 			}
 		}
 	}
@@ -234,29 +226,26 @@ impl HeadlessDriver<'_> {
 
 	fn configure_viewport(&mut self) {
 		self.app.perf = PerfMonitor::default();
-		self.dispatch_message(Message::Viewport(ViewportMessage::CanvasResized(
-			HEADLESS_VIEWPORT_SIZE,
-		)));
+		self.dispatch_command(AppCommand::ObserveCanvasResize(HEADLESS_VIEWPORT_SIZE));
 	}
 
 	fn enable_inspect_mode(&mut self) {
-		self.dispatch_message(Message::Controls(ControlsMessage::ShowHitboxesChanged(true)));
-		self.dispatch_message(Message::Controls(ControlsMessage::ShowBaselinesChanged(true)));
-		self.dispatch_message(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
+		self.dispatch_command(AppCommand::Control(ControlsMessage::ShowHitboxesChanged(true)));
+		self.dispatch_command(AppCommand::Control(ControlsMessage::ShowBaselinesChanged(true)));
+		self.dispatch_command(AppCommand::SelectSidebarTab(SidebarTab::Inspect));
 	}
 
 	fn load_document(&mut self, text: &str) {
-		self.dispatch_message(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Controls)));
-		let _ = self.app.dispatch(AppAction::ReplaceDocument {
-			text: text.to_string(),
-			preset: SamplePreset::Custom,
-		});
+		self.dispatch_command(AppCommand::SelectSidebarTab(SidebarTab::Controls));
+		self.dispatch_command(AppCommand::ReplaceDocument(text.to_string()));
 	}
 
 	fn position_insert_point(&mut self) {
 		self.repeat_motion(EditorMotion::Down, HEADLESS_INSERT_POSITION_ROWS);
 		self.apply_motion(EditorMotion::LineEnd);
-		self.dispatch_message(Message::Editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
+		self.dispatch_command(AppCommand::editor(EditorIntent::Mode(
+			EditorModeIntent::EnterInsertAfter,
+		)));
 	}
 
 	fn rewind_insert_caret(&mut self, steps: usize) {
@@ -268,16 +257,16 @@ impl HeadlessDriver<'_> {
 	}
 
 	fn apply_edit(&mut self, intent: EditorEditIntent) {
-		self.dispatch_message(Message::Editor(EditorIntent::Edit(intent)));
+		self.dispatch_command(AppCommand::editor(EditorIntent::Edit(intent)));
 	}
 
 	#[cfg(test)]
 	fn apply_history(&mut self, intent: EditorHistoryIntent) {
-		self.dispatch_message(Message::Editor(EditorIntent::History(intent)));
+		self.dispatch_command(AppCommand::editor(EditorIntent::History(intent)));
 	}
 
 	fn apply_motion(&mut self, intent: EditorMotion) {
-		self.dispatch_message(Message::Editor(EditorIntent::Motion(intent)));
+		self.dispatch_command(AppCommand::editor(EditorIntent::Motion(intent)));
 	}
 
 	#[cfg(test)]
@@ -348,22 +337,18 @@ impl HeadlessDriver<'_> {
 
 		for progress in HEADLESS_RESIZE_PROGRESS {
 			let width = (target - start).mul_add(progress, start);
-			self.dispatch_message(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
+			self.dispatch_command(AppCommand::ObserveCanvasResize(Size::new(
 				width,
 				HEADLESS_VIEWPORT_SIZE.height,
-			))));
+			)));
 		}
 
-		self.dispatch_message(Message::Viewport(ViewportMessage::ResizeTick(
-			Instant::now() + HEADLESS_RESIZE_SETTLE_DELAY,
-		)));
+		self.dispatch_command(AppCommand::FlushResizeReflow);
 	}
 
 	fn perform_inspect_interaction_step(&mut self, step: usize) {
 		if step < HEADLESS_INSPECT_HOVERS.len() {
-			self.dispatch_message(Message::Canvas(CanvasEvent::Hovered(Some(
-				HEADLESS_INSPECT_HOVERS[step],
-			))));
+			self.dispatch_command(AppCommand::HoverCanvas(Some(HEADLESS_INSPECT_HOVERS[step])));
 			return;
 		}
 
@@ -403,28 +388,28 @@ impl HeadlessDriver<'_> {
 		)
 	}
 
-	fn dispatch_message(&mut self, message: Message) {
-		let _ = self.app.dispatch(message.into());
+	fn dispatch_command(&mut self, command: AppCommand) {
+		let _ = self.app.perform(command);
 	}
 
 	fn begin_pointer_selection(&mut self, target: CanvasTarget, position: (f32, f32)) {
-		self.dispatch_message(Message::Canvas(CanvasEvent::PointerSelectionStarted {
+		self.dispatch_command(AppCommand::BeginPointerSelection {
 			target: Some(target),
 			intent: EditorPointerIntent::Begin {
 				position: Point::new(position.0, position.1),
 				select_word: false,
 			},
-		}));
+		});
 	}
 
 	fn drag_pointer_selection(&mut self, position: (f32, f32)) {
-		self.dispatch_message(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
+		self.dispatch_command(AppCommand::editor(EditorIntent::Pointer(EditorPointerIntent::Drag(
 			Point::new(position.0, position.1),
 		))));
 	}
 
 	fn end_pointer_selection(&mut self) {
-		self.dispatch_message(Message::Editor(EditorIntent::Pointer(EditorPointerIntent::End)));
+		self.dispatch_command(AppCommand::editor(EditorIntent::Pointer(EditorPointerIntent::End)));
 	}
 }
 
