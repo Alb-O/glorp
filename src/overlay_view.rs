@@ -351,26 +351,23 @@ fn point_in_space(bounds: Rectangle, origin: Point, position: Point, space: Over
 fn draw_selection_underlay(
 	renderer: &mut iced::Renderer, bounds: Rectangle, origin: Point, overlays: &[OverlayPrimitive],
 ) {
-	let mut rectangles = Vec::with_capacity(overlays.len() / 2);
-
-	for primitive in overlays
+	let rectangles = overlays
 		.iter()
 		.filter(|primitive| primitive.layer == OverlayLayer::UnderText)
-	{
-		// Selection fill/outline is rendered as one merged shape so adjacent
-		// rects do not double-stroke shared edges.
-		let OverlayRectKind::EditorSelection = primitive.kind else {
-			continue;
-		};
-
-		let rect = rect_bounds(bounds, origin, primitive.rect, primitive.space);
-		rectangles.push(LayoutRect {
-			x: rect.x,
-			y: rect.y,
-			width: rect.width.max(1.0),
-			height: rect.height.max(1.0),
-		});
-	}
+		.filter_map(|primitive| {
+			// Selection fill/outline is rendered as one merged shape so adjacent
+			// rects do not double-stroke shared edges.
+			matches!(primitive.kind, OverlayRectKind::EditorSelection).then(|| {
+				let rect = rect_bounds(bounds, origin, primitive.rect, primitive.space);
+				LayoutRect {
+					x: rect.x,
+					y: rect.y,
+					width: rect.width.max(1.0),
+					height: rect.height.max(1.0),
+				}
+			})
+		})
+		.collect::<Vec<_>>();
 
 	draw_selection_group(renderer, &rectangles, selection_palette(EditorOverlayTone::Normal));
 }

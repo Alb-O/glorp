@@ -87,12 +87,10 @@ impl DocumentLayout {
 pub(crate) fn resolve_font_names_from_buffer(
 	font_system: &FontSystem, buffer: &Buffer,
 ) -> Arc<[(fontdb::ID, Arc<str>)]> {
-	let mut font_ids = BTreeSet::new();
-	for run in buffer.layout_runs() {
-		font_ids.extend(run.glyphs.iter().map(|glyph| glyph.font_id));
-	}
-
-	font_ids
+	buffer
+		.layout_runs()
+		.flat_map(|run| run.glyphs.iter().map(|glyph| glyph.font_id))
+		.collect::<BTreeSet<_>>()
 		.into_iter()
 		.map(|font_id| {
 			let name = font_system

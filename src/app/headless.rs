@@ -162,23 +162,14 @@ impl EditorApp {
 					self.apply_headless_insert(format!("u{step:02}"));
 				}
 
-				for _ in 0..HEADLESS_UNDO_REDO_STEPS {
-					self.apply_headless_history(EditorHistoryIntent::Undo);
-				}
-
-				for _ in 0..HEADLESS_UNDO_REDO_STEPS {
-					self.apply_headless_history(EditorHistoryIntent::Redo);
-				}
+				self.repeat_headless_history(EditorHistoryIntent::Undo, HEADLESS_UNDO_REDO_STEPS);
+				self.repeat_headless_history(EditorHistoryIntent::Redo, HEADLESS_UNDO_REDO_STEPS);
 			}
 			HeadlessScriptScenario::BackspaceBurst => {
-				for _ in 0..delete_seed_char_count() {
-					self.apply_headless_edit(EditorEditIntent::Backspace);
-				}
+				self.repeat_headless_edit(EditorEditIntent::Backspace, delete_seed_char_count())
 			}
 			HeadlessScriptScenario::DeleteForwardBurst => {
-				for _ in 0..delete_seed_char_count() {
-					self.apply_headless_edit(EditorEditIntent::DeleteForward);
-				}
+				self.repeat_headless_edit(EditorEditIntent::DeleteForward, delete_seed_char_count())
 			}
 			HeadlessScriptScenario::MotionSweep => self.perform_motion_sweep(),
 			HeadlessScriptScenario::PointerSelectionSweep => self.perform_pointer_selection_sweep(),
@@ -241,18 +232,13 @@ impl EditorApp {
 	}
 
 	fn position_headless_insert_point(&mut self) {
-		for _ in 0..HEADLESS_INSERT_POSITION_ROWS {
-			self.apply_headless_motion(EditorMotion::Down);
-		}
-
+		self.repeat_headless_motion(EditorMotion::Down, HEADLESS_INSERT_POSITION_ROWS);
 		self.apply_headless_motion(EditorMotion::LineEnd);
 		self.dispatch_headless(Message::Editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
 	}
 
 	fn rewind_insert_caret(&mut self, steps: usize) {
-		for _ in 0..steps {
-			self.apply_headless_motion(EditorMotion::Left);
-		}
+		self.repeat_headless_motion(EditorMotion::Left, steps);
 	}
 
 	fn apply_headless_insert(&mut self, text: impl Into<String>) {
@@ -269,6 +255,24 @@ impl EditorApp {
 
 	fn apply_headless_motion(&mut self, intent: EditorMotion) {
 		self.dispatch_headless(Message::Editor(EditorIntent::Motion(intent)));
+	}
+
+	fn repeat_headless_edit(&mut self, intent: EditorEditIntent, steps: usize) {
+		for _ in 0..steps {
+			self.apply_headless_edit(intent.clone());
+		}
+	}
+
+	fn repeat_headless_history(&mut self, intent: EditorHistoryIntent, steps: usize) {
+		for _ in 0..steps {
+			self.apply_headless_history(intent);
+		}
+	}
+
+	fn repeat_headless_motion(&mut self, intent: EditorMotion, steps: usize) {
+		for _ in 0..steps {
+			self.apply_headless_motion(intent);
+		}
 	}
 
 	fn perform_motion_sweep(&mut self) {
@@ -395,11 +399,9 @@ impl EditorApp {
 }
 
 fn fold_bytes_to_usize(bytes: impl IntoIterator<Item = u8>) -> usize {
-	let mut hash = 0usize;
-	for byte in bytes {
-		hash = hash.rotate_left(5) ^ usize::from(byte);
-	}
-	hash
+	bytes
+		.into_iter()
+		.fold(0usize, |hash, byte| hash.rotate_left(5) ^ usize::from(byte))
 }
 
 fn headless_bench_document() -> &'static str {

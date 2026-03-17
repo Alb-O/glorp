@@ -34,8 +34,9 @@ pub(super) struct EditorLayout {
 impl EditorLayout {
 	pub(super) fn new(font_system: &mut FontSystem, text: &str, config: SceneConfig) -> Self {
 		let buffer = Arc::new(build_buffer(font_system, text, config));
+		let font_names = resolve_font_names_from_buffer(font_system, &buffer);
 		Self {
-			font_names: RefCell::new(resolve_font_names_from_buffer(font_system, &buffer)),
+			font_names: RefCell::new(font_names),
 			buffer,
 			config,
 			document_layout: RefCell::new(None),
@@ -73,9 +74,7 @@ impl EditorLayout {
 		}
 
 		self.config = config;
-		self.buffer = Arc::new(build_buffer(font_system, text, config));
-		self.font_names
-			.replace(resolve_font_names_from_buffer(font_system, &self.buffer));
+		self.replace_buffer(font_system, text);
 		true
 	}
 
@@ -92,9 +91,7 @@ impl EditorLayout {
 
 	pub(super) fn reset(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) {
 		self.config = config;
-		self.buffer = Arc::new(build_buffer(font_system, text, config));
-		self.font_names
-			.replace(resolve_font_names_from_buffer(font_system, &self.buffer));
+		self.replace_buffer(font_system, text);
 		self.clear_snapshot();
 		self.view_state = default_view_state();
 	}
@@ -155,9 +152,7 @@ impl EditorLayout {
 	pub(super) fn rebuild_buffer(&mut self, font_system: &mut FontSystem, text: &str, edit: &TextEdit) {
 		let started = Instant::now();
 		self.clear_snapshot();
-		self.buffer = Arc::new(build_buffer(font_system, text, self.config));
-		self.font_names
-			.replace(resolve_font_names_from_buffer(font_system, &self.buffer));
+		self.replace_buffer(font_system, text);
 		debug!(
 			duration_ms = duration_ms(started.elapsed()),
 			text_bytes = text.len(),
@@ -221,6 +216,12 @@ impl EditorLayout {
 		buffer.set_size(font_system, Some(width), None);
 	}
 
+	fn replace_buffer(&mut self, font_system: &mut FontSystem, text: &str) {
+		self.buffer = Arc::new(build_buffer(font_system, text, self.config));
+		self.font_names
+			.replace(resolve_font_names_from_buffer(font_system, &self.buffer));
+	}
+
 	fn clear_snapshot(&self) {
 		self.document_layout.replace(None);
 		self.viewport_metrics.set(None);
@@ -246,13 +247,7 @@ fn default_view_state() -> EditorViewState {
 }
 
 fn measure_buffer(buffer: &Buffer) -> (f32, f32) {
-	let mut measured_width: f32 = 0.0;
-	let mut measured_height: f32 = 0.0;
-
-	for run in buffer.layout_runs() {
-		measured_width = measured_width.max(run.line_w);
-		measured_height = measured_height.max(run.line_top + run.line_height);
-	}
-
-	(measured_width, measured_height)
+	buffer.layout_runs().fold((0.0, 0.0), |(width, height), run| {
+		(width.max(run.line_w), height.max(run.line_top + run.line_height))
+	})
 }

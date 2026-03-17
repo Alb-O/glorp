@@ -181,52 +181,14 @@ impl EditorEngine {
 		let started = Instant::now();
 		let Self { core, layout } = self;
 		layout.apply_incremental_edit(font_system, core.document.text(), edit);
-		let total_ms = duration_ms(started.elapsed());
-		if total_ms >= 8.0 {
-			debug!(
-				text_bytes = self.core.document.len(),
-				total_ms,
-				inserted_bytes = edit.inserted.len(),
-				range_start = edit.range.start,
-				range_end = edit.range.end,
-				"apply buffer edit"
-			);
-		} else {
-			trace!(
-				text_bytes = self.core.document.len(),
-				total_ms,
-				inserted_bytes = edit.inserted.len(),
-				range_start = edit.range.start,
-				range_end = edit.range.end,
-				"apply buffer edit"
-			);
-		}
+		self.log_buffer_edit("apply buffer edit", edit, started);
 	}
 
 	fn rebuild_buffer(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {
 		let started = Instant::now();
 		let Self { core, layout } = self;
 		layout.rebuild_buffer(font_system, core.document.text(), edit);
-		let total_ms = duration_ms(started.elapsed());
-		if total_ms >= 8.0 {
-			debug!(
-				text_bytes = self.core.document.len(),
-				total_ms,
-				inserted_bytes = edit.inserted.len(),
-				range_start = edit.range.start,
-				range_end = edit.range.end,
-				"rebuild buffer"
-			);
-		} else {
-			trace!(
-				text_bytes = self.core.document.len(),
-				total_ms,
-				inserted_bytes = edit.inserted.len(),
-				range_start = edit.range.start,
-				range_end = edit.range.end,
-				"rebuild buffer"
-			);
-		}
+		self.log_buffer_edit("rebuild buffer", edit, started);
 	}
 
 	pub(super) fn set_insert_head_fast(&mut self, head: usize) {
@@ -288,47 +250,56 @@ impl EditorEngine {
 	fn insert_overlays(
 		tone: EditorOverlayTone, insert_cursor: Option<LayoutRect>, viewport_target: Option<LayoutRect>,
 	) -> Arc<[OverlayPrimitive]> {
-		let mut overlays =
-			Vec::with_capacity(usize::from(viewport_target.is_some()) + usize::from(insert_cursor.is_some()));
-
-		if let Some(insert_block) = viewport_target {
-			overlays.push(OverlayPrimitive::scene_rect(
-				insert_block,
-				OverlayRectKind::EditorInsertBlock(tone),
-				OverlayLayer::UnderText,
-			));
-		}
-
-		if let Some(caret) = insert_cursor {
-			overlays.push(OverlayPrimitive::scene_rect(
-				caret,
-				OverlayRectKind::EditorCaret(tone),
-				OverlayLayer::UnderText,
-			));
-		}
-
-		overlays.into()
+		[
+			viewport_target.map(|insert_block| {
+				OverlayPrimitive::scene_rect(
+					insert_block,
+					OverlayRectKind::EditorInsertBlock(tone),
+					OverlayLayer::UnderText,
+				)
+			}),
+			insert_cursor.map(|caret| {
+				OverlayPrimitive::scene_rect(caret, OverlayRectKind::EditorCaret(tone), OverlayLayer::UnderText)
+			}),
+		]
+		.into_iter()
+		.flatten()
+		.collect()
 	}
 
 	fn normal_overlays(
 		tone: EditorOverlayTone, selection_rectangles: &[LayoutRect], viewport_target: Option<LayoutRect>,
 	) -> Arc<[OverlayPrimitive]> {
-		let mut overlays = Vec::with_capacity(selection_rectangles.len() + usize::from(viewport_target.is_some()));
+		selection_rectangles
+			.iter()
+			.copied()
+			.map(|rect| OverlayPrimitive::scene_rect(rect, OverlayRectKind::EditorSelection, OverlayLayer::UnderText))
+			.chain(viewport_target.into_iter().map(|active| {
+				OverlayPrimitive::scene_rect(active, OverlayRectKind::EditorActive(tone), OverlayLayer::UnderText)
+			}))
+			.collect()
+	}
 
-		overlays.extend(
-			selection_rectangles.iter().copied().map(|rect| {
-				OverlayPrimitive::scene_rect(rect, OverlayRectKind::EditorSelection, OverlayLayer::UnderText)
-			}),
-		);
-
-		if let Some(active) = viewport_target {
-			overlays.push(OverlayPrimitive::scene_rect(
-				active,
-				OverlayRectKind::EditorActive(tone),
-				OverlayLayer::UnderText,
-			));
+	fn log_buffer_edit(&self, label: &'static str, edit: &TextEdit, started: Instant) {
+		let total_ms = duration_ms(started.elapsed());
+		if total_ms >= 8.0 {
+			debug!(
+				text_bytes = self.core.document.len(),
+				total_ms,
+				inserted_bytes = edit.inserted.len(),
+				range_start = edit.range.start,
+				range_end = edit.range.end,
+				"{label}"
+			);
+		} else {
+			trace!(
+				text_bytes = self.core.document.len(),
+				total_ms,
+				inserted_bytes = edit.inserted.len(),
+				range_start = edit.range.start,
+				range_end = edit.range.end,
+				"{label}"
+			);
 		}
-
-		overlays.into()
 	}
 }

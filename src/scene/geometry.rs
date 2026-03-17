@@ -201,13 +201,7 @@ fn run_distance(run: &LayoutRun, y: f32) -> f32 {
 	let top = run.line_top;
 	let bottom = run.line_top + run.line_height;
 
-	if y < top {
-		top - y
-	} else if y > bottom {
-		y - bottom
-	} else {
-		0.0
-	}
+	if y < top { top - y } else { (y - bottom).max(0.0) }
 }
 
 fn contains_point(point: Point, x: f32, y: f32, width: f32, height: f32) -> bool {
