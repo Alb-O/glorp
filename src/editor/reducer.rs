@@ -108,7 +108,7 @@ fn apply_enter_insert(editor: &mut EditorEngine, before: bool) -> ApplyResult {
 		let range = selection.range();
 		if before { range.start } else { range.end }
 	});
-	editor.enter_insert_with_layout(&layout, caret);
+	editor.set_insert_head(&layout, caret);
 	layout_result(layout)
 }
 

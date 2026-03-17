@@ -17,8 +17,7 @@ fn large_paste_script_scenario_applies_one_large_edit() {
 	let before = app.model.session.text().len();
 	let history_before = app.model.session.history_depths();
 
-	let _ = app
-		.headless_driver()
+	app.headless_driver()
 		.run_script_scenario(HeadlessScriptScenario::LargePaste);
 
 	assert_eq!(
@@ -37,8 +36,7 @@ fn incremental_typing_script_scenario_records_many_small_edits() {
 	let before = app.model.session.text().len();
 	let history_before = app.model.session.history_depths();
 
-	let _ = app
-		.headless_driver()
+	app.headless_driver()
 		.run_script_scenario(HeadlessScriptScenario::IncrementalTyping);
 
 	assert_eq!(
@@ -59,8 +57,7 @@ fn incremental_line_break_script_scenario_grows_line_count() {
 	let before_lines = app.model.session.text().lines().count();
 	let history_before = app.model.session.history_depths();
 
-	let _ = app
-		.headless_driver()
+	app.headless_driver()
 		.run_script_scenario(HeadlessScriptScenario::IncrementalLineBreaks);
 
 	assert_eq!(
@@ -78,8 +75,7 @@ fn undo_redo_script_scenario_reaches_the_redone_state() {
 		.configure_script_scenario(HeadlessScriptScenario::UndoRedoBurst);
 	let before = app.model.session.text().len();
 
-	let _ = app
-		.headless_driver()
+	app.headless_driver()
 		.run_script_scenario(HeadlessScriptScenario::UndoRedoBurst);
 
 	assert!(app.model.session.text().len() > before);
@@ -94,8 +90,7 @@ fn backspace_script_scenario_removes_the_seeded_insert() {
 		.configure_script_scenario(HeadlessScriptScenario::BackspaceBurst);
 	let before = app.model.session.text().len();
 
-	let _ = app
-		.headless_driver()
+	app.headless_driver()
 		.run_script_scenario(HeadlessScriptScenario::BackspaceBurst);
 
 	assert_eq!(
@@ -112,8 +107,7 @@ fn delete_forward_script_scenario_removes_the_seeded_insert() {
 		.configure_script_scenario(HeadlessScriptScenario::DeleteForwardBurst);
 	let before = app.model.session.text().len();
 
-	let _ = app
-		.headless_driver()
+	app.headless_driver()
 		.run_script_scenario(HeadlessScriptScenario::DeleteForwardBurst);
 
 	assert_eq!(
@@ -131,8 +125,7 @@ fn motion_sweep_script_scenario_moves_without_editing() {
 	let before = app.model.session.text().to_string();
 	let history_before = app.model.session.history_depths();
 
-	let _ = app
-		.headless_driver()
+	app.headless_driver()
 		.run_script_scenario(HeadlessScriptScenario::MotionSweep);
 
 	assert_eq!(app.model.session.text(), before);
@@ -146,8 +139,7 @@ fn pointer_selection_sweep_script_scenario_expands_selection() {
 	app.headless_driver()
 		.configure_script_scenario(HeadlessScriptScenario::PointerSelectionSweep);
 
-	let _ = app
-		.headless_driver()
+	app.headless_driver()
 		.run_script_scenario(HeadlessScriptScenario::PointerSelectionSweep);
 
 	assert!(
@@ -166,8 +158,7 @@ fn resize_reflow_script_scenario_changes_layout_width_and_revisions() {
 		.configure_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
 	let revision_before = app.model.session.snapshot().scene.as_ref().map(|scene| scene.revision);
 
-	let _ = app
-		.headless_driver()
+	app.headless_driver()
 		.run_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
 
 	assert_eq!(
@@ -227,8 +218,7 @@ fn inspect_interaction_script_scenario_keeps_inspect_state_active() {
 	app.headless_driver()
 		.configure_script_scenario(HeadlessScriptScenario::InspectInteractionSweep);
 
-	let _ = app
-		.headless_driver()
+	app.headless_driver()
 		.run_script_scenario(HeadlessScriptScenario::InspectInteractionSweep);
 
 	assert_eq!(app.model.sidebar.active_tab, SidebarTab::Inspect);

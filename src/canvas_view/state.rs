@@ -273,7 +273,7 @@ mod tests {
 
 		assert!(!state.focused());
 
-		let _ = state.transition(
+		state.transition(
 			DecodedEvent::canvas(CanvasIntent::PointerPressed {
 				position: Point::new(4.0, 4.0),
 				target: None,
@@ -283,7 +283,7 @@ mod tests {
 		);
 		assert!(state.focused());
 
-		let _ = state.transition(DecodedEvent::canvas(CanvasIntent::Blur), max_scroll());
+		state.transition(DecodedEvent::canvas(CanvasIntent::Blur), max_scroll());
 		assert!(!state.focused());
 	}
 
@@ -303,7 +303,7 @@ mod tests {
 	#[test]
 	fn hover_clears_when_cursor_leaves_bounds() {
 		let mut state = CanvasState::default();
-		let _ = state.transition(
+		state.transition(
 			DecodedEvent::canvas(CanvasIntent::CursorMoved {
 				position: Point::new(5.0, 5.0),
 				target: Some(CanvasTarget::Run(0)),
@@ -322,7 +322,7 @@ mod tests {
 	#[test]
 	fn dragging_pointer_selection_publishes_editor_pointer_intent() {
 		let mut state = CanvasState::default();
-		let _ = state.transition(
+		state.transition(
 			DecodedEvent::canvas(CanvasIntent::PointerPressed {
 				position: Point::new(1.0, 1.0),
 				target: None,

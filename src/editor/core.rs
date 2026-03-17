@@ -143,11 +143,7 @@ impl EditorEngine {
 
 	pub(super) fn enter_insert_at(&mut self, caret: usize) {
 		let layout = self.document_layout();
-		self.enter_insert_with_layout(&layout, caret);
-	}
-
-	pub(super) fn enter_insert_with_layout(&mut self, layout: &DocumentLayout, caret: usize) {
-		self.set_insert_head(layout, caret);
+		self.set_insert_head(&layout, caret);
 	}
 
 	pub(super) fn insert_selection(layout: &DocumentLayout, head: usize) -> Option<EditorSelection> {

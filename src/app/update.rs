@@ -68,8 +68,9 @@ impl From<Message> for AppCommand {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum ScrollBehavior {
+	#[default]
 	KeepClamped,
 	ResetScroll,
 }
@@ -121,12 +122,6 @@ enum SceneRefreshReason {
 impl SceneRefreshReason {
 	fn records_resize_reflow(self) -> bool {
 		matches!(self, Self::ResizeReflow)
-	}
-}
-
-impl Default for ScrollBehavior {
-	fn default() -> Self {
-		Self::KeepClamped
 	}
 }
 

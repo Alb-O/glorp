@@ -61,14 +61,6 @@ impl EditorPresentation {
 			redo_depth,
 		}
 	}
-
-	pub(crate) fn mode(&self) -> EditorMode {
-		self.editor.mode
-	}
-
-	pub(crate) fn editor_bytes(&self) -> usize {
-		self.editor_bytes
-	}
 }
 
 impl ScenePresentation {
@@ -83,10 +75,10 @@ impl SessionSnapshot {
 	}
 
 	pub(crate) fn mode(&self) -> EditorMode {
-		self.editor.mode()
+		self.editor.editor.mode
 	}
 
 	pub(crate) fn editor_bytes(&self) -> usize {
-		self.editor.editor_bytes()
+		self.editor.editor_bytes
 	}
 }

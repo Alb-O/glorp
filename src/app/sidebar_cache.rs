@@ -80,8 +80,8 @@ impl SidebarCache {
 		let key = PerfSidebarKey {
 			editor_revision: editor.revision,
 			scene_revision: scene.revision,
-			editor_mode: editor.mode(),
-			editor_bytes: editor.editor_bytes(),
+			editor_mode: editor.editor.mode,
+			editor_bytes: editor.editor_bytes,
 			perf: perf.key(),
 		};
 
@@ -89,7 +89,7 @@ impl SidebarCache {
 			#[cfg(test)]
 			self.perf_builds.set(self.perf_builds.get() + 1);
 
-			perf.dashboard(scene.layout.as_ref(), editor.mode(), editor.editor_bytes())
+			perf.dashboard(scene.layout.as_ref(), editor.editor.mode, editor.editor_bytes)
 		})
 	}
 
@@ -132,28 +132,24 @@ impl InspectSidebarArgs<'_> {
 	}
 }
 
-fn cached_data<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, key: K) -> Option<Arc<V>>
-where
-	K: Copy + Eq, {
-	cache
-		.borrow()
-		.as_ref()
-		.filter(|entry| entry.key == key)
-		.map(|entry| entry.data.clone())
-}
-
 fn cached_or_build<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, key: K, build: impl FnOnce() -> V) -> Arc<V>
 where
 	K: Copy + Eq, {
-	cached_data(cache, key).unwrap_or_else(|| {
-		let data = Arc::new(build());
-		store_cached_data(cache, key, data.clone());
+	if let Some(data) = cache
+		.borrow()
+		.as_ref()
+		.filter(|entry| entry.key == key)
+		.map(|entry| Arc::clone(&entry.data))
+	{
 		data
-	})
-}
-
-fn store_cached_data<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, key: K, data: Arc<V>) {
-	cache.replace(Some(CachedEntry { key, data }));
+	} else {
+		let data = Arc::new(build());
+		cache.replace(Some(CachedEntry {
+			key,
+			data: Arc::clone(&data),
+		}));
+		data
+	}
 }
 
 fn interaction_details(

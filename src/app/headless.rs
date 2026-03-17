@@ -97,7 +97,7 @@ impl EditorApp {
 				self.model.perf.dashboard(
 					scene.layout.as_ref(),
 					self.model.session.mode(),
-					snapshot.editor.editor_bytes(),
+					snapshot.editor.editor_bytes,
 				)
 			},
 		)

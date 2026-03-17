@@ -117,6 +117,19 @@ impl SamplePreset {
 		SamplePreset::Custom,
 	];
 
+	pub(crate) const fn label(self) -> &'static str {
+		match self {
+			SamplePreset::Tall => "Tall",
+			SamplePreset::Mixed => "Mixed",
+			SamplePreset::Rust => "Rust",
+			SamplePreset::Ligatures => "Ligatures",
+			SamplePreset::Arabic => "Arabic",
+			SamplePreset::Cjk => "CJK",
+			SamplePreset::Emoji => "Emoji",
+			SamplePreset::Custom => "Custom",
+		}
+	}
+
 	pub(crate) fn text(self) -> &'static str {
 		match self {
 			SamplePreset::Tall => concat!(
@@ -154,16 +167,7 @@ impl SamplePreset {
 
 impl Display for SamplePreset {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.write_str(match self {
-			SamplePreset::Tall => "Tall",
-			SamplePreset::Mixed => "Mixed",
-			SamplePreset::Rust => "Rust",
-			SamplePreset::Ligatures => "Ligatures",
-			SamplePreset::Arabic => "Arabic",
-			SamplePreset::Cjk => "CJK",
-			SamplePreset::Emoji => "Emoji",
-			SamplePreset::Custom => "Custom",
-		})
+		f.write_str(self.label())
 	}
 }
 
@@ -183,6 +187,15 @@ impl FontChoice {
 		FontChoice::SansSerif,
 	];
 
+	pub(crate) const fn label(self) -> &'static str {
+		match self {
+			FontChoice::JetBrainsMono => "JetBrains Mono",
+			FontChoice::Monospace => "Monospace family",
+			FontChoice::NotoSansCjk => "Noto Sans CJK SC",
+			FontChoice::SansSerif => "Sans Serif family",
+		}
+	}
+
 	pub(crate) fn to_iced_font(self) -> Font {
 		match self {
 			FontChoice::JetBrainsMono => Font::new("JetBrains Mono"),
@@ -195,12 +208,7 @@ impl FontChoice {
 
 impl Display for FontChoice {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.write_str(match self {
-			FontChoice::JetBrainsMono => "JetBrains Mono",
-			FontChoice::Monospace => "Monospace family",
-			FontChoice::NotoSansCjk => "Noto Sans CJK SC",
-			FontChoice::SansSerif => "Sans Serif family",
-		})
+		f.write_str(self.label())
 	}
 }
 
@@ -214,6 +222,14 @@ pub(crate) enum ShapingChoice {
 impl ShapingChoice {
 	pub(crate) const ALL: [ShapingChoice; 3] = [Self::Auto, Self::Basic, Self::Advanced];
 
+	pub(crate) const fn label(self) -> &'static str {
+		match self {
+			ShapingChoice::Auto => "Auto",
+			ShapingChoice::Basic => "Basic",
+			ShapingChoice::Advanced => "Advanced",
+		}
+	}
+
 	pub(crate) fn to_cosmic(self, text: &str) -> cosmic_text::Shaping {
 		match self {
 			ShapingChoice::Auto if text.is_ascii() => cosmic_text::Shaping::Basic,
@@ -225,11 +241,7 @@ impl ShapingChoice {
 
 impl Display for ShapingChoice {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.write_str(match self {
-			ShapingChoice::Auto => "Auto",
-			ShapingChoice::Basic => "Basic",
-			ShapingChoice::Advanced => "Advanced",
-		})
+		f.write_str(self.label())
 	}
 }
 
@@ -244,6 +256,15 @@ pub(crate) enum WrapChoice {
 impl WrapChoice {
 	pub(crate) const ALL: [WrapChoice; 4] = [Self::None, Self::Word, Self::Glyph, Self::WordOrGlyph];
 
+	pub(crate) const fn label(self) -> &'static str {
+		match self {
+			WrapChoice::None => "None",
+			WrapChoice::Word => "Word",
+			WrapChoice::Glyph => "Glyph",
+			WrapChoice::WordOrGlyph => "Word or glyph",
+		}
+	}
+
 	pub(crate) fn to_cosmic(self) -> cosmic_text::Wrap {
 		match self {
 			WrapChoice::None => cosmic_text::Wrap::None,
@@ -256,11 +277,6 @@ impl WrapChoice {
 
 impl Display for WrapChoice {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		f.write_str(match self {
-			WrapChoice::None => "None",
-			WrapChoice::Word => "Word",
-			WrapChoice::Glyph => "Glyph",
-			WrapChoice::WordOrGlyph => "Word or glyph",
-		})
+		f.write_str(self.label())
 	}
 }

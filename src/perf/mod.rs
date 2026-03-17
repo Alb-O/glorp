@@ -34,7 +34,12 @@ impl PerfMonitor {
 	}
 
 	pub(crate) fn key(&self) -> PerfSnapshotKey {
-		perf_key(&self.store)
+		PerfSnapshotKey {
+			metric_totals: store::MetricKind::ALL.map(|kind| self.store.metrics[kind.index()].total_samples),
+			total_draws: self.store.frames.total_draws,
+			cache_hits: self.store.cache.hits,
+			cache_misses: self.store.cache.misses,
+		}
 	}
 
 	pub(crate) fn record_editor_apply(&mut self, duration: Duration) {
@@ -81,14 +86,5 @@ impl PerfMonitor {
 			.into_iter()
 			.find(|kind| kind.label() == label)
 			.map_or(0, |kind| self.store.metrics[kind.index()].total_samples)
-	}
-}
-
-fn perf_key(store: &PerfStore) -> PerfSnapshotKey {
-	PerfSnapshotKey {
-		metric_totals: store::MetricKind::ALL.map(|kind| store.metrics[kind.index()].total_samples),
-		total_draws: store.frames.total_draws,
-		cache_hits: store.cache.hits,
-		cache_misses: store.cache.misses,
 	}
 }

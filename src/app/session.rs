@@ -158,12 +158,11 @@ impl DocumentSession {
 
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		let mut transition = SessionTransition {
+		SessionTransition {
 			view_changed: true,
+			width_sync: Some(started.elapsed()),
 			..SessionTransition::default()
-		};
-		transition.width_sync = Some(started.elapsed());
-		transition
+		}
 	}
 
 	fn execute_editor_intent(&mut self, intent: EditorIntent) -> SessionTransition {
@@ -209,7 +208,7 @@ impl DocumentSession {
 
 		let revision = self.next_scene_revision + 1;
 		let started = Instant::now();
-		self.snapshot.scene = Some(build_scene_presentation(&self.editor, revision));
+		self.snapshot.scene = Some(ScenePresentation::new(revision, self.editor.shared_document_layout()));
 		self.next_scene_revision = revision;
 		#[cfg(test)]
 		{
@@ -230,11 +229,6 @@ fn build_editor_presentation(editor: &EditorEngine, revision: u64) -> EditorPres
 		undo_depth,
 		redo_depth,
 	)
-}
-
-fn build_scene_presentation(editor: &EditorEngine, revision: u64) -> ScenePresentation {
-	let layout = editor.shared_document_layout();
-	ScenePresentation::new(revision, layout)
 }
 
 #[cfg(test)]
@@ -260,7 +254,7 @@ mod tests {
 		assert!(initial.scene_materialized.is_some());
 		assert_eq!(session.derived_scene_build_count(), 1);
 
-		let _ = session.execute(
+		session.execute(
 			SessionCommand::ApplyEditorIntent(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
 			false,
 		);
@@ -278,10 +272,10 @@ mod tests {
 	#[test]
 	fn text_edit_with_scene_demand_rebuilds_scene_once() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
-		let _ = session.ensure_scene_materialized();
+		session.ensure_scene_materialized();
 		assert_eq!(session.derived_scene_build_count(), 1);
 
-		let _ = session.execute(
+		session.execute(
 			SessionCommand::ApplyEditorIntent(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
 			true,
 		);

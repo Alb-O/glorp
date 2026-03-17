@@ -165,9 +165,9 @@ fn reset_rebuilds_document_session_and_layout_together() {
 		400.0,
 	);
 
-	let _ = editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
-	let _ = editor.apply(&mut font_system, edit(EditorEditIntent::InsertText("!".to_string())));
-	let _ = editor.apply(&mut font_system, motion(EditorMotion::Right));
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+	editor.apply(&mut font_system, edit(EditorEditIntent::InsertText("!".to_string())));
+	editor.apply(&mut font_system, motion(EditorMotion::Right));
 
 	assert_eq!(editor.history_depths(), (1, 0));
 
@@ -269,7 +269,7 @@ fn motion_intents_report_view_without_document_change() {
 fn text_edit_intents_report_document_and_view_outcome() {
 	let (mut font_system, mut editor) = editor("abc");
 
-	let _ = editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
+	editor.apply(&mut font_system, mode(EditorModeIntent::EnterInsertAfter));
 	let outcome = editor.apply(&mut font_system, edit(EditorEditIntent::InsertText("!".to_string())));
 
 	assert!(outcome.document_changed());
