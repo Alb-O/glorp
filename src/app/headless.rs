@@ -111,22 +111,25 @@ impl EditorApp {
 
 	pub(crate) fn configure_headless_perf_scenario(&mut self, scenario: PerfScenario) {
 		match scenario {
-			PerfScenario::Default => self.configure_headless_scenario(HeadlessScenario::Default),
-			PerfScenario::Tall => self.configure_headless_scenario(HeadlessScenario::Tall),
-			PerfScenario::TallInspect => self.configure_headless_scenario(HeadlessScenario::TallInspect),
-			PerfScenario::TallPerf => self.configure_headless_scenario(HeadlessScenario::TallPerf),
-			PerfScenario::IncrementalTyping => {
-				self.configure_headless_script_scenario(HeadlessScriptScenario::IncrementalTyping);
+			PerfScenario::Default | PerfScenario::Tall | PerfScenario::TallInspect | PerfScenario::TallPerf => {
+				self.configure_headless_scenario(match scenario {
+					PerfScenario::Default => HeadlessScenario::Default,
+					PerfScenario::Tall => HeadlessScenario::Tall,
+					PerfScenario::TallInspect => HeadlessScenario::TallInspect,
+					PerfScenario::TallPerf => HeadlessScenario::TallPerf,
+					_ => unreachable!("handled by the outer match"),
+				});
 			}
-			PerfScenario::MotionSweep => {
-				self.configure_headless_script_scenario(HeadlessScriptScenario::MotionSweep);
-			}
+			PerfScenario::IncrementalTyping | PerfScenario::MotionSweep | PerfScenario::InspectInteraction => self
+				.configure_headless_script_scenario(match scenario {
+					PerfScenario::IncrementalTyping => HeadlessScriptScenario::IncrementalTyping,
+					PerfScenario::MotionSweep => HeadlessScriptScenario::MotionSweep,
+					PerfScenario::InspectInteraction => HeadlessScriptScenario::InspectInteractionSweep,
+					_ => unreachable!("handled by the outer match"),
+				}),
 			PerfScenario::ResizeReflow => {
 				self.configure_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
 				self.dispatch_headless(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
-			}
-			PerfScenario::InspectInteraction => {
-				self.configure_headless_script_scenario(HeadlessScriptScenario::InspectInteractionSweep);
 			}
 		}
 	}
@@ -143,13 +146,10 @@ impl EditorApp {
 
 	pub fn run_headless_script_scenario(&mut self, scenario: HeadlessScriptScenario) -> usize {
 		match scenario {
-			HeadlessScriptScenario::LargePaste => {
-				self.apply_headless_insert(headless_large_paste_chunk());
-			}
+			HeadlessScriptScenario::LargePaste => self.apply_headless_insert(headless_large_paste_chunk()),
 			HeadlessScriptScenario::IncrementalTyping => {
 				for step in 0..HEADLESS_INCREMENTAL_TYPING_STEPS {
-					let next = char::from(ASCII_LOWERCASE[step % ASCII_LOWERCASE.len()]);
-					self.apply_headless_insert(next.to_string());
+					self.apply_headless_insert(headless_incremental_typing_char(step).to_string());
 				}
 			}
 			HeadlessScriptScenario::IncrementalLineBreaks => {
@@ -165,11 +165,8 @@ impl EditorApp {
 				self.repeat_headless_history(EditorHistoryIntent::Undo, HEADLESS_UNDO_REDO_STEPS);
 				self.repeat_headless_history(EditorHistoryIntent::Redo, HEADLESS_UNDO_REDO_STEPS);
 			}
-			HeadlessScriptScenario::BackspaceBurst => {
-				self.repeat_headless_edit(EditorEditIntent::Backspace, delete_seed_char_count());
-			}
-			HeadlessScriptScenario::DeleteForwardBurst => {
-				self.repeat_headless_edit(EditorEditIntent::DeleteForward, delete_seed_char_count());
+			HeadlessScriptScenario::BackspaceBurst | HeadlessScriptScenario::DeleteForwardBurst => {
+				self.repeat_headless_edit(delete_burst_intent(scenario), delete_seed_char_count());
 			}
 			HeadlessScriptScenario::MotionSweep => self.perform_motion_sweep(),
 			HeadlessScriptScenario::PointerSelectionSweep => self.perform_pointer_selection_sweep(),
@@ -305,8 +302,7 @@ impl EditorApp {
 	}
 
 	fn perform_incremental_typing_step(&mut self, step: usize) {
-		let next = char::from(ASCII_LOWERCASE[step % ASCII_LOWERCASE.len()]);
-		self.apply_headless_insert(next.to_string());
+		self.apply_headless_insert(headless_incremental_typing_char(step).to_string());
 	}
 
 	fn perform_motion_sweep_step(&mut self, step: usize) {
@@ -456,8 +452,20 @@ fn build_headless_delete_seed_chunk() -> String {
 	"delete-forward-burst ".repeat(HEADLESS_DELETE_SEED_REPEAT)
 }
 
+fn headless_incremental_typing_char(step: usize) -> char {
+	char::from(ASCII_LOWERCASE[step % ASCII_LOWERCASE.len()])
+}
+
 fn headless_incremental_line_break(step: usize) -> String {
 	format!("\nbranch {step:04}: line break typing probe ffi 漢字")
+}
+
+fn delete_burst_intent(scenario: HeadlessScriptScenario) -> EditorEditIntent {
+	match scenario {
+		HeadlessScriptScenario::BackspaceBurst => EditorEditIntent::Backspace,
+		HeadlessScriptScenario::DeleteForwardBurst => EditorEditIntent::DeleteForward,
+		_ => unreachable!("only delete-burst scenarios should reach this helper"),
+	}
 }
 
 fn delete_seed_char_count() -> usize {

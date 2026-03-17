@@ -87,7 +87,7 @@ fn key_intent(
 
 			navigation_key_intent(key)
 				.or_else(|| normal_named_key_intent(key))
-				.or_else(|| match latin {
+				.or(match latin {
 					Some('h') => Some(EditorIntent::Motion(EditorMotion::Left)),
 					Some('l') => Some(EditorIntent::Motion(EditorMotion::Right)),
 					Some('k') => Some(EditorIntent::Motion(EditorMotion::Up)),

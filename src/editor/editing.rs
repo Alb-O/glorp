@@ -9,15 +9,13 @@ use {
 
 impl EditorEngine {
 	pub(super) fn undo(&mut self, font_system: &mut FontSystem) -> ApplyResult {
-		self.core.document.undo().map_or_else(ApplyResult::default, |entry| {
-			self.replay_history(font_system, entry.inverse, &entry.before)
-		})
+		let entry = self.core.document.undo();
+		self.apply_history_entry(font_system, entry, true)
 	}
 
 	pub(super) fn redo(&mut self, font_system: &mut FontSystem) -> ApplyResult {
-		self.core.document.redo().map_or_else(ApplyResult::default, |entry| {
-			self.replay_history(font_system, entry.forward, &entry.after)
-		})
+		let entry = self.core.document.redo();
+		self.apply_history_entry(font_system, entry, false)
 	}
 
 	pub(super) fn delete_selection(&mut self, font_system: &mut FontSystem) -> ApplyResult {
@@ -152,5 +150,18 @@ impl EditorEngine {
 			layout,
 			view_refreshed,
 		}
+	}
+
+	fn apply_history_entry(
+		&mut self, font_system: &mut FontSystem, entry: Option<super::history::HistoryEntry>, undo: bool,
+	) -> ApplyResult {
+		entry.map_or_else(ApplyResult::default, |entry| {
+			let (text_edit, snapshot) = if undo {
+				(entry.inverse, entry.before)
+			} else {
+				(entry.forward, entry.after)
+			};
+			self.replay_history(font_system, text_edit, &snapshot)
+		})
 	}
 }

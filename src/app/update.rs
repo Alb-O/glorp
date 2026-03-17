@@ -132,29 +132,26 @@ impl EditorApp {
 	}
 
 	fn handle_sidebar_message(&mut self, message: SidebarMessage) {
-		match message {
-			SidebarMessage::SelectTab(tab) => {
-				if self.sidebar.active_tab == tab {
-					return;
-				}
-				let was_inspect = self.sidebar.active_tab == SidebarTab::Inspect;
-				self.sidebar.set_active_tab(tab);
-				// The inspect pane is the only consumer of this cache, so unrelated
-				// tab switches should not force it cold.
-				if was_inspect || tab == SidebarTab::Inspect {
-					self.sidebar_cache.invalidate_inspect();
-				}
-				if matches!(tab, SidebarTab::Inspect | SidebarTab::Perf) {
-					self.ensure_scene_for_active_consumers(None);
-				}
-			}
+		let SidebarMessage::SelectTab(tab) = message;
+		if self.sidebar.active_tab == tab {
+			return;
+		}
+
+		let was_inspect = self.sidebar.active_tab == SidebarTab::Inspect;
+		self.sidebar.set_active_tab(tab);
+		// The inspect pane is the only consumer of this cache, so unrelated
+		// tab switches should not force it cold.
+		if was_inspect || tab == SidebarTab::Inspect {
+			self.sidebar_cache.invalidate_inspect();
+		}
+		if matches!(tab, SidebarTab::Inspect | SidebarTab::Perf) {
+			self.ensure_scene_for_active_consumers(None);
 		}
 	}
 
 	fn handle_canvas_message(&mut self, message: CanvasEvent) {
 		match message {
 			CanvasEvent::Hovered(target) => {
-				let target = self.inspect_target(target);
 				let previous = self.sidebar.hovered_target;
 				self.sidebar.set_hovered_target(target);
 				if self.sidebar.hovered_target != previous {
@@ -170,7 +167,6 @@ impl EditorApp {
 			}
 			CanvasEvent::PointerSelectionStarted { target, intent } => {
 				self.viewport.canvas_focused = true;
-				let target = self.inspect_target(target);
 				let previous = self.sidebar.selected_target;
 				self.sidebar.set_selected_target(target);
 				// Selection can be normalized inside the sidebar state, so compare the
@@ -186,11 +182,11 @@ impl EditorApp {
 	fn handle_viewport_message(&mut self, message: ViewportMessage) {
 		match message {
 			ViewportMessage::CanvasResized(size) => self.handle_canvas_viewport_resized(size),
-			ViewportMessage::ResizeTick(_now) => {
-				if let Some(width) = self.viewport.flush_resize() {
-					self.sync_editor_width(width);
-				}
-			}
+			ViewportMessage::ResizeTick(_now) => self
+				.viewport
+				.flush_resize()
+				.map(|width| self.sync_editor_width(width))
+				.unwrap_or(()),
 		}
 	}
 
@@ -312,7 +308,7 @@ impl EditorApp {
 			self.sidebar_cache.invalidate_perf();
 		}
 
-		if outcome.view_changed() || outcome.selection_changed() || outcome.mode_changed() {
+		if outcome.view_changed() {
 			self.sidebar_cache.invalidate_inspect();
 		}
 
@@ -396,16 +392,6 @@ impl EditorApp {
 		matches!(self.sidebar.active_tab, SidebarTab::Inspect | SidebarTab::Perf)
 			|| self.controls.show_baselines
 			|| self.controls.show_hitboxes
-	}
-
-	fn inspect_targeting_active(&self) -> bool {
-		self.sidebar.active_tab == SidebarTab::Inspect
-	}
-
-	fn inspect_target(&self, target: Option<crate::types::CanvasTarget>) -> Option<crate::types::CanvasTarget> {
-		// Keep inspect hover/selection state fully dormant outside the Inspect
-		// tab so normal editing never depends on scene hit testing.
-		target.filter(|_| self.inspect_targeting_active())
 	}
 }
 

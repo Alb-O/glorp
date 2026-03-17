@@ -46,38 +46,35 @@ impl DocumentLayout {
 		&self, overlays: &mut Vec<OverlayPrimitive>, target: CanvasTarget, selected: bool, layout_width: f32,
 		show_hitboxes: bool,
 	) {
-		let Some((rect, kind, hitbox_kind)) = (match target {
-			CanvasTarget::Run(_) => self.target_rect(target).map(|rect| {
-				(
-					LayoutRect {
-						width: layout_width.max(rect.width).max(1.0),
-						..rect
-					},
-					if selected {
-						OverlayRectKind::InspectRunSelected
-					} else {
-						OverlayRectKind::InspectRunHover
-					},
-					None,
-				)
-			}),
-			CanvasTarget::Cluster(_) => self.target_rect(target).map(|rect| {
-				(
-					rect,
-					if selected {
-						OverlayRectKind::InspectGlyphSelected
-					} else {
-						OverlayRectKind::InspectGlyphHover
-					},
-					show_hitboxes.then_some(if selected {
-						OverlayRectKind::InspectGlyphHitboxSelected
-					} else {
-						OverlayRectKind::InspectGlyphHitboxHover
-					}),
-				)
-			}),
-		}) else {
+		let Some(rect) = self.target_rect(target) else {
 			return;
+		};
+		let (rect, kind, hitbox_kind) = match target {
+			CanvasTarget::Run(_) => (
+				LayoutRect {
+					width: layout_width.max(rect.width).max(1.0),
+					..rect
+				},
+				if selected {
+					OverlayRectKind::InspectRunSelected
+				} else {
+					OverlayRectKind::InspectRunHover
+				},
+				None,
+			),
+			CanvasTarget::Cluster(_) => (
+				rect,
+				if selected {
+					OverlayRectKind::InspectGlyphSelected
+				} else {
+					OverlayRectKind::InspectGlyphHover
+				},
+				show_hitboxes.then_some(if selected {
+					OverlayRectKind::InspectGlyphHitboxSelected
+				} else {
+					OverlayRectKind::InspectGlyphHitboxHover
+				}),
+			),
 		};
 
 		overlays.push(OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText));
@@ -106,7 +103,7 @@ fn cluster_details(layout: &DocumentLayout, index: usize, cluster: &LayoutCluste
 impl DocumentLayout {
 	fn debug_snippet(&self, range: &Range<usize>) -> String {
 		self.text
-			.get(range.start..range.end)
+			.get(range.clone())
 			.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
 	}
 }

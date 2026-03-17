@@ -354,18 +354,17 @@ fn draw_selection_underlay(
 	let rectangles = overlays
 		.iter()
 		.filter(|primitive| primitive.layer == OverlayLayer::UnderText)
-		.filter_map(|primitive| {
+		.filter(|primitive| matches!(primitive.kind, OverlayRectKind::EditorSelection))
+		.map(|primitive| {
 			// Selection fill/outline is rendered as one merged shape so adjacent
 			// rects do not double-stroke shared edges.
-			matches!(primitive.kind, OverlayRectKind::EditorSelection).then(|| {
-				let rect = rect_bounds(bounds, origin, primitive.rect, primitive.space);
-				LayoutRect {
-					x: rect.x,
-					y: rect.y,
-					width: rect.width.max(1.0),
-					height: rect.height.max(1.0),
-				}
-			})
+			let rect = rect_bounds(bounds, origin, primitive.rect, primitive.space);
+			LayoutRect {
+				x: rect.x,
+				y: rect.y,
+				width: rect.width.max(1.0),
+				height: rect.height.max(1.0),
+			}
 		})
 		.collect::<Vec<_>>();
 

@@ -233,7 +233,7 @@ fn editor_selection_details(text: &str, editor: &EditorViewState, undo_depth: us
 }
 
 fn preview_range(text: &str, range: &Range<usize>) -> String {
-	text.get(range.start..range.end)
+	text.get(range.clone())
 		.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
 }
 
