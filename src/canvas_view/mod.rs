@@ -4,11 +4,7 @@ mod state;
 
 use {
 	self::{geometry::max_scroll, input::decode_event},
-	crate::{
-		perf::CanvasPerfSink,
-		presentation::{DerivedScenePresentation, EditorPresentation},
-		types::Message,
-	},
+	crate::{perf::CanvasPerfSink, presentation::SessionSnapshot, types::Message},
 	iced::{Rectangle, Theme, mouse, widget::canvas},
 	std::time::Instant,
 	tracing::trace_span,
@@ -20,8 +16,7 @@ pub(crate) use {
 
 #[derive(Debug, Clone)]
 pub(crate) struct GlyphCanvas {
-	pub(crate) editor_presentation: EditorPresentation,
-	pub(crate) derived_scene: Option<DerivedScenePresentation>,
+	pub(crate) snapshot: SessionSnapshot,
 	pub(crate) layout_width: f32,
 	pub(crate) inspect_targets_active: bool,
 	pub(crate) perf: CanvasPerfSink,
@@ -33,7 +28,7 @@ impl GlyphCanvas {
 		// inspect hit testing should still stay off unless the Inspect path is
 		// explicitly active.
 		self.inspect_targets_active.then_some(())?;
-		self.derived_scene.as_ref().map(|scene| scene.layout.as_ref())
+		self.snapshot.scene.as_ref().map(|scene| scene.layout.as_ref())
 	}
 }
 
@@ -50,9 +45,9 @@ impl canvas::Program<Message> for GlyphCanvas {
 		)
 		.entered();
 		let started = Instant::now();
-		let max_scroll = max_scroll(bounds, self.editor_presentation.viewport_metrics, self.layout_width);
+		let max_scroll = max_scroll(bounds, self.snapshot.editor.viewport_metrics, self.layout_width);
 		let action = decode_event(
-			self.editor_presentation.mode(),
+			self.snapshot.mode(),
 			state.focused(),
 			event,
 			self.inspect_layout(),
@@ -89,15 +84,15 @@ mod tests {
 		crate::{
 			editor::{EditorMode, EditorTextLayerState, EditorViewState, EditorViewportMetrics},
 			perf::CanvasPerfSink,
-			presentation::{DerivedScenePresentation, EditorPresentation},
+			presentation::{EditorPresentation, ScenePresentation, SessionSnapshot},
 			scene::{DocumentLayout, DocumentLayoutTestSpec},
 			types::WrapChoice,
 		},
 		std::sync::Arc,
 	};
 
-	fn editor_presentation() -> EditorPresentation {
-		EditorPresentation::new(
+	fn snapshot(scene: bool) -> SessionSnapshot {
+		let editor = EditorPresentation::new(
 			1,
 			EditorViewportMetrics {
 				wrapping: WrapChoice::Word,
@@ -117,31 +112,34 @@ mod tests {
 				viewport_target: None,
 			},
 			0,
-		)
-	}
-
-	fn derived_scene() -> DerivedScenePresentation {
-		DerivedScenePresentation::new(
-			1,
-			Arc::new(DocumentLayout::new_for_test(DocumentLayoutTestSpec {
-				text: Arc::<str>::from("abc"),
-				wrapping: WrapChoice::Word,
-				max_width: 20.0,
-				measured_width: 20.0,
-				measured_height: 20.0,
-				glyph_count: 0,
-				font_count: 0,
-				runs: Vec::new(),
-				clusters: Vec::new(),
-			})),
-		)
+			0,
+			0,
+		);
+		SessionSnapshot {
+			editor,
+			scene: scene.then(|| {
+				ScenePresentation::new(
+					1,
+					Arc::new(DocumentLayout::new_for_test(DocumentLayoutTestSpec {
+						text: Arc::<str>::from("abc"),
+						wrapping: WrapChoice::Word,
+						max_width: 20.0,
+						measured_width: 20.0,
+						measured_height: 20.0,
+						glyph_count: 0,
+						font_count: 0,
+						runs: Vec::new(),
+						clusters: Vec::new(),
+					})),
+				)
+			}),
+		}
 	}
 
 	#[test]
 	fn inspect_layout_depends_on_activation_not_existing_overlays() {
 		let canvas = GlyphCanvas {
-			editor_presentation: editor_presentation(),
-			derived_scene: Some(derived_scene()),
+			snapshot: snapshot(true),
 			layout_width: 20.0,
 			inspect_targets_active: true,
 			perf: CanvasPerfSink::default(),
@@ -153,8 +151,7 @@ mod tests {
 	#[test]
 	fn inspect_layout_stays_disabled_off_the_inspect_path() {
 		let canvas = GlyphCanvas {
-			editor_presentation: editor_presentation(),
-			derived_scene: Some(derived_scene()),
+			snapshot: snapshot(true),
 			layout_width: 20.0,
 			inspect_targets_active: false,
 			perf: CanvasPerfSink::default(),

@@ -1,18 +1,17 @@
+#[cfg(test)]
+use std::cell::Cell;
+
 use {
 	super::sidebar_data::InspectSidebarData,
 	crate::{
-		editor::{EditorMode, EditorViewState},
+		editor::EditorMode,
 		overlay::OverlayRectKind,
 		perf::{PerfDashboard, PerfMonitor, PerfSnapshotKey},
-		presentation::{DerivedScenePresentation, EditorPresentation},
+		presentation::{EditorPresentation, ScenePresentation},
 		scene::{DocumentLayout, debug_snippet},
 		types::CanvasTarget,
 	},
-	std::{
-		cell::{Cell, RefCell},
-		ops::Range,
-		sync::Arc,
-	},
+	std::{cell::RefCell, ops::Range, sync::Arc},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -47,8 +46,6 @@ struct CachedEntry<K, V> {
 
 #[derive(Default)]
 pub(super) struct SidebarCache {
-	inspect_dirty: Cell<bool>,
-	perf_dirty: Cell<bool>,
 	inspect: RefCell<Option<CachedEntry<InspectSidebarKey, InspectSidebarData>>>,
 	perf: RefCell<Option<CachedEntry<PerfSidebarKey, PerfDashboard>>>,
 	#[cfg(test)]
@@ -58,22 +55,9 @@ pub(super) struct SidebarCache {
 }
 
 impl SidebarCache {
-	pub(super) fn invalidate_inspect(&self) {
-		self.inspect_dirty.set(true);
-	}
-
-	pub(super) fn invalidate_perf(&self) {
-		self.perf_dirty.set(true);
-	}
-
-	pub(super) fn invalidate_scene_derived(&self) {
-		self.invalidate_inspect();
-		self.invalidate_perf();
-	}
-
 	pub(super) fn inspect_data(&self, args: InspectSidebarArgs<'_>) -> Arc<InspectSidebarData> {
 		let key = args.key();
-		cached_or_build(&self.inspect, &self.inspect_dirty, key, || {
+		cached_or_build(&self.inspect, key, || {
 			#[cfg(test)]
 			self.inspect_builds.set(self.inspect_builds.get() + 1);
 
@@ -85,15 +69,13 @@ impl SidebarCache {
 					args.text,
 					args.hovered_target,
 					args.selected_target,
-					args.undo_depth,
-					args.redo_depth,
 				),
 			})
 		})
 	}
 
 	pub(super) fn perf_dashboard(
-		&self, editor: &EditorPresentation, scene: &DerivedScenePresentation, perf: &PerfMonitor,
+		&self, editor: &EditorPresentation, scene: &ScenePresentation, perf: &PerfMonitor,
 	) -> Arc<PerfDashboard> {
 		let key = PerfSidebarKey {
 			editor_revision: editor.revision,
@@ -103,7 +85,7 @@ impl SidebarCache {
 			perf: perf.key(),
 		};
 
-		cached_or_build(&self.perf, &self.perf_dirty, key, || {
+		cached_or_build(&self.perf, key, || {
 			#[cfg(test)]
 			self.perf_builds.set(self.perf_builds.get() + 1);
 
@@ -125,12 +107,10 @@ impl SidebarCache {
 #[derive(Clone, Copy)]
 pub(super) struct InspectSidebarArgs<'a> {
 	pub(super) editor: &'a EditorPresentation,
-	pub(super) scene: &'a DerivedScenePresentation,
+	pub(super) scene: &'a ScenePresentation,
 	pub(super) text: &'a str,
 	pub(super) hovered_target: Option<CanvasTarget>,
 	pub(super) selected_target: Option<CanvasTarget>,
-	pub(super) undo_depth: usize,
-	pub(super) redo_depth: usize,
 }
 
 impl InspectSidebarArgs<'_> {
@@ -146,19 +126,15 @@ impl InspectSidebarArgs<'_> {
 			selection_end: selection.map(|range| range.end),
 			selection_head: self.editor.editor.selection_head,
 			pointer_anchor: self.editor.editor.pointer_anchor,
-			undo_depth: self.undo_depth,
-			redo_depth: self.redo_depth,
+			undo_depth: self.editor.undo_depth,
+			redo_depth: self.editor.redo_depth,
 		}
 	}
 }
 
-fn cached_data<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, dirty: &Cell<bool>, key: K) -> Option<Arc<V>>
+fn cached_data<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, key: K) -> Option<Arc<V>>
 where
 	K: Copy + Eq, {
-	if dirty.get() {
-		return None;
-	}
-
 	cache
 		.borrow()
 		.as_ref()
@@ -166,69 +142,67 @@ where
 		.map(|entry| entry.data.clone())
 }
 
-fn cached_or_build<K, V>(
-	cache: &RefCell<Option<CachedEntry<K, V>>>, dirty: &Cell<bool>, key: K, build: impl FnOnce() -> Arc<V>,
-) -> Arc<V>
+fn cached_or_build<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, key: K, build: impl FnOnce() -> Arc<V>) -> Arc<V>
 where
 	K: Copy + Eq, {
-	cached_data(cache, dirty, key).unwrap_or_else(|| {
+	cached_data(cache, key).unwrap_or_else(|| {
 		let data = build();
-		store_cached_data(cache, dirty, key, data.clone());
+		store_cached_data(cache, key, data.clone());
 		data
 	})
 }
 
-fn store_cached_data<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, dirty: &Cell<bool>, key: K, data: Arc<V>) {
-	dirty.set(false);
+fn store_cached_data<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, key: K, data: Arc<V>) {
 	cache.replace(Some(CachedEntry { key, data }));
 }
 
 fn interaction_details(
-	editor: &EditorPresentation, scene: &DerivedScenePresentation, text: &str, hovered_target: Option<CanvasTarget>,
-	selected_target: Option<CanvasTarget>, undo_depth: usize, redo_depth: usize,
+	editor: &EditorPresentation, scene: &ScenePresentation, text: &str, hovered_target: Option<CanvasTarget>,
+	selected_target: Option<CanvasTarget>,
 ) -> Arc<str> {
 	let layout = scene.layout.as_ref();
 	Arc::<str>::from(format!(
 		"editor\n{}\n\nhover\n{}\n\nselection\n{}",
-		editor_selection_details(text, &editor.editor, undo_depth, redo_depth),
+		editor_selection_details(text, editor),
 		target_details_or_none(layout, hovered_target),
 		target_details_or_none(layout, selected_target),
 	))
 }
 
-fn editor_selection_details(text: &str, editor: &EditorViewState, undo_depth: usize, redo_depth: usize) -> String {
-	let selection_rects = editor.overlay_count(OverlayRectKind::EditorSelection);
-	let Some(selection) = editor.selection.as_ref() else {
-		return match editor.mode {
-			EditorMode::Normal => format!("  mode: {}\n  selection: none", editor.mode),
+fn editor_selection_details(text: &str, editor: &EditorPresentation) -> String {
+	let view = &editor.editor;
+	let selection_rects = view.overlay_count(OverlayRectKind::EditorSelection);
+	let Some(selection) = view.selection.as_ref() else {
+		return match view.mode {
+			EditorMode::Normal => format!("  mode: {}\n  selection: none", view.mode),
 			EditorMode::Insert => format!(
-				"  mode: {}\n  selection: none\n  undo/redo: {undo_depth}/{redo_depth}",
-				editor.mode
+				"  mode: {}\n  selection: none\n  undo/redo: {}/{}",
+				view.mode, editor.undo_depth, editor.redo_depth
 			),
 		};
 	};
 
-	match editor.mode {
+	match view.mode {
 		EditorMode::Normal => format!(
 			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}/{}",
-			editor.mode,
+			view.mode,
 			selection,
 			preview_range(text, selection),
 			selection_rects,
-			editor.selection_head.unwrap_or(selection.start),
-			editor.pointer_anchor.unwrap_or(selection.start),
-			undo_depth,
-			redo_depth,
+			view.selection_head.unwrap_or(selection.start),
+			view.pointer_anchor.unwrap_or(selection.start),
+			editor.undo_depth,
+			editor.redo_depth,
 		),
 		EditorMode::Insert => format!(
 			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  head byte: {}\n  undo/redo: {}/{}",
-			editor.mode,
+			view.mode,
 			selection,
 			preview_range(text, selection),
 			selection_rects,
-			editor.selection_head.unwrap_or(selection.start),
-			undo_depth,
-			redo_depth,
+			view.selection_head.unwrap_or(selection.start),
+			editor.undo_depth,
+			editor.redo_depth,
 		),
 	}
 }

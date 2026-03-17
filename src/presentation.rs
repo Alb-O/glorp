@@ -22,15 +22,26 @@ pub(crate) struct EditorPresentation {
 	pub(crate) editor: EditorViewState,
 	/// Current document size in bytes.
 	pub(crate) editor_bytes: usize,
+	/// Current undo stack depth.
+	pub(crate) undo_depth: usize,
+	/// Current redo stack depth.
+	pub(crate) redo_depth: usize,
 }
 
 /// Lazily-built scene snapshot used only by inspect/perf/debug consumers.
 #[derive(Debug, Clone)]
-pub(crate) struct DerivedScenePresentation {
+pub(crate) struct ScenePresentation {
 	/// Monotonic revision used by scene caches and invalidation.
 	pub(crate) revision: u64,
 	/// Shared layout metadata for hit testing, inspection, and debug draw.
 	pub(crate) layout: Arc<DocumentLayout>,
+}
+
+/// Coherent session-owned presentation state for the current frame.
+#[derive(Debug, Clone)]
+pub(crate) struct SessionSnapshot {
+	pub(crate) editor: EditorPresentation,
+	pub(crate) scene: Option<ScenePresentation>,
 }
 
 impl EditorPresentation {
@@ -38,7 +49,7 @@ impl EditorPresentation {
 	/// state.
 	pub(crate) fn new(
 		revision: u64, viewport_metrics: EditorViewportMetrics, text_layer: EditorTextLayerState,
-		editor: EditorViewState, editor_bytes: usize,
+		editor: EditorViewState, editor_bytes: usize, undo_depth: usize, redo_depth: usize,
 	) -> Self {
 		Self {
 			revision,
@@ -46,6 +57,8 @@ impl EditorPresentation {
 			text_layer,
 			editor,
 			editor_bytes,
+			undo_depth,
+			redo_depth,
 		}
 	}
 
@@ -58,8 +71,22 @@ impl EditorPresentation {
 	}
 }
 
-impl DerivedScenePresentation {
+impl ScenePresentation {
 	pub(crate) fn new(revision: u64, layout: Arc<DocumentLayout>) -> Self {
 		Self { revision, layout }
+	}
+}
+
+impl SessionSnapshot {
+	pub(crate) fn new(editor: EditorPresentation) -> Self {
+		Self { editor, scene: None }
+	}
+
+	pub(crate) fn mode(&self) -> EditorMode {
+		self.editor.mode()
+	}
+
+	pub(crate) fn editor_bytes(&self) -> usize {
+		self.editor.editor_bytes()
 	}
 }

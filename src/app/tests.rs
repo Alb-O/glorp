@@ -103,7 +103,7 @@ fn text_edits_flip_the_preset_to_custom() {
 #[test]
 fn controls_tab_keeps_text_edits_on_the_hot_path() {
 	let (mut app, _) = EditorApp::new();
-	let revision_before = app.viewport.scene_revision;
+	let revision_before = app.session.snapshot().scene.as_ref().map(|scene| scene.revision);
 	let scene_builds_before = app.session.derived_scene_build_count();
 
 	let _ = app.update(editor(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)));
@@ -111,31 +111,33 @@ fn controls_tab_keeps_text_edits_on_the_hot_path() {
 		"!".to_string(),
 	))));
 
-	assert_eq!(app.viewport.scene_revision, revision_before);
-	assert_eq!(app.session.derived_scene_build_count(), scene_builds_before);
-	assert!(app.session.derived_scene().is_none());
-	assert!(app.session.text().contains('!'));
 	assert_eq!(
-		app.session.editor_presentation().editor_bytes(),
-		app.session.text().len()
+		app.session.snapshot().scene.as_ref().map(|scene| scene.revision),
+		revision_before
 	);
+	assert_eq!(app.session.derived_scene_build_count(), scene_builds_before);
+	assert!(app.session.snapshot().scene.is_none());
+	assert!(app.session.text().contains('!'));
+	assert_eq!(app.session.snapshot().editor.editor_bytes(), app.session.text().len());
 }
 
 #[test]
 fn resize_reflow_updates_scene_when_inspect_is_active() {
 	let (mut app, _) = EditorApp::new();
 	let _ = app.update(Message::Sidebar(SidebarMessage::SelectTab(SidebarTab::Inspect)));
-	let revision_before = app.viewport.scene_revision;
+	let revision_before = app.session.snapshot().scene.as_ref().map_or(0, |scene| scene.revision);
 
 	let _ = app.update(resize(Size::new(980.0, 280.0)));
 	let _ = app.update(Message::Viewport(ViewportMessage::ResizeTick(
 		Instant::now() + RESIZE_REFLOW_INTERVAL,
 	)));
 
-	assert!(app.viewport.scene_revision > revision_before);
+	assert!(app.session.snapshot().scene.as_ref().map_or(0, |scene| scene.revision) > revision_before);
 	assert_approx_eq(
 		app.session
-			.derived_scene()
+			.snapshot()
+			.scene
+			.as_ref()
 			.expect("inspect mode should materialize a derived scene")
 			.layout
 			.max_width,
@@ -240,7 +242,7 @@ fn perf_sidebar_cache_reuses_model_until_metrics_change() {
 #[test]
 fn repeated_no_op_inputs_do_not_churn_scene_state() {
 	let (mut app, _) = EditorApp::new();
-	let revision_before = app.viewport.scene_revision;
+	let revision_before = app.session.snapshot().scene.as_ref().map(|scene| scene.revision);
 
 	let _ = app.update(Message::Controls(ControlsMessage::FontSelected(app.controls.font)));
 	let _ = app.update(Message::Controls(ControlsMessage::ShowHitboxesChanged(
@@ -252,6 +254,9 @@ fn repeated_no_op_inputs_do_not_churn_scene_state() {
 		"!".to_string(),
 	))));
 
-	assert_eq!(app.viewport.scene_revision, revision_before);
-	assert!(app.session.derived_scene().is_none());
+	assert_eq!(
+		app.session.snapshot().scene.as_ref().map(|scene| scene.revision),
+		revision_before
+	);
+	assert!(app.session.snapshot().scene.is_none());
 }

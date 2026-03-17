@@ -2,8 +2,8 @@ use {
 	crate::{
 		editor::{EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorViewportMetrics},
 		overlay::LayoutRect,
-		presentation::{DerivedScenePresentation, EditorPresentation},
-		scene::{DocumentLayout, SceneConfig, make_font_system},
+		presentation::{EditorPresentation, ScenePresentation, SessionSnapshot},
+		scene::{SceneConfig, make_font_system},
 	},
 	cosmic_text::FontSystem,
 	std::time::{Duration, Instant},
@@ -11,6 +11,23 @@ use {
 
 #[cfg(test)]
 use crate::editor::EditorViewState;
+
+/// Controls whether session operations must keep derived scene data hot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum SceneDemand {
+	HotOnly,
+	DerivedRequired,
+}
+
+impl SceneDemand {
+	fn rebuilds_existing_scene(self) -> bool {
+		matches!(self, Self::DerivedRequired)
+	}
+
+	fn requires_scene(self) -> bool {
+		matches!(self, Self::DerivedRequired)
+	}
+}
 
 /// App-facing summary of what changed after applying an editor intent.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -25,8 +42,6 @@ impl DocumentChanges {
 	const MODE_CHANGED: u8 = 1 << 3;
 
 	const fn with(self, flag: u8, enabled: bool) -> Self {
-		// Keep the app-facing change summary compact without re-introducing a
-		// wider enum matrix for mostly-independent editor deltas.
 		Self {
 			bits: self.bits | if enabled { flag } else { 0 },
 		}
@@ -53,17 +68,24 @@ impl DocumentChanges {
 	}
 }
 
-/// App-facing summary of what changed after applying an editor intent.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub(crate) struct DocumentUpdate {
-	/// The compact change set for this update.
-	pub(crate) changes: DocumentChanges,
-	/// The latest viewport reveal target for the updated editor state.
-	pub(crate) viewport_target: Option<LayoutRect>,
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) enum ScrollIntent {
+	#[default]
+	KeepClamped,
+	ResetScroll,
 }
 
-impl DocumentUpdate {
-	/// Returns whether any app-visible editor state changed.
+/// App-facing summary of what changed after a session operation.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub(crate) struct SessionUpdate {
+	pub(crate) changes: DocumentChanges,
+	pub(crate) scroll_intent: ScrollIntent,
+	pub(crate) viewport_target: Option<LayoutRect>,
+	pub(crate) width_sync: Option<Duration>,
+	pub(crate) scene_build: Option<Duration>,
+}
+
+impl SessionUpdate {
 	pub(crate) fn changed(&self) -> bool {
 		self.changes.changed()
 	}
@@ -85,7 +107,7 @@ impl DocumentUpdate {
 	}
 }
 
-impl From<EditorOutcome> for DocumentUpdate {
+impl From<EditorOutcome> for SessionUpdate {
 	fn from(outcome: EditorOutcome) -> Self {
 		Self {
 			changes: DocumentChanges::default()
@@ -93,136 +115,120 @@ impl From<EditorOutcome> for DocumentUpdate {
 				.with(DocumentChanges::VIEW_CHANGED, outcome.view_changed)
 				.with(DocumentChanges::SELECTION_CHANGED, outcome.selection_changed)
 				.with(DocumentChanges::MODE_CHANGED, outcome.mode_changed),
+			scroll_intent: ScrollIntent::KeepClamped,
 			viewport_target: outcome.viewport_target,
+			width_sync: None,
+			scene_build: None,
 		}
 	}
 }
 
-/// Owns the editable document and its synchronized presentation snapshot.
-///
-/// The session is the only place where mutations occur. The editor-facing
-/// presentation is refreshed eagerly, while the heavier derived scene is built
-/// only for inspect/perf/debug consumers.
+/// Owns the editable document plus the coherent render snapshot consumed by the
+/// rest of the app.
 pub(super) struct DocumentSession {
 	editor: EditorEngine,
-	editor_presentation: EditorPresentation,
-	derived_scene: Option<DerivedScenePresentation>,
-	next_derived_scene_revision: u64,
+	snapshot: SessionSnapshot,
+	next_scene_revision: u64,
 	font_system: FontSystem,
 	#[cfg(test)]
 	derived_scene_build_count: usize,
 }
 
 impl DocumentSession {
-	/// Creates a new session seeded from the given text and scene config.
 	pub(super) fn new(text: &str, config: SceneConfig) -> Self {
 		let mut font_system = make_font_system();
 		let editor = EditorEngine::new(&mut font_system, text, config);
-		let editor_presentation = build_editor_presentation(&editor, 1);
+		let snapshot = SessionSnapshot::new(build_editor_presentation(&editor, 1));
 
 		Self {
 			editor,
-			editor_presentation,
-			derived_scene: None,
-			next_derived_scene_revision: 0,
+			snapshot,
+			next_scene_revision: 0,
 			font_system,
 			#[cfg(test)]
 			derived_scene_build_count: 0,
 		}
 	}
 
-	/// Returns the latest synchronized editor presentation snapshot.
-	pub(super) fn editor_presentation(&self) -> &EditorPresentation {
-		&self.editor_presentation
+	pub(super) fn snapshot(&self) -> &SessionSnapshot {
+		&self.snapshot
 	}
 
-	/// Returns the latest derived scene snapshot if one is currently
-	/// materialized.
-	pub(super) fn derived_scene(&self) -> Option<&DerivedScenePresentation> {
-		self.derived_scene.as_ref()
-	}
-
-	/// Returns the current document text.
 	pub(super) fn text(&self) -> &str {
 		self.editor.text()
 	}
 
-	/// Returns the current editor mode.
 	pub(super) fn mode(&self) -> EditorMode {
-		self.editor.mode()
+		self.snapshot.mode()
 	}
 
-	/// Returns a clone of the current editor view state.
 	#[cfg(test)]
 	pub(super) fn view_state(&self) -> EditorViewState {
-		self.editor_presentation.editor.clone()
+		self.snapshot.editor.editor.clone()
 	}
 
-	/// Returns the latest measured viewport metrics.
 	pub(super) fn viewport_metrics(&self) -> EditorViewportMetrics {
-		self.editor_presentation.viewport_metrics
+		self.snapshot.editor.viewport_metrics
 	}
 
-	/// Returns the undo and redo stack depths.
+	#[cfg(test)]
 	pub(super) fn history_depths(&self) -> (usize, usize) {
-		self.editor.history_depths()
+		(self.snapshot.editor.undo_depth, self.snapshot.editor.redo_depth)
 	}
 
-	/// Applies a width change and refreshes the hot presentation if needed.
-	pub(super) fn sync_width(&mut self, width: f32) -> bool {
+	pub(super) fn sync_width(&mut self, width: f32, demand: SceneDemand) -> SessionUpdate {
+		let started = Instant::now();
 		let changed = self.editor.sync_buffer_width(&mut self.font_system, width);
-		self.finish_buffer_sync(changed)
+		let width_sync = changed.then(|| started.elapsed());
+		self.finish_buffer_sync(changed, demand, ScrollIntent::KeepClamped, width_sync)
 	}
 
-	/// Applies a config change and refreshes the hot presentation if needed.
-	pub(super) fn sync_config(&mut self, config: SceneConfig) -> bool {
+	pub(super) fn sync_config(&mut self, config: SceneConfig, demand: SceneDemand) -> SessionUpdate {
 		let changed = self.editor.sync_buffer_config(&mut self.font_system, config);
-		self.finish_buffer_sync(changed)
+		self.finish_buffer_sync(changed, demand, ScrollIntent::ResetScroll, None)
 	}
 
-	/// Replaces the document contents and refreshes the hot presentation.
-	pub(super) fn reset_with_preset(&mut self, text: &str, config: SceneConfig) {
+	pub(super) fn reset_with_preset(&mut self, text: &str, config: SceneConfig, demand: SceneDemand) -> SessionUpdate {
 		self.editor.reset(&mut self.font_system, text, config);
-		self.refresh_editor_presentation();
-		self.invalidate_derived_scene();
+		self.refresh_editor_snapshot();
+		self.invalidate_scene();
+
+		SessionUpdate {
+			changes: DocumentChanges::default()
+				.with(DocumentChanges::DOCUMENT_CHANGED, true)
+				.with(DocumentChanges::VIEW_CHANGED, true)
+				.with(DocumentChanges::SELECTION_CHANGED, true)
+				.with(DocumentChanges::MODE_CHANGED, true),
+			scroll_intent: ScrollIntent::ResetScroll,
+			viewport_target: self.snapshot.editor.editor.viewport_target,
+			width_sync: None,
+			scene_build: self.reconcile_scene(demand, true),
+		}
 	}
 
-	/// Applies an editor intent and returns the app-facing change summary.
-	pub(super) fn apply_editor_intent(&mut self, intent: EditorIntent) -> DocumentUpdate {
+	pub(super) fn apply_editor_intent(&mut self, intent: EditorIntent, demand: SceneDemand) -> SessionUpdate {
 		let outcome = self.editor.apply(&mut self.font_system, intent);
-		let update = DocumentUpdate::from(outcome);
+		let mut update = SessionUpdate::from(outcome);
 
 		if update.changed() {
-			self.refresh_editor_presentation();
+			self.refresh_editor_snapshot();
 		}
 
 		if update.document_changed() {
-			self.invalidate_derived_scene();
+			self.invalidate_scene();
+			update.scene_build = self.reconcile_scene(demand, true);
+		} else {
+			update.scene_build = self.reconcile_scene(demand, false);
 		}
 
 		update
 	}
 
-	pub(super) fn ensure_derived_scene(&mut self) -> Option<Duration> {
-		if self.derived_scene.is_some() {
-			return None;
+	pub(super) fn ensure_scene(&mut self, demand: SceneDemand) -> SessionUpdate {
+		SessionUpdate {
+			scene_build: self.reconcile_scene(demand, false),
+			..SessionUpdate::default()
 		}
-
-		// The hot path is allowed to invalidate scene data aggressively because
-		// scene consumers opt back in explicitly through this gate.
-		let revision = self.next_derived_scene_revision + 1;
-		let started = Instant::now();
-		self.derived_scene = Some(build_derived_scene(&self.editor, revision));
-		self.next_derived_scene_revision = revision;
-		#[cfg(test)]
-		{
-			self.derived_scene_build_count += 1;
-		}
-		Some(started.elapsed())
-	}
-
-	pub(super) fn derived_scene_layout(&self) -> Option<&DocumentLayout> {
-		self.derived_scene.as_ref().map(|scene| scene.layout.as_ref())
 	}
 
 	#[cfg(test)]
@@ -230,23 +236,57 @@ impl DocumentSession {
 		self.derived_scene_build_count
 	}
 
-	fn refresh_editor_presentation(&mut self) {
-		// Keep the always-visible editor surface fully synchronized even when the
-		// heavier inspect/perf scene stays cold.
-		let revision = self.editor_presentation.revision + 1;
-		self.editor_presentation = build_editor_presentation(&self.editor, revision);
+	fn refresh_editor_snapshot(&mut self) {
+		let revision = self.snapshot.editor.revision + 1;
+		self.snapshot.editor = build_editor_presentation(&self.editor, revision);
 	}
 
-	fn finish_buffer_sync(&mut self, changed: bool) -> bool {
-		if changed {
-			self.refresh_editor_presentation();
-			self.invalidate_derived_scene();
+	fn finish_buffer_sync(
+		&mut self, changed: bool, demand: SceneDemand, scroll_intent: ScrollIntent, width_sync: Option<Duration>,
+	) -> SessionUpdate {
+		if !changed {
+			return SessionUpdate {
+				scroll_intent,
+				width_sync,
+				scene_build: self.reconcile_scene(demand, false),
+				..SessionUpdate::default()
+			};
 		}
-		changed
+
+		self.refresh_editor_snapshot();
+		self.invalidate_scene();
+
+		SessionUpdate {
+			changes: DocumentChanges::default()
+				.with(DocumentChanges::DOCUMENT_CHANGED, true)
+				.with(DocumentChanges::VIEW_CHANGED, true),
+			scroll_intent,
+			viewport_target: self.snapshot.editor.editor.viewport_target,
+			width_sync,
+			scene_build: self.reconcile_scene(demand, true),
+		}
 	}
 
-	fn invalidate_derived_scene(&mut self) {
-		self.derived_scene = None;
+	fn reconcile_scene(&mut self, demand: SceneDemand, rebuild_requested: bool) -> Option<Duration> {
+		let rebuild_existing = demand.rebuilds_existing_scene() && rebuild_requested && self.snapshot.scene.is_some();
+		let cold_build = demand.requires_scene() && self.snapshot.scene.is_none();
+		if !rebuild_existing && !cold_build {
+			return None;
+		}
+
+		let revision = self.next_scene_revision + 1;
+		let started = Instant::now();
+		self.snapshot.scene = Some(build_scene_presentation(&self.editor, revision));
+		self.next_scene_revision = revision;
+		#[cfg(test)]
+		{
+			self.derived_scene_build_count += 1;
+		}
+		Some(started.elapsed())
+	}
+
+	fn invalidate_scene(&mut self) {
+		self.snapshot.scene = None;
 	}
 }
 
@@ -254,11 +294,20 @@ fn build_editor_presentation(editor: &EditorEngine, revision: u64) -> EditorPres
 	let text_layer = editor.text_layer_state();
 	let viewport_metrics = editor.viewport_metrics();
 	let editor_view = editor.view_state();
+	let (undo_depth, redo_depth) = editor.history_depths();
 
-	EditorPresentation::new(revision, viewport_metrics, text_layer, editor_view, editor.text().len())
+	EditorPresentation::new(
+		revision,
+		viewport_metrics,
+		text_layer,
+		editor_view,
+		editor.text().len(),
+		undo_depth,
+		redo_depth,
+	)
 }
 
-fn build_derived_scene(editor: &EditorEngine, revision: u64) -> DerivedScenePresentation {
+fn build_scene_presentation(editor: &EditorEngine, revision: u64) -> ScenePresentation {
 	let layout = editor.shared_document_layout();
-	DerivedScenePresentation::new(revision, layout)
+	ScenePresentation::new(revision, layout)
 }

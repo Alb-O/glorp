@@ -6,7 +6,7 @@ use {
 			OverlaySpace,
 		},
 		perf::CanvasPerfSink,
-		presentation::{DerivedScenePresentation, EditorPresentation},
+		presentation::SessionSnapshot,
 		types::Message,
 	},
 	iced::{
@@ -23,8 +23,7 @@ use {
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneOverlayLayer {
-	editor_presentation: EditorPresentation,
-	derived_scene: Option<DerivedScenePresentation>,
+	snapshot: SessionSnapshot,
 	layout_width: f32,
 	inspect_overlays: Arc<[OverlayPrimitive]>,
 	focused: bool,
@@ -36,12 +35,11 @@ pub(crate) struct SceneOverlayLayer {
 
 impl SceneOverlayLayer {
 	pub(crate) fn new(
-		editor_presentation: EditorPresentation, derived_scene: Option<DerivedScenePresentation>, layout_width: f32,
-		inspect_overlays: Arc<[OverlayPrimitive]>, focused: bool, scroll: Vector, perf: CanvasPerfSink,
+		snapshot: SessionSnapshot, layout_width: f32, inspect_overlays: Arc<[OverlayPrimitive]>, focused: bool,
+		scroll: Vector, perf: CanvasPerfSink,
 	) -> Self {
 		Self {
-			editor_presentation,
-			derived_scene,
+			snapshot,
 			layout_width,
 			inspect_overlays,
 			focused,
@@ -63,9 +61,10 @@ impl SceneOverlayLayer {
 	}
 
 	fn measured_height(&self) -> f32 {
-		self.derived_scene
+		self.snapshot
+			.scene
 			.as_ref()
-			.map_or(self.editor_presentation.viewport_metrics.measured_height, |scene| {
+			.map_or(self.snapshot.editor.viewport_metrics.measured_height, |scene| {
 				scene.layout.measured_height
 			})
 	}
@@ -73,7 +72,7 @@ impl SceneOverlayLayer {
 
 #[derive(Debug, Clone)]
 pub(crate) struct EditorUnderlayLayer {
-	presentation: EditorPresentation,
+	snapshot: SessionSnapshot,
 	scroll: Vector,
 	perf: CanvasPerfSink,
 	width: Length,
@@ -81,9 +80,9 @@ pub(crate) struct EditorUnderlayLayer {
 }
 
 impl EditorUnderlayLayer {
-	pub(crate) fn new(presentation: EditorPresentation, scroll: Vector, perf: CanvasPerfSink) -> Self {
+	pub(crate) fn new(snapshot: SessionSnapshot, scroll: Vector, perf: CanvasPerfSink) -> Self {
 		Self {
-			presentation,
+			snapshot,
 			scroll,
 			perf,
 			width: Length::Fill,
@@ -150,18 +149,18 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 					width: self.layout_width.max(1.0),
 					height: self.measured_height().max(1.0),
 				},
-				OverlayRectKind::EditorFocusFrame(EditorOverlayTone::from(self.editor_presentation.editor.mode)),
+				OverlayRectKind::EditorFocusFrame(EditorOverlayTone::from(self.snapshot.editor.editor.mode)),
 				OverlaySpace::Scene,
 			);
 		}
 
-		let scene_footer = self.derived_scene.as_ref().map_or_else(
+		let scene_footer = self.snapshot.scene.as_ref().map_or_else(
 			|| {
 				format!(
 					"bytes={} width={:.1} height={:.1}",
-					self.editor_presentation.editor_bytes,
-					self.editor_presentation.viewport_metrics.measured_width,
-					self.editor_presentation.viewport_metrics.measured_height,
+					self.snapshot.editor.editor_bytes,
+					self.snapshot.editor.viewport_metrics.measured_width,
+					self.snapshot.editor.viewport_metrics.measured_height,
 				)
 			},
 			|scene| {
@@ -188,7 +187,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneOverlayLayer {
 
 		let canvas_status = format!(
 			"mode={} focus={} scroll={:.0},{:.0}",
-			self.editor_presentation.editor.mode, self.focused, self.scroll.x, self.scroll.y
+			self.snapshot.editor.editor.mode, self.focused, self.scroll.x, self.scroll.y
 		);
 		draw_label_primitive(
 			renderer,
@@ -224,10 +223,11 @@ impl Widget<Message, Theme, iced::Renderer> for EditorUnderlayLayer {
 			bounds.y + scene_origin().y - self.scroll.y,
 		);
 
-		draw_selection_underlay(renderer, bounds, origin, &self.presentation.editor.overlays);
+		draw_selection_underlay(renderer, bounds, origin, &self.snapshot.editor.editor.overlays);
 
 		for primitive in self
-			.presentation
+			.snapshot
+			.editor
 			.editor
 			.overlays
 			.iter()

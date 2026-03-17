@@ -126,7 +126,6 @@ pub(super) struct ViewportState {
 	pub(super) canvas_viewport: Size,
 	pub(super) canvas_focused: bool,
 	pub(super) canvas_scroll: Vector,
-	pub(super) scene_revision: u64,
 	pub(super) resize_coalescer: ResizeCoalescer,
 }
 
@@ -137,7 +136,6 @@ impl ViewportState {
 			canvas_viewport: Size::new(layout_width, DEFAULT_CANVAS_HEIGHT),
 			canvas_focused: false,
 			canvas_scroll: Vector::ZERO,
-			scene_revision: 0,
 			resize_coalescer: ResizeCoalescer::new(layout_width),
 		}
 	}

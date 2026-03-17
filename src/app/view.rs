@@ -49,15 +49,14 @@ impl EditorApp {
 	}
 
 	fn view_sidebar(&self, stacked: bool) -> Element<'_, Message> {
-		let (undo_depth, redo_depth) = self.session.history_depths();
-		let presentation = self.session.editor_presentation();
-		let body = render_sidebar_body(self.sidebar_body_data(undo_depth, redo_depth));
+		let snapshot = self.session.snapshot();
+		let body = render_sidebar_body(self.sidebar_body_data());
 		view_sidebar(SidebarProps {
 			active_tab: self.sidebar.active_tab,
-			editor_mode: presentation.mode(),
-			editor_bytes: presentation.editor_bytes(),
-			undo_depth,
-			redo_depth,
+			editor_mode: snapshot.mode(),
+			editor_bytes: snapshot.editor_bytes(),
+			undo_depth: snapshot.editor.undo_depth,
+			redo_depth: snapshot.editor.redo_depth,
 			body,
 			stacked,
 		})
@@ -69,14 +68,12 @@ impl EditorApp {
 	}
 
 	fn view_canvas(&self, stacked: bool) -> Element<'static, Message> {
-		let editor_presentation = self.session.editor_presentation();
-		let derived_scene = self.session.derived_scene().cloned();
+		let snapshot = self.session.snapshot().clone();
 		let inspect_targets_active = self.sidebar.active_tab == SidebarTab::Inspect;
-		let inspect_overlays = self.inspect_overlays(derived_scene.as_ref(), inspect_targets_active);
+		let inspect_overlays = self.inspect_overlays(snapshot.scene.as_ref(), inspect_targets_active);
 
 		view_canvas_pane(CanvasPaneProps {
-			editor_presentation: editor_presentation.clone(),
-			derived_scene,
+			snapshot,
 			layout_width: self.viewport.layout_width,
 			decorations: CanvasDecorations {
 				show_baselines: self.controls.show_baselines,
@@ -85,14 +82,13 @@ impl EditorApp {
 			inspect_overlays,
 			inspect_targets_active,
 			focused: self.viewport.canvas_focused,
-			scene_revision: self.viewport.scene_revision,
 			scroll: self.viewport.canvas_scroll,
 			perf: self.perf.sink(),
 			stacked,
 		})
 	}
 
-	fn sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
+	fn sidebar_body_data(&self) -> SidebarBodyData {
 		match self.sidebar.active_tab {
 			SidebarTab::Controls => SidebarBodyData::Controls(ControlsTabProps {
 				preset: self.controls.preset,
@@ -104,34 +100,31 @@ impl EditorApp {
 				show_baselines: self.controls.show_baselines,
 				show_hitboxes: self.controls.show_hitboxes,
 			}),
-			SidebarTab::Inspect => self.inspect_sidebar_body_data(undo_depth, redo_depth),
+			SidebarTab::Inspect => self.inspect_sidebar_body_data(),
 			SidebarTab::Perf => self.perf_sidebar_body_data(),
 		}
 	}
 
-	fn inspect_sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
+	fn inspect_sidebar_body_data(&self) -> SidebarBodyData {
+		let snapshot = self.session.snapshot();
 		let scene = self.required_derived_scene("inspect");
 		SidebarBodyData::Inspect(self.sidebar_cache.inspect_data(InspectSidebarArgs {
-			editor: self.session.editor_presentation(),
+			editor: &snapshot.editor,
 			scene,
 			text: self.session.text(),
 			hovered_target: self.sidebar.hovered_target,
 			selected_target: self.sidebar.selected_target,
-			undo_depth,
-			redo_depth,
 		}))
 	}
 
 	fn perf_sidebar_body_data(&self) -> SidebarBodyData {
+		let snapshot = self.session.snapshot();
 		let scene = self.required_derived_scene("perf");
-		SidebarBodyData::Perf(
-			self.sidebar_cache
-				.perf_dashboard(self.session.editor_presentation(), scene, &self.perf),
-		)
+		SidebarBodyData::Perf(self.sidebar_cache.perf_dashboard(&snapshot.editor, scene, &self.perf))
 	}
 
 	fn inspect_overlays(
-		&self, scene: Option<&crate::presentation::DerivedScenePresentation>, active: bool,
+		&self, scene: Option<&crate::presentation::ScenePresentation>, active: bool,
 	) -> Arc<[crate::overlay::OverlayPrimitive]> {
 		scene.filter(|_| active).map_or_else(
 			|| Arc::from([]),
@@ -146,9 +139,11 @@ impl EditorApp {
 		)
 	}
 
-	fn required_derived_scene(&self, tab: &str) -> &crate::presentation::DerivedScenePresentation {
+	fn required_derived_scene(&self, tab: &str) -> &crate::presentation::ScenePresentation {
 		self.session
-			.derived_scene()
+			.snapshot()
+			.scene
+			.as_ref()
 			.unwrap_or_else(|| panic!("{tab} view requires a materialized derived scene"))
 	}
 }

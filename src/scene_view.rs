@@ -2,7 +2,7 @@ use {
 	crate::{
 		canvas_view::scene_origin,
 		perf::CanvasPerfSink,
-		presentation::DerivedScenePresentation,
+		presentation::ScenePresentation,
 		types::{Message, WrapChoice},
 	},
 	iced::{
@@ -18,18 +18,23 @@ use {
 #[derive(Debug)]
 struct StaticSceneState {
 	cache: canvas::Cache<iced::Renderer>,
-	cached_scene_revision: Cell<Option<u64>>,
+	cached_scene_key: Cell<Option<StaticSceneKey>>,
 	cached_scene_size: Cell<Option<(u32, u32)>>,
-	cached_scene_has_debug_geometry: Cell<bool>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct StaticSceneKey {
+	scene_revision: u64,
+	show_baselines: bool,
+	show_hitboxes: bool,
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct StaticSceneLayer {
-	scene: DerivedScenePresentation,
+	scene: ScenePresentation,
 	layout_width: f32,
 	show_baselines: bool,
 	show_hitboxes: bool,
-	scene_revision: u64,
 	scroll: Vector,
 	perf: CanvasPerfSink,
 	width: Length,
@@ -38,15 +43,14 @@ pub(crate) struct StaticSceneLayer {
 
 impl StaticSceneLayer {
 	pub(crate) fn new(
-		scene: DerivedScenePresentation, layout_width: f32, show_baselines: bool, show_hitboxes: bool,
-		scene_revision: u64, scroll: Vector, perf: CanvasPerfSink,
+		scene: ScenePresentation, layout_width: f32, show_baselines: bool, show_hitboxes: bool, scroll: Vector,
+		perf: CanvasPerfSink,
 	) -> Self {
 		Self {
 			scene,
 			layout_width,
 			show_baselines,
 			show_hitboxes,
-			scene_revision,
 			scroll,
 			perf,
 			width: Length::Fill,
@@ -63,9 +67,12 @@ impl StaticSceneLayer {
 		self.height = height.into();
 		self
 	}
-
-	fn has_debug_geometry(&self) -> bool {
-		self.show_baselines || self.show_hitboxes
+	fn cache_key(&self) -> StaticSceneKey {
+		StaticSceneKey {
+			scene_revision: self.scene.revision,
+			show_baselines: self.show_baselines,
+			show_hitboxes: self.show_hitboxes,
+		}
 	}
 }
 
@@ -77,29 +84,9 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 	fn state(&self) -> iced::advanced::widget::tree::State {
 		iced::advanced::widget::tree::State::new(StaticSceneState {
 			cache: canvas::Cache::default(),
-			cached_scene_revision: Cell::new(None),
+			cached_scene_key: Cell::new(None),
 			cached_scene_size: Cell::new(None),
-			cached_scene_has_debug_geometry: Cell::new(false),
 		})
-	}
-
-	fn diff(&self, tree: &mut Tree) {
-		let state = tree.state.downcast_mut::<StaticSceneState>();
-
-		// Replacing the cache object is only needed when a prior debug-heavy
-		// build would otherwise donate its larger mesh storage to a plain
-		// document scene again.
-		if should_reset_cache_storage(
-			state.cached_scene_revision.get(),
-			state.cached_scene_has_debug_geometry.get(),
-			self.scene_revision,
-			self.has_debug_geometry(),
-		) {
-			state.cache = canvas::Cache::default();
-			state.cached_scene_revision.set(None);
-			state.cached_scene_size.set(None);
-			state.cached_scene_has_debug_geometry.set(false);
-		}
 	}
 
 	fn size(&self) -> Size<Length> {
@@ -128,9 +115,8 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 			scene_bounds.width.round().to_bits(),
 			scene_bounds.height.round().to_bits(),
 		);
-		// `scene_revision` deliberately includes decoration-only invalidations
-		// such as baseline/hitbox toggles that do not change the presentation.
-		let revision_changed = state.cached_scene_revision.get() != Some(self.scene_revision);
+		let cache_key = self.cache_key();
+		let revision_changed = state.cached_scene_key.get() != Some(cache_key);
 		let size_changed = state.cached_scene_size.get() != Some(scene_size_key);
 		let cache_miss = revision_changed || size_changed;
 
@@ -146,9 +132,8 @@ impl Widget<Message, Theme, iced::Renderer> for StaticSceneLayer {
 		});
 
 		if cache_miss {
-			state.cached_scene_revision.set(Some(self.scene_revision));
+			state.cached_scene_key.set(Some(cache_key));
 			state.cached_scene_size.set(Some(scene_size_key));
-			state.cached_scene_has_debug_geometry.set(self.has_debug_geometry());
 		}
 
 		renderer.with_layer(bounds, |renderer| {
@@ -217,27 +202,5 @@ fn scene_content_width(layout: &crate::scene::DocumentLayout, layout_width: f32)
 		layout.measured_width.max(layout_width).max(1.0)
 	} else {
 		layout_width.max(1.0)
-	}
-}
-
-fn should_reset_cache_storage(
-	cached_scene_revision: Option<u64>, cached_scene_has_debug_geometry: bool, scene_revision: u64,
-	scene_has_debug_geometry: bool,
-) -> bool {
-	cached_scene_revision != Some(scene_revision) && cached_scene_has_debug_geometry && !scene_has_debug_geometry
-}
-
-#[cfg(test)]
-mod tests {
-	use super::should_reset_cache_storage;
-
-	#[test]
-	fn drops_cached_storage_when_debug_geometry_is_removed() {
-		assert!(should_reset_cache_storage(Some(4), true, 5, false));
-	}
-
-	#[test]
-	fn keeps_cached_storage_while_debug_geometry_remains() {
-		assert!(!should_reset_cache_storage(Some(4), true, 5, true));
 	}
 }

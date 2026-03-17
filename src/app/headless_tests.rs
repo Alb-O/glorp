@@ -126,13 +126,16 @@ fn pointer_selection_sweep_script_scenario_expands_selection() {
 fn resize_reflow_script_scenario_changes_layout_width_and_revisions() {
 	let mut app = EditorApp::headless();
 	app.configure_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
-	let revision_before = app.viewport.scene_revision;
+	let revision_before = app.session.snapshot().scene.as_ref().map(|scene| scene.revision);
 
 	let _ = app.run_headless_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
 
-	assert_eq!(app.viewport.scene_revision, revision_before);
+	assert_eq!(
+		app.session.snapshot().scene.as_ref().map(|scene| scene.revision),
+		revision_before
+	);
 	assert!(app.perf.metric_total_samples("editor.width_sync") > 0);
-	assert!(app.session.derived_scene().is_none());
+	assert!(app.session.snapshot().scene.is_none());
 }
 
 #[test]
@@ -146,18 +149,18 @@ fn perf_incremental_typing_step_mutates_editor_state() {
 
 	assert_eq!(app.session.text().len(), before + 1);
 	assert_eq!(app.session.history_depths().0, history_before + 1);
-	assert!(app.session.derived_scene().is_none());
+	assert!(app.session.snapshot().scene.is_none());
 }
 
 #[test]
 fn perf_resize_reflow_step_rebuilds_immediately_when_scene_ui_is_active() {
 	let mut app = EditorApp::headless();
 	app.configure_headless_perf_scenario(crate::PerfScenario::ResizeReflow);
-	let revision_before = app.viewport.scene_revision;
+	let revision_before = app.session.snapshot().scene.as_ref().map_or(0, |scene| scene.revision);
 
 	app.run_headless_perf_step(crate::PerfScenario::ResizeReflow, 0);
 
-	assert!(app.viewport.scene_revision > revision_before);
+	assert!(app.session.snapshot().scene.as_ref().map_or(0, |scene| scene.revision) > revision_before);
 }
 
 #[test]

@@ -1,5 +1,5 @@
 use {
-	crate::{canvas_view::scene_origin, editor::EditorMode, presentation::EditorPresentation, types::Message},
+	crate::{canvas_view::scene_origin, editor::EditorMode, presentation::SessionSnapshot, types::Message},
 	iced::{
 		Color, Element, Length, Point, Rectangle, Size, Theme, Vector,
 		advanced::{Layout, Renderer as _, Widget, graphics::text::Renderer as _, layout, mouse, renderer},
@@ -15,7 +15,7 @@ const BORDER_COLOR: Color = Color::from_rgba(0.8, 0.8, 0.9, 0.65);
 
 #[derive(Debug, Clone)]
 pub(crate) struct SceneTextLayer {
-	presentation: EditorPresentation,
+	snapshot: SessionSnapshot,
 	layout_width: f32,
 	scroll: Vector,
 	draw_backdrop: bool,
@@ -25,9 +25,9 @@ pub(crate) struct SceneTextLayer {
 }
 
 impl SceneTextLayer {
-	pub(crate) fn new(presentation: EditorPresentation, layout_width: f32, scroll: Vector) -> Self {
+	pub(crate) fn new(snapshot: SessionSnapshot, layout_width: f32, scroll: Vector) -> Self {
 		Self {
-			presentation,
+			snapshot,
 			layout_width,
 			scroll,
 			draw_backdrop: true,
@@ -73,7 +73,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 			self.height,
 			Size::new(
 				self.layout_width.max(1.0),
-				self.presentation.text_layer.measured_height.max(1.0),
+				self.snapshot.editor.text_layer.measured_height.max(1.0),
 			),
 		))
 	}
@@ -84,7 +84,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 	) {
 		let bounds = layout.bounds();
 		let content_width = self.layout_width.max(1.0);
-		let text_height = self.presentation.text_layer.measured_height.max(1.0);
+		let text_height = self.snapshot.editor.text_layer.measured_height.max(1.0);
 		let origin = Point::new(
 			bounds.x + scene_origin().x - self.scroll.x,
 			bounds.y + scene_origin().y - self.scroll.y,
@@ -138,10 +138,10 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 		if self.draw_text {
 			if let Some(clip) = insert_repaint_clip(
 				origin,
-				self.presentation.editor.mode,
-				self.presentation.editor.viewport_target,
+				self.snapshot.editor.editor.mode,
+				self.snapshot.editor.editor.viewport_target,
 			) {
-				let buffer = self.presentation.text_layer.buffer.clone();
+				let buffer = self.snapshot.editor.text_layer.buffer.clone();
 				// Draw once in the normal color, then repaint only the active insert
 				// cell with the inverted glyph color.
 				renderer.fill_raw(iced::advanced::graphics::text::Raw {
@@ -158,7 +158,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 				});
 			} else {
 				renderer.fill_raw(iced::advanced::graphics::text::Raw {
-					buffer: self.presentation.text_layer.buffer.clone(),
+					buffer: self.snapshot.editor.text_layer.buffer.clone(),
 					position: origin,
 					color: TEXT_COLOR,
 					clip_bounds: bounds,

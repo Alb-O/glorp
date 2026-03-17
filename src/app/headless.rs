@@ -2,6 +2,7 @@ use {
 	super::EditorApp,
 	crate::{
 		HeadlessScenario, HeadlessScriptScenario, PerfScenario,
+		app::session::SceneDemand,
 		editor::{
 			EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent,
 		},
@@ -194,15 +195,16 @@ impl EditorApp {
 	}
 
 	pub(crate) fn perf_dashboard(&mut self) -> crate::perf::PerfDashboard {
-		let _ = self.session.ensure_derived_scene();
-		let scene = self
-			.session
-			.derived_scene()
+		let _ = self.session.ensure_scene(SceneDemand::DerivedRequired);
+		let snapshot = self.session.snapshot();
+		let scene = snapshot
+			.scene
+			.as_ref()
 			.expect("perf dashboard requires a materialized derived scene");
 		self.perf.dashboard(
 			scene.layout.as_ref(),
 			self.session.mode(),
-			self.session.editor_presentation().editor_bytes(),
+			snapshot.editor.editor_bytes(),
 		)
 	}
 
@@ -222,10 +224,14 @@ impl EditorApp {
 	fn load_headless_document(&mut self, text: &str) {
 		self.controls.preset = SamplePreset::Custom;
 		self.sidebar.set_active_tab(SidebarTab::Controls);
-		self.session.reset_with_preset(text, self.scene_config());
+		let update = self
+			.session
+			.reset_with_preset(text, self.scene_config(), SceneDemand::HotOnly);
 		self.viewport.mark_scene_applied();
-		self.viewport
-			.finish_editor_refresh(self.session.viewport_metrics(), true);
+		self.viewport.finish_editor_refresh(
+			self.session.viewport_metrics(),
+			matches!(update.scroll_intent, super::session::ScrollIntent::ResetScroll),
+		);
 	}
 
 	fn position_headless_insert_point(&mut self) {
@@ -348,9 +354,11 @@ impl EditorApp {
 	}
 
 	fn headless_observation(&self) -> usize {
-		let view = &self.session.editor_presentation().editor;
+		let snapshot = self.session.snapshot();
+		let view = &snapshot.editor.editor;
 		let selection_end = view.selection.as_ref().map_or(0, |selection| selection.end);
 		let selection_head = view.selection_head.unwrap_or(0);
+		let scene_revision = snapshot.scene.as_ref().map_or(0, |scene| scene.revision);
 
 		// This is only a cheap deterministic fingerprint for tests/bench scripts,
 		// not a durable serialization format.
@@ -365,7 +373,7 @@ impl EditorApp {
 				.chain(self.viewport.canvas_scroll.x.max(0.0).to_bits().to_ne_bytes())
 				.chain(self.viewport.canvas_scroll.y.max(0.0).to_bits().to_ne_bytes())
 				.chain(self.viewport.layout_width.round().to_bits().to_ne_bytes())
-				.chain(self.viewport.scene_revision.to_ne_bytes()),
+				.chain(scene_revision.to_ne_bytes()),
 		)
 	}
 
