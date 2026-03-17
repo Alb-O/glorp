@@ -42,13 +42,13 @@ pub(crate) fn run_from_env() -> Option<ExitCode> {
 
 	crate::init_tracing();
 
-	match run(config) {
-		Ok(report) => {
+	run(config).map_or_else(
+		|message| Some(report_error(&message)),
+		|report| {
 			println!("{report}");
 			Some(ExitCode::SUCCESS)
-		}
-		Err(message) => Some(report_error(&message)),
-	}
+		},
+	)
 }
 
 fn parse_args(args: &[String]) -> Result<Option<PerfCliConfig>, String> {
@@ -110,15 +110,10 @@ fn required_arg<'a>(args: &'a [String], index: usize, flag: &str) -> Result<&'a 
 }
 
 fn parse_count(flag: &str, value: &str) -> Result<usize, String> {
-	let count = value
-		.parse::<usize>()
-		.map_err(|_| format!("{flag} expects a positive integer, got `{value}`"))?;
-
-	if count == 0 {
-		return Err(format!("{flag} expects a positive integer, got `0`"));
+	match value.parse::<usize>() {
+		Ok(count @ 1..) => Ok(count),
+		_ => Err(format!("{flag} expects a positive integer, got `{value}`")),
 	}
-
-	Ok(count)
 }
 
 fn usage() -> String {

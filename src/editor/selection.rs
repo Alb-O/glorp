@@ -21,16 +21,15 @@ impl EditorEngine {
 	}
 
 	pub(super) fn extend_pointer_selection(&mut self, layout: &DocumentLayout, position: Point) {
-		let Some(anchor_byte) = self.pointer_anchor() else {
-			return;
-		};
-		let Some(anchor_index) = layout
-			.cluster_at_or_after(anchor_byte)
-			.or_else(|| layout.cluster_before(anchor_byte.saturating_add(1)))
+		let Some((anchor_index, target_index)) = self
+			.pointer_anchor()
+			.and_then(|anchor_byte| {
+				layout
+					.cluster_at_or_after(anchor_byte)
+					.or_else(|| layout.cluster_before(anchor_byte.saturating_add(1)))
+			})
+			.zip(self.pointer_cluster_index(layout, position))
 		else {
-			return;
-		};
-		let Some(target_index) = self.pointer_cluster_index(layout, position) else {
 			return;
 		};
 
@@ -52,13 +51,13 @@ impl EditorEngine {
 	}
 
 	pub(super) fn select_word_at(&mut self, layout: &DocumentLayout, position: Point) {
-		let Some(cluster_index) = self.pointer_cluster_index(layout, position) else {
+		let Some((cluster, range)) = self.pointer_cluster_index(layout, position).and_then(|cluster_index| {
+			layout
+				.cluster(cluster_index)
+				.map(|cluster| (cluster, self.word_range(cluster.byte_range.clone())))
+		}) else {
 			return;
 		};
-		let Some(cluster) = layout.cluster(cluster_index) else {
-			return;
-		};
-		let range = self.word_range(cluster.byte_range.clone());
 		self.set_mode(EditorMode::Normal);
 		self.set_selection(Some(EditorSelection::new(range.clone(), range.start)));
 		self.set_preferred_x(Some(cluster.center_x()));

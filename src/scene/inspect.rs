@@ -46,53 +46,44 @@ impl DocumentLayout {
 		&self, overlays: &mut Vec<OverlayPrimitive>, target: CanvasTarget, selected: bool, layout_width: f32,
 		show_hitboxes: bool,
 	) {
-		match target {
-			CanvasTarget::Run(run_index) => {
-				let Some(run) = self.runs.get(run_index) else {
-					return;
-				};
-
-				overlays.push(OverlayPrimitive::scene_rect(
+		let Some((rect, kind, hitbox_kind)) = (match target {
+			CanvasTarget::Run(_) => self.target_rect(target).map(|rect| {
+				(
 					LayoutRect {
-						x: 0.0,
-						y: run.line_top,
-						width: layout_width.max(run.line_width).max(1.0),
-						height: run.line_height.max(1.0),
+						width: layout_width.max(rect.width).max(1.0),
+						..rect
 					},
 					if selected {
 						OverlayRectKind::InspectRunSelected
 					} else {
 						OverlayRectKind::InspectRunHover
 					},
-					OverlayLayer::OverText,
-				));
-			}
-			CanvasTarget::Cluster(index) => {
-				let Some(rect) = self.target_rect(CanvasTarget::Cluster(index)) else {
-					return;
-				};
-				overlays.push(OverlayPrimitive::scene_rect(
+					None,
+				)
+			}),
+			CanvasTarget::Cluster(_) => self.target_rect(target).map(|rect| {
+				(
 					rect,
 					if selected {
 						OverlayRectKind::InspectGlyphSelected
 					} else {
 						OverlayRectKind::InspectGlyphHover
 					},
-					OverlayLayer::OverText,
-				));
+					show_hitboxes.then_some(if selected {
+						OverlayRectKind::InspectGlyphHitboxSelected
+					} else {
+						OverlayRectKind::InspectGlyphHitboxHover
+					}),
+				)
+			}),
+		}) else {
+			return;
+		};
 
-				if show_hitboxes {
-					overlays.push(OverlayPrimitive::scene_rect(
-						rect,
-						if selected {
-							OverlayRectKind::InspectGlyphHitboxSelected
-						} else {
-							OverlayRectKind::InspectGlyphHitboxHover
-						},
-						OverlayLayer::OverText,
-					));
-				}
-			}
+		overlays.push(OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText));
+
+		if let Some(kind) = hitbox_kind {
+			overlays.push(OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText));
 		}
 	}
 }

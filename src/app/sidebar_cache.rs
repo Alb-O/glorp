@@ -73,27 +73,23 @@ impl SidebarCache {
 
 	pub(super) fn inspect_data(&self, args: InspectSidebarArgs<'_>) -> Arc<InspectSidebarData> {
 		let key = args.key();
+		cached_or_build(&self.inspect, &self.inspect_dirty, key, || {
+			#[cfg(test)]
+			self.inspect_builds.set(self.inspect_builds.get() + 1);
 
-		if let Some(data) = cached_data(&self.inspect, &self.inspect_dirty, key) {
-			return data;
-		}
-
-		let data = Arc::new(InspectSidebarData {
-			warnings: args.scene.layout.warnings.clone(),
-			interaction_details: interaction_details(
-				args.editor,
-				args.scene,
-				args.text,
-				args.hovered_target,
-				args.selected_target,
-				args.undo_depth,
-				args.redo_depth,
-			),
-		});
-		#[cfg(test)]
-		self.inspect_builds.set(self.inspect_builds.get() + 1);
-		store_cached_data(&self.inspect, &self.inspect_dirty, key, data.clone());
-		data
+			Arc::new(InspectSidebarData {
+				warnings: args.scene.layout.warnings.clone(),
+				interaction_details: interaction_details(
+					args.editor,
+					args.scene,
+					args.text,
+					args.hovered_target,
+					args.selected_target,
+					args.undo_depth,
+					args.redo_depth,
+				),
+			})
+		})
 	}
 
 	pub(super) fn perf_dashboard(
@@ -107,15 +103,12 @@ impl SidebarCache {
 			perf: perf.key(),
 		};
 
-		if let Some(data) = cached_data(&self.perf, &self.perf_dirty, key) {
-			return data;
-		}
+		cached_or_build(&self.perf, &self.perf_dirty, key, || {
+			#[cfg(test)]
+			self.perf_builds.set(self.perf_builds.get() + 1);
 
-		let data = Arc::new(perf.dashboard(scene.layout.as_ref(), editor.mode(), editor.editor_bytes()));
-		#[cfg(test)]
-		self.perf_builds.set(self.perf_builds.get() + 1);
-		store_cached_data(&self.perf, &self.perf_dirty, key, data.clone());
-		data
+			Arc::new(perf.dashboard(scene.layout.as_ref(), editor.mode(), editor.editor_bytes()))
+		})
 	}
 
 	#[cfg(test)]
@@ -170,6 +163,18 @@ where
 	}
 
 	None
+}
+
+fn cached_or_build<K, V>(
+	cache: &RefCell<Option<CachedEntry<K, V>>>, dirty: &Cell<bool>, key: K, build: impl FnOnce() -> Arc<V>,
+) -> Arc<V>
+where
+	K: Copy + Eq, {
+	cached_data(cache, dirty, key).unwrap_or_else(|| {
+		let data = build();
+		store_cached_data(cache, dirty, key, data.clone());
+		data
+	})
 }
 
 fn store_cached_data<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, dirty: &Cell<bool>, key: K, data: Arc<V>) {
@@ -233,7 +238,5 @@ fn preview_range(text: &str, range: &Range<usize>) -> String {
 }
 
 fn target_details_or_none(layout: &DocumentLayout, target: Option<CanvasTarget>) -> Arc<str> {
-	layout
-		.target_details(target)
-		.unwrap_or_else(|| Arc::<str>::from("  none"))
+	layout.target_details(target).unwrap_or_else(|| "  none".into())
 }

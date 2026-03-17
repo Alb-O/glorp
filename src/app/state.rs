@@ -57,13 +57,10 @@ impl ResizeCoalescer {
 	}
 
 	pub(super) fn flush(&mut self) -> Option<f32> {
-		let width = self.pending_width?;
-		self.pending_width = None;
-
-		if (self.applied_width - width).abs() < 0.5 {
-			return None;
-		}
-
+		let width = self
+			.pending_width
+			.take()
+			.filter(|width| (self.applied_width - *width).abs() >= 0.5)?;
 		self.applied_width = width;
 		Some(width)
 	}

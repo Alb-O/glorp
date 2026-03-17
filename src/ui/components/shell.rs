@@ -125,13 +125,12 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	.width(Length::Fill)
 	.height(Length::Fill);
 
-	let mut children = vec![backdrop.into(), underlay.into(), text_layer.into()];
-
-	if let Some(derived_scene) = derived_scene.filter(|_| decorations.show_baselines || decorations.show_hitboxes) {
-		// The static scene cache only exists for debug geometry. Inspect overlays
-		// and the footer can still use the derived scene without paying for this
-		// extra layer.
-		children.push(
+	let static_layer = derived_scene
+		.filter(|_| decorations.show_baselines || decorations.show_hitboxes)
+		.map(|derived_scene| {
+			// The static scene cache only exists for debug geometry. Inspect overlays
+			// and the footer can still use the derived scene without paying for this
+			// extra layer.
 			StaticSceneLayer::new(
 				derived_scene,
 				layout_width,
@@ -143,12 +142,13 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 			)
 			.width(Length::Fill)
 			.height(Length::Fill)
-			.into(),
-		);
-	}
-
-	children.push(canvas_view.into());
-	children.push(overlay.into());
+			.into()
+		});
+	let children = [backdrop.into(), underlay.into(), text_layer.into()]
+		.into_iter()
+		.chain(static_layer)
+		.chain([canvas_view.into(), overlay.into()])
+		.collect::<Vec<_>>();
 
 	container(
 		sensor(Stack::with_children(children).width(Length::Fill).height(Length::Fill))

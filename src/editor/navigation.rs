@@ -11,13 +11,13 @@ impl EditorEngine {
 		self.clear_pointer_anchor();
 		match self.mode() {
 			EditorMode::Normal => {
-				let Some(current) = self.active_selection_index(layout) else {
+				let Some(target) = self
+					.active_selection_index(layout)
+					.and_then(|current| current.checked_sub(1))
+				else {
 					return;
 				};
-
-				if let Some(previous) = current.checked_sub(1) {
-					self.select_cluster(layout, previous);
-				}
+				self.select_cluster(layout, target);
 			}
 			EditorMode::Insert => {
 				self.set_insert_head(
@@ -33,13 +33,14 @@ impl EditorEngine {
 		self.clear_pointer_anchor();
 		match self.mode() {
 			EditorMode::Normal => {
-				let Some(current) = self.active_selection_index(layout) else {
+				let Some(target) = self
+					.active_selection_index(layout)
+					.filter(|current| current + 1 < layout.clusters().len())
+					.map(|current| current + 1)
+				else {
 					return;
 				};
-
-				if current + 1 < layout.clusters().len() {
-					self.select_cluster(layout, current + 1);
-				}
+				self.select_cluster(layout, target);
 			}
 			EditorMode::Insert => {
 				self.set_insert_head(

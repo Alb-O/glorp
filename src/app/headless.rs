@@ -166,10 +166,10 @@ impl EditorApp {
 				self.repeat_headless_history(EditorHistoryIntent::Redo, HEADLESS_UNDO_REDO_STEPS);
 			}
 			HeadlessScriptScenario::BackspaceBurst => {
-				self.repeat_headless_edit(EditorEditIntent::Backspace, delete_seed_char_count())
+				self.repeat_headless_edit(EditorEditIntent::Backspace, delete_seed_char_count());
 			}
 			HeadlessScriptScenario::DeleteForwardBurst => {
-				self.repeat_headless_edit(EditorEditIntent::DeleteForward, delete_seed_char_count())
+				self.repeat_headless_edit(EditorEditIntent::DeleteForward, delete_seed_char_count());
 			}
 			HeadlessScriptScenario::MotionSweep => self.perform_motion_sweep(),
 			HeadlessScriptScenario::PointerSelectionSweep => self.perform_pointer_selection_sweep(),
@@ -319,7 +319,7 @@ impl EditorApp {
 		let target = HEADLESS_RESIZE_WIDTHS[(step + 1) % width_count];
 
 		for progress in HEADLESS_RESIZE_PROGRESS {
-			let width = start + ((target - start) * progress);
+			let width = (target - start).mul_add(progress, start);
 			self.dispatch_headless(Message::Viewport(ViewportMessage::CanvasResized(Size::new(
 				width,
 				HEADLESS_VIEWPORT_SIZE.height,

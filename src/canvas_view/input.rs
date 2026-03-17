@@ -86,8 +86,8 @@ fn key_intent(
 			}
 
 			navigation_key_intent(key)
-				.or(normal_named_key_intent(key))
-				.or(match latin {
+				.or_else(|| normal_named_key_intent(key))
+				.or_else(|| match latin {
 					Some('h') => Some(EditorIntent::Motion(EditorMotion::Left)),
 					Some('l') => Some(EditorIntent::Motion(EditorMotion::Right)),
 					Some('k') => Some(EditorIntent::Motion(EditorMotion::Up)),
@@ -98,17 +98,13 @@ fn key_intent(
 					_ => None,
 				})
 		}
-		EditorMode::Insert => {
-			if let Some(intent) = navigation_key_intent(key).or(insert_named_key_intent(key)) {
-				return Some(intent);
-			}
-			if modifiers.alt() {
-				return None;
-			}
-
-			text.filter(|text| !text.chars().all(char::is_control))
-				.map(|text| EditorIntent::Edit(EditorEditIntent::InsertText(text.to_string())))
-		}
+		EditorMode::Insert => navigation_key_intent(key)
+			.or_else(|| insert_named_key_intent(key))
+			.or_else(|| {
+				(!modifiers.alt()).then_some(())?;
+				text.filter(|text| !text.chars().all(char::is_control))
+					.map(|text| EditorIntent::Edit(EditorEditIntent::InsertText(text.to_string())))
+			}),
 	}
 }
 

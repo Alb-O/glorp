@@ -30,10 +30,6 @@ impl DocumentLayout {
 	}
 
 	pub(crate) fn cluster_index_for_cursor(&self, cursor: Cursor) -> Option<usize> {
-		if self.clusters.is_empty() {
-			return None;
-		}
-
 		let line_offset = self.line_byte_offsets.get(cursor.line).copied().unwrap_or_default();
 		let byte = line_offset + cursor.index;
 

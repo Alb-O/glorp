@@ -29,26 +29,18 @@ pub(crate) fn duration_ms(duration: Duration) -> f64 {
 fn tracing_filter() -> Option<EnvFilter> {
 	let glorp_trace = std::env::var("GLORP_TRACE").ok();
 	let rust_log = std::env::var("RUST_LOG").ok();
-
-	if glorp_trace.is_none() && rust_log.is_none() {
-		return None;
-	}
-
-	if let Some(value) = glorp_trace.as_deref().map(str::trim) {
-		let directive = if value.is_empty() || value == "1" || value.eq_ignore_ascii_case("true") {
-			DEFAULT_TRACE_FILTER
-		} else if value == "0" || value.eq_ignore_ascii_case("false") {
-			return None;
-		} else {
-			value
-		};
-
-		if let Ok(filter) = EnvFilter::try_new(directive) {
-			return Some(filter);
+	let directive = match glorp_trace.as_deref().map(str::trim) {
+		None if rust_log.is_none() => return None,
+		Some(value) if value == "0" || value.eq_ignore_ascii_case("false") => return None,
+		Some(value) if value.is_empty() || value == "1" || value.eq_ignore_ascii_case("true") => {
+			Some(DEFAULT_TRACE_FILTER)
 		}
-	}
+		Some(value) => Some(value),
+		None => None,
+	};
 
-	EnvFilter::try_from_default_env()
-		.ok()
+	directive
+		.and_then(|directive| EnvFilter::try_new(directive).ok())
+		.or_else(|| EnvFilter::try_from_default_env().ok())
 		.or_else(|| EnvFilter::try_new(DEFAULT_TRACE_FILTER).ok())
 }
