@@ -11,13 +11,12 @@ impl EditorEngine {
 		self.clear_pointer_anchor();
 		match self.mode() {
 			EditorMode::Normal => {
-				let Some(target) = self
+				if let Some(target) = self
 					.active_selection_index(layout)
 					.and_then(|current| current.checked_sub(1))
-				else {
-					return;
-				};
-				self.select_cluster(layout, target);
+				{
+					self.select_cluster(layout, target);
+				}
 			}
 			EditorMode::Insert => {
 				self.set_insert_head(
@@ -33,14 +32,13 @@ impl EditorEngine {
 		self.clear_pointer_anchor();
 		match self.mode() {
 			EditorMode::Normal => {
-				let Some(target) = self
+				if let Some(target) = self
 					.active_selection_index(layout)
 					.filter(|current| current + 1 < layout.clusters().len())
 					.map(|current| current + 1)
-				else {
-					return;
-				};
-				self.select_cluster(layout, target);
+				{
+					self.select_cluster(layout, target);
+				}
 			}
 			EditorMode::Insert => {
 				self.set_insert_head(
@@ -95,13 +93,11 @@ impl EditorEngine {
 				let Some(current) = self.active_selection(layout) else {
 					return;
 				};
-				let target = if to_start {
+				if let Some(target) = if to_start {
 					layout.first_cluster_in_run(current.run_index)
 				} else {
 					layout.last_cluster_in_run(current.run_index)
-				};
-
-				if let Some(target) = target {
+				} {
 					self.select_cluster(layout, target);
 				}
 			}
@@ -127,21 +123,21 @@ impl EditorEngine {
 		if matches!(self.mode(), EditorMode::Normal) {
 			self.set_preferred_x(None);
 			self.clear_pointer_anchor();
-			return ApplyResult::default();
-		}
-
-		let layout = self.document_layout();
-		self.set_mode(EditorMode::Normal);
-		// Normal mode uses the same visible selection that insert mode showed, so
-		// Esc does not shift the cursor left as a separate reconciliation step.
-		let selection = Self::insert_selection(&layout, self.caret());
-		self.set_selection(selection);
-		self.set_preferred_x(None);
-		self.clear_pointer_anchor();
-		ApplyResult {
-			text_edit: None,
-			layout: Some(layout),
-			view_refreshed: false,
+			ApplyResult::default()
+		} else {
+			let layout = self.document_layout();
+			self.set_mode(EditorMode::Normal);
+			// Normal mode uses the same visible selection that insert mode showed, so
+			// Esc does not shift the cursor left as a separate reconciliation step.
+			let selection = Self::insert_selection(&layout, self.caret());
+			self.set_selection(selection);
+			self.set_preferred_x(None);
+			self.clear_pointer_anchor();
+			ApplyResult {
+				text_edit: None,
+				layout: Some(layout),
+				view_refreshed: false,
+			}
 		}
 	}
 }

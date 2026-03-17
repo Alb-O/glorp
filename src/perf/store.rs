@@ -164,13 +164,13 @@ pub(super) fn average_ms(values: impl Iterator<Item = f32>) -> f32 {
 
 pub(super) fn percentile_ms(values: &VecDeque<f32>, percentile_percent: usize) -> f32 {
 	if values.is_empty() {
-		return 0.0;
+		0.0
+	} else {
+		let mut sorted = values.iter().copied().collect::<Vec<_>>();
+		let index = ((sorted.len() - 1) * percentile_percent + 50) / 100;
+		let (_, sample, _) = sorted.select_nth_unstable_by(index, f32::total_cmp);
+		*sample
 	}
-
-	let mut sorted = values.iter().copied().collect::<Vec<_>>();
-	let index = ((sorted.len() - 1) * percentile_percent + 50) / 100;
-	let (_, sample, _) = sorted.select_nth_unstable_by(index, f32::total_cmp);
-	*sample
 }
 
 fn push_bounded<T>(items: &mut VecDeque<T>, value: T, limit: usize) {

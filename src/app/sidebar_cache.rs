@@ -155,14 +155,15 @@ impl InspectSidebarArgs<'_> {
 fn cached_data<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, dirty: &Cell<bool>, key: K) -> Option<Arc<V>>
 where
 	K: Copy + Eq, {
-	if !dirty.get()
-		&& let Some(entry) = cache.borrow().as_ref()
-		&& entry.key == key
-	{
-		return Some(entry.data.clone());
+	if dirty.get() {
+		return None;
 	}
 
-	None
+	cache
+		.borrow()
+		.as_ref()
+		.filter(|entry| entry.key == key)
+		.map(|entry| entry.data.clone())
 }
 
 fn cached_or_build<K, V>(

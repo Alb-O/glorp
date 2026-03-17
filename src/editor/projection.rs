@@ -44,15 +44,13 @@ impl EditorEngine {
 	}
 
 	pub(crate) fn shared_document_layout(&self) -> Arc<DocumentLayout> {
-		if let Some(layout) = self.layout.cached_document_layout_arc() {
-			return layout;
-		}
-
-		// Seed the retained snapshot on first demand so later presentation reads
-		// observe one derived layout instead of rebuilding independently.
-		let layout = Arc::new(self.document_layout());
-		self.layout.set_document_layout(layout.clone());
-		layout
+		self.layout.cached_document_layout_arc().unwrap_or_else(|| {
+			// Seed the retained snapshot on first demand so later presentation reads
+			// observe one derived layout instead of rebuilding independently.
+			let layout = Arc::new(self.document_layout());
+			self.layout.set_document_layout(layout.clone());
+			layout
+		})
 	}
 
 	pub(crate) fn viewport_metrics(&self) -> EditorViewportMetrics {
@@ -148,14 +146,14 @@ impl EditorEngine {
 		viewport_target: Option<LayoutRect>, tone: EditorOverlayTone,
 	) -> Arc<[OverlayPrimitive]> {
 		if matches!(self.mode(), EditorMode::Insert) {
-			return Self::insert_overlays(tone, insert_cursor, viewport_target);
+			Self::insert_overlays(tone, insert_cursor, viewport_target)
+		} else {
+			let selection_rectangles = selection.map_or_else(
+				|| Arc::from([]),
+				|selection| selection_rectangles(layout, selection.range()),
+			);
+			Self::normal_overlays(tone, selection_rectangles.as_ref(), viewport_target)
 		}
-
-		let selection_rectangles = selection.map_or_else(
-			|| Arc::from([]),
-			|selection| selection_rectangles(layout, selection.range()),
-		);
-		Self::normal_overlays(tone, selection_rectangles.as_ref(), viewport_target)
 	}
 
 	pub(super) fn buffer_hit(&self, point: Point) -> Option<cosmic_text::Cursor> {
@@ -170,11 +168,11 @@ impl EditorEngine {
 			// buffer has to be rebuilt from whole-document text after the edit.
 			let inverse = self.core.document.apply_edit(edit);
 			self.rebuild_buffer(font_system, edit);
-			return inverse;
+			inverse
+		} else {
+			self.apply_buffer_edit(font_system, edit);
+			self.core.document.apply_edit(edit)
 		}
-
-		self.apply_buffer_edit(font_system, edit);
-		self.core.document.apply_edit(edit)
 	}
 
 	fn apply_buffer_edit(&mut self, font_system: &mut FontSystem, edit: &TextEdit) {

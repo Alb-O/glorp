@@ -185,8 +185,7 @@ impl EditorApp {
 			ViewportMessage::ResizeTick(_now) => self
 				.viewport
 				.flush_resize()
-				.map(|width| self.sync_editor_width(width))
-				.unwrap_or(()),
+				.map_or((), |width| self.sync_editor_width(width)),
 		}
 	}
 
@@ -366,11 +365,11 @@ impl EditorApp {
 	}
 
 	fn ensure_scene_for_active_consumers(&mut self, reason: Option<SceneRefreshReason>) -> bool {
-		if !self.derived_scene_consumer_active() {
-			return false;
-		}
-
-		let Some(duration) = self.session.ensure_derived_scene() else {
+		let Some(duration) = self
+			.derived_scene_consumer_active()
+			.then(|| self.session.ensure_derived_scene())
+			.flatten()
+		else {
 			return false;
 		};
 

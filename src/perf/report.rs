@@ -118,18 +118,18 @@ pub(crate) struct PerfRecentActivity {
 impl PerfRecentActivity {
 	pub(crate) fn text(&self) -> String {
 		if self.recent_ms.is_empty() {
-			return format!("{:<14} no samples", self.label);
+			format!("{:<14} no samples", self.label)
+		} else {
+			format!(
+				"{:<14} {}",
+				self.label,
+				self.recent_ms
+					.iter()
+					.map(|value| format!("{value:>5.2}"))
+					.collect::<Vec<_>>()
+					.join("  "),
+			)
 		}
-
-		format!(
-			"{:<14} {}",
-			self.label,
-			self.recent_ms
-				.iter()
-				.map(|value| format!("{value:>5.2}"))
-				.collect::<Vec<_>>()
-				.join("  "),
-		)
 	}
 }
 

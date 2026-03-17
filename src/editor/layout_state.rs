@@ -66,15 +66,14 @@ impl EditorLayout {
 			return false;
 		}
 
+		let width_only_change = self.width_only_config_change(config);
 		self.clear_snapshot();
-		if self.width_only_config_change(config) {
-			self.resize_buffer(font_system, config.max_width);
-			self.config = config;
-			return true;
-		}
-
 		self.config = config;
-		self.replace_buffer(font_system, text);
+		if width_only_change {
+			self.resize_buffer(font_system, self.config.max_width);
+		} else {
+			self.replace_buffer(font_system, text);
+		}
 		true
 	}
 
@@ -116,17 +115,17 @@ impl EditorLayout {
 
 	pub(super) fn viewport_metrics(&self) -> EditorViewportMetrics {
 		if let Some(metrics) = self.viewport_metrics.get() {
-			return metrics;
+			metrics
+		} else {
+			let (measured_width, measured_height) = measure_buffer(&self.buffer);
+			let metrics = EditorViewportMetrics {
+				wrapping: self.config.wrapping,
+				measured_width,
+				measured_height,
+			};
+			self.viewport_metrics.set(Some(metrics));
+			metrics
 		}
-
-		let (measured_width, measured_height) = measure_buffer(&self.buffer);
-		let metrics = EditorViewportMetrics {
-			wrapping: self.config.wrapping,
-			measured_width,
-			measured_height,
-		};
-		self.viewport_metrics.set(Some(metrics));
-		metrics
 	}
 
 	pub(super) fn text_layer_state(&self) -> EditorTextLayerState {

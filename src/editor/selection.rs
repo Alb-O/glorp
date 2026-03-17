@@ -37,10 +37,7 @@ impl EditorEngine {
 	}
 
 	fn select_range(&mut self, layout: &DocumentLayout, anchor_index: usize, target_index: usize) {
-		let Some(anchor) = layout.cluster(anchor_index) else {
-			return;
-		};
-		let Some(target) = layout.cluster(target_index) else {
+		let Some((anchor, target)) = layout.cluster(anchor_index).zip(layout.cluster(target_index)) else {
 			return;
 		};
 		let start = anchor.byte_range.start.min(target.byte_range.start);
@@ -65,16 +62,16 @@ impl EditorEngine {
 	}
 
 	fn word_range(&self, fallback: std::ops::Range<usize>) -> std::ops::Range<usize> {
-		if !self
-			.text()
+		let text = self.text();
+		if text
 			.get(fallback.clone())
-			.is_some_and(|slice| slice.chars().any(is_word_char))
+			.is_none_or(|slice| !slice.chars().any(is_word_char))
 		{
 			return fallback;
 		}
 
 		let mut start = fallback.start;
-		while let Some((index, ch)) = previous_char(self.text(), start) {
+		while let Some((index, ch)) = previous_char(text, start) {
 			if !is_word_char(ch) {
 				break;
 			}
@@ -82,7 +79,7 @@ impl EditorEngine {
 		}
 
 		let mut end = fallback.end;
-		while let Some((next, ch)) = next_char(self.text(), end) {
+		while let Some((next, ch)) = next_char(text, end) {
 			if !is_word_char(ch) {
 				break;
 			}

@@ -238,13 +238,11 @@ impl DocumentSession {
 	}
 
 	fn finish_buffer_sync(&mut self, changed: bool) -> bool {
-		if !changed {
-			return false;
+		if changed {
+			self.refresh_editor_presentation();
+			self.invalidate_derived_scene();
 		}
-
-		self.refresh_editor_presentation();
-		self.invalidate_derived_scene();
-		true
+		changed
 	}
 
 	fn invalidate_derived_scene(&mut self) {

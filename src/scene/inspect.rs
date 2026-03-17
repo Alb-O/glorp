@@ -33,10 +33,12 @@ impl DocumentLayout {
 	) -> Arc<[OverlayPrimitive]> {
 		let mut overlays = Vec::with_capacity(4);
 
-		for (target, selected) in [(hovered_target, false), (selected_target, true)] {
-			if let Some(target) = target {
-				self.append_target_overlay_primitives(&mut overlays, target, selected, layout_width, show_hitboxes);
-			}
+		for (target, selected) in hovered_target
+			.into_iter()
+			.map(|target| (target, false))
+			.chain(selected_target.into_iter().map(|target| (target, true)))
+		{
+			self.append_target_overlay_primitives(&mut overlays, target, selected, layout_width, show_hitboxes);
 		}
 
 		overlays.into()

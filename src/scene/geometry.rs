@@ -114,10 +114,10 @@ impl DocumentLayout {
 		// A caret parked on a hard newline should stay visually attached to the
 		// preceding cluster instead of jumping onto the next rendered row.
 		if self.ends_hard_line(byte) {
-			return self.cluster_before(byte.saturating_add(1));
+			self.cluster_before(byte.saturating_add(1))
+		} else {
+			self.cluster_at_or_after(byte).or_else(|| self.cluster_before(byte))
 		}
-
-		self.cluster_at_or_after(byte).or_else(|| self.cluster_before(byte))
 	}
 
 	pub(crate) fn caret_metrics(&self, byte: usize) -> LayoutCaretMetrics {

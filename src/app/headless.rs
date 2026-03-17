@@ -166,7 +166,7 @@ impl EditorApp {
 				self.repeat_headless_history(EditorHistoryIntent::Redo, HEADLESS_UNDO_REDO_STEPS);
 			}
 			HeadlessScriptScenario::BackspaceBurst | HeadlessScriptScenario::DeleteForwardBurst => {
-				self.repeat_headless_edit(delete_burst_intent(scenario), delete_seed_char_count());
+				self.repeat_headless_edit(&delete_burst_intent(scenario), delete_seed_char_count())
 			}
 			HeadlessScriptScenario::MotionSweep => self.perform_motion_sweep(),
 			HeadlessScriptScenario::PointerSelectionSweep => self.perform_pointer_selection_sweep(),
@@ -254,7 +254,7 @@ impl EditorApp {
 		self.dispatch_headless(Message::Editor(EditorIntent::Motion(intent)));
 	}
 
-	fn repeat_headless_edit(&mut self, intent: EditorEditIntent, steps: usize) {
+	fn repeat_headless_edit(&mut self, intent: &EditorEditIntent, steps: usize) {
 		for _ in 0..steps {
 			self.apply_headless_edit(intent.clone());
 		}

@@ -1,11 +1,7 @@
 use {crate::scene::line_byte_offsets, cosmic_text::Cursor};
 
 pub(super) fn clamp_char_boundary(text: &str, byte: usize) -> usize {
-	if byte >= text.len() {
-		return text.len();
-	}
-
-	let mut boundary = byte;
+	let mut boundary = byte.min(text.len());
 	while boundary > 0 && !text.is_char_boundary(boundary) {
 		boundary -= 1;
 	}

@@ -478,12 +478,9 @@ fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 
 	let xs = unique_sorted_edges(rectangles.iter().flat_map(|rect| [rect.x, rect.x + rect.width]));
 	let ys = unique_sorted_edges(rectangles.iter().flat_map(|rect| [rect.y, rect.y + rect.height]));
-	if xs.len() < 2 || ys.len() < 2 {
+	let (Some(columns), Some(rows)) = (xs.len().checked_sub(1), ys.len().checked_sub(1)) else {
 		return Vec::new();
-	}
-
-	let columns = xs.len() - 1;
-	let rows = ys.len() - 1;
+	};
 	let mut occupied = vec![false; rows * columns];
 
 	for row in 0..rows {
