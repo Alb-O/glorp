@@ -83,10 +83,6 @@ impl EditorSelection {
 		&self.range
 	}
 
-	fn range_cloned(&self) -> Range<usize> {
-		self.range.clone()
-	}
-
 	fn head(&self) -> usize {
 		self.head
 	}

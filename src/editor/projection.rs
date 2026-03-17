@@ -277,7 +277,7 @@ impl EditorEngine {
 		let selection_head = selection.map(EditorSelection::head);
 		self.layout.set_view_state(EditorViewState {
 			mode: self.mode(),
-			selection: selection.map(EditorSelection::range_cloned),
+			selection: selection.map(|selection| selection.range.clone()),
 			selection_head,
 			pointer_anchor: self.pointer_anchor(),
 			overlays,

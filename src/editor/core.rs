@@ -46,15 +46,13 @@ impl EditorEngine {
 	pub(super) fn reset_normal_selection(&mut self) {
 		// Normal mode is always anchored to a visible cluster when possible so
 		// movement commands can stay purely layout-relative after resets.
-		if let Some(selection) = self
-			.document_layout()
-			.cluster(0)
-			.map(|cluster| cluster.byte_range.clone())
-		{
-			let head = selection.start;
-			self.core
-				.session
-				.set_normal_selection(EditorSelection::new(selection, head), None, Some(head));
+		if let Some(cluster) = self.document_layout().cluster(0) {
+			let head = cluster.byte_range.start;
+			self.core.session.set_normal_selection(
+				EditorSelection::new(cluster.byte_range.clone(), head),
+				None,
+				Some(head),
+			);
 		} else {
 			self.set_selection(None);
 			self.clear_pointer_anchor();
@@ -108,7 +106,7 @@ impl EditorEngine {
 	}
 
 	pub(super) fn selection_range(&self) -> Option<Range<usize>> {
-		self.selection().map(EditorSelection::range_cloned)
+		self.selection().map(|selection| selection.range.clone())
 	}
 
 	pub(super) fn set_selection(&mut self, selection: Option<EditorSelection>) {

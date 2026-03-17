@@ -110,10 +110,7 @@ impl EditorApp {
 	}
 
 	fn inspect_sidebar_body_data(&self, undo_depth: usize, redo_depth: usize) -> SidebarBodyData {
-		let scene = self
-			.session
-			.derived_scene()
-			.expect("inspect view requires a materialized derived scene");
+		let scene = self.required_derived_scene("inspect");
 		SidebarBodyData::Inspect(self.sidebar_cache.inspect_data(InspectSidebarArgs {
 			editor: self.session.editor_presentation(),
 			scene,
@@ -126,10 +123,7 @@ impl EditorApp {
 	}
 
 	fn perf_sidebar_body_data(&self) -> SidebarBodyData {
-		let scene = self
-			.session
-			.derived_scene()
-			.expect("perf view requires a materialized derived scene");
+		let scene = self.required_derived_scene("perf");
 		SidebarBodyData::Perf(
 			self.sidebar_cache
 				.perf_dashboard(self.session.editor_presentation(), scene, &self.perf),
@@ -150,6 +144,12 @@ impl EditorApp {
 			self.controls.show_hitboxes,
 		)
 	}
+
+	fn required_derived_scene(&self, tab: &str) -> &crate::presentation::DerivedScenePresentation {
+		self.session
+			.derived_scene()
+			.unwrap_or_else(|| panic!("{tab} view requires a materialized derived scene"))
+	}
 }
 
 fn render_sidebar_body(body: SidebarBodyData) -> Element<'static, Message> {
@@ -158,11 +158,10 @@ fn render_sidebar_body(body: SidebarBodyData) -> Element<'static, Message> {
 		SidebarBodyData::Inspect(data) => {
 			let key = Arc::as_ptr(&data);
 			lazy(key, move |_| {
-				let props = InspectTabProps {
+				view_inspect_tab(&InspectTabProps {
 					warnings: data.warnings.clone(),
 					interaction_details: data.interaction_details.clone(),
-				};
-				view_inspect_tab(&props)
+				})
 			})
 			.into()
 		}

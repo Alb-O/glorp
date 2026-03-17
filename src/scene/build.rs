@@ -148,7 +148,9 @@ fn build_clusters(
 		}
 	}
 
-	clusters.extend(current);
+	if let Some(cluster) = current {
+		clusters.push(cluster);
+	}
 
 	clusters
 }

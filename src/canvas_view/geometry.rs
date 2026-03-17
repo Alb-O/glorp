@@ -46,13 +46,11 @@ pub(super) fn scroll_delta(delta: mouse::ScrollDelta) -> Vector {
 }
 
 pub(super) fn vector_length(vector: Vector) -> f32 {
-	(vector.x * vector.x + vector.y * vector.y).sqrt()
+	vector.x.hypot(vector.y)
 }
 
 pub(super) fn point_distance(a: Point, b: Point) -> f32 {
-	let dx = a.x - b.x;
-	let dy = a.y - b.y;
-	(dx * dx + dy * dy).sqrt()
+	(a.x - b.x).hypot(a.y - b.y)
 }
 
 pub(super) fn to_scene_local(position: Point, scroll: Vector) -> Point {

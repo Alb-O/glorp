@@ -36,31 +36,31 @@ impl PerfMonitor {
 	}
 
 	pub(crate) fn record_editor_apply(&mut self, duration: Duration) {
-		self.store.record_editor_apply(duration);
+		self.store.record(store::MetricKind::EditorApply, duration);
 	}
 
 	pub(crate) fn record_editor_command(&mut self, duration: Duration) {
-		self.store.record_editor_command(duration);
+		self.store.record(store::MetricKind::EditorCommand, duration);
 	}
 
 	pub(crate) fn record_editor_width_sync(&mut self, duration: Duration) {
-		self.store.record_editor_width_sync(duration);
+		self.store.record(store::MetricKind::EditorWidthSync, duration);
 	}
 
 	pub(crate) fn record_scene_build(&mut self, duration: Duration) {
-		self.store.record_scene_build(duration);
+		self.store.record(store::MetricKind::SceneBuild, duration);
 	}
 
 	pub(crate) fn record_resize_reflow(&mut self, duration: Duration) {
-		self.store.record_resize_reflow(duration);
+		self.store.record(store::MetricKind::ResizeReflow, duration);
 	}
 
 	pub(crate) fn record_ui_build(&mut self, duration: Duration) {
-		self.store.record_ui_build(duration);
+		self.store.record(store::MetricKind::UiBuild, duration);
 	}
 
 	pub(crate) fn record_ui_draw(&mut self, duration: Duration) {
-		self.store.record_ui_draw(duration);
+		self.store.record(store::MetricKind::UiDraw, duration);
 	}
 
 	pub(crate) fn flush_canvas_metrics(&mut self) {

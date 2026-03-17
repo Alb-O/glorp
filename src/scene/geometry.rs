@@ -64,11 +64,7 @@ impl DocumentLayout {
 	}
 
 	pub(crate) fn nearest_cluster_in_run(&self, run_index: usize, preferred_x: f32) -> Option<usize> {
-		let run = self.runs.get(run_index)?;
-		if run.cluster_range.is_empty() {
-			return None;
-		}
-
+		let run = self.runs.get(run_index).filter(|run| !run.cluster_range.is_empty())?;
 		self.clusters[run.cluster_range.clone()]
 			.iter()
 			.enumerate()
@@ -129,29 +125,24 @@ impl DocumentLayout {
 	}
 
 	pub(crate) fn caret_metrics(&self, byte: usize) -> LayoutCaretMetrics {
-		if self.clusters.is_empty() {
-			return LayoutCaretMetrics { run_index: 0, x: 0.0 };
-		}
-
-		if let Some(index) = self.cluster_at_or_after(byte) {
-			let cluster = &self.clusters[index];
-			if byte <= cluster.byte_range.start {
-				return LayoutCaretMetrics {
+		self.cluster_at_or_after(byte)
+			.and_then(|index| {
+				let cluster = &self.clusters[index];
+				(byte <= cluster.byte_range.start).then_some(LayoutCaretMetrics {
 					run_index: cluster.run_index,
 					x: cluster.x,
-				};
-			}
-		}
-
-		if let Some(index) = self.cluster_before(byte) {
-			let cluster = &self.clusters[index];
-			return LayoutCaretMetrics {
-				run_index: cluster.run_index,
-				x: cluster.x + cluster.width,
-			};
-		}
-
-		LayoutCaretMetrics { run_index: 0, x: 0.0 }
+				})
+			})
+			.or_else(|| {
+				self.cluster_before(byte).map(|index| {
+					let cluster = &self.clusters[index];
+					LayoutCaretMetrics {
+						run_index: cluster.run_index,
+						x: cluster.x + cluster.width,
+					}
+				})
+			})
+			.unwrap_or(LayoutCaretMetrics { run_index: 0, x: 0.0 })
 	}
 
 	pub(crate) fn hit_test(&self, local: Point) -> Option<CanvasTarget> {
@@ -186,15 +177,12 @@ impl DocumentLayout {
 
 	pub(crate) fn target_rect(&self, target: CanvasTarget) -> Option<LayoutRect> {
 		match target {
-			CanvasTarget::Run(run_index) => {
-				let run = self.runs.get(run_index)?;
-				Some(LayoutRect {
-					x: 0.0,
-					y: run.line_top,
-					width: self.max_width.max(run.line_width).max(1.0),
-					height: run.line_height.max(1.0),
-				})
-			}
+			CanvasTarget::Run(run_index) => self.runs.get(run_index).map(|run| LayoutRect {
+				x: 0.0,
+				y: run.line_top,
+				width: self.max_width.max(run.line_width).max(1.0),
+				height: run.line_height.max(1.0),
+			}),
 			CanvasTarget::Cluster(index) => self.cluster(index).map(cluster_rectangle),
 		}
 	}

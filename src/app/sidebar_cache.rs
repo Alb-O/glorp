@@ -90,13 +90,9 @@ impl SidebarCache {
 				args.redo_depth,
 			),
 		});
-		self.inspect_dirty.set(false);
 		#[cfg(test)]
 		self.inspect_builds.set(self.inspect_builds.get() + 1);
-		self.inspect.replace(Some(CachedEntry {
-			key,
-			data: data.clone(),
-		}));
+		store_cached_data(&self.inspect, &self.inspect_dirty, key, data.clone());
 		data
 	}
 
@@ -116,13 +112,9 @@ impl SidebarCache {
 		}
 
 		let data = Arc::new(perf.dashboard(scene.layout.as_ref(), editor.mode(), editor.editor_bytes()));
-		self.perf_dirty.set(false);
 		#[cfg(test)]
 		self.perf_builds.set(self.perf_builds.get() + 1);
-		self.perf.replace(Some(CachedEntry {
-			key,
-			data: data.clone(),
-		}));
+		store_cached_data(&self.perf, &self.perf_dirty, key, data.clone());
 		data
 	}
 
@@ -178,6 +170,11 @@ where
 	}
 
 	None
+}
+
+fn store_cached_data<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, dirty: &Cell<bool>, key: K, data: Arc<V>) {
+	dirty.set(false);
+	cache.replace(Some(CachedEntry { key, data }));
 }
 
 fn interaction_details(

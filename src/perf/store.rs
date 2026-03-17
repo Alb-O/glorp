@@ -121,34 +121,6 @@ pub(super) struct PerfStore {
 }
 
 impl PerfStore {
-	pub(super) fn record_editor_apply(&mut self, duration: Duration) {
-		self.record(MetricKind::EditorApply, duration);
-	}
-
-	pub(super) fn record_editor_command(&mut self, duration: Duration) {
-		self.record(MetricKind::EditorCommand, duration);
-	}
-
-	pub(super) fn record_editor_width_sync(&mut self, duration: Duration) {
-		self.record(MetricKind::EditorWidthSync, duration);
-	}
-
-	pub(super) fn record_scene_build(&mut self, duration: Duration) {
-		self.record(MetricKind::SceneBuild, duration);
-	}
-
-	pub(super) fn record_resize_reflow(&mut self, duration: Duration) {
-		self.record(MetricKind::ResizeReflow, duration);
-	}
-
-	pub(super) fn record_ui_build(&mut self, duration: Duration) {
-		self.record(MetricKind::UiBuild, duration);
-	}
-
-	pub(super) fn record_ui_draw(&mut self, duration: Duration) {
-		self.record(MetricKind::UiDraw, duration);
-	}
-
 	pub(super) fn flush_canvas_metrics(&mut self, sink: &CanvasPerfSink) {
 		let pending = sink.drain();
 
@@ -171,7 +143,7 @@ impl PerfStore {
 		}
 	}
 
-	fn record(&mut self, kind: MetricKind, duration: Duration) {
+	pub(super) fn record(&mut self, kind: MetricKind, duration: Duration) {
 		self.metrics[kind.index()].record(duration);
 	}
 
