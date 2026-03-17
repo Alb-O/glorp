@@ -1,7 +1,7 @@
 use {
 	super::{
 		AppModel,
-		session::{SceneDemand, SessionCommand, SessionTransition},
+		session::{SessionCommand, SessionTransition},
 		state::{EditorDispatchSource, RESIZE_REFLOW_INTERVAL},
 	},
 	crate::{
@@ -81,6 +81,35 @@ struct ApplyPolicy {
 	scene_refresh_reason: Option<SceneRefreshReason>,
 }
 
+impl ApplyPolicy {
+	fn keep() -> Self {
+		Self::default()
+	}
+
+	fn reset_scroll(reason: SceneRefreshReason) -> Self {
+		Self {
+			scroll_behavior: ScrollBehavior::ResetScroll,
+			scene_refresh_reason: Some(reason),
+			..Self::default()
+		}
+	}
+
+	fn scene_refresh(reason: SceneRefreshReason) -> Self {
+		Self {
+			scene_refresh_reason: Some(reason),
+			..Self::default()
+		}
+	}
+
+	fn reveal(reveal_viewport: bool, scene_refresh_reason: Option<SceneRefreshReason>) -> Self {
+		Self {
+			reveal_viewport,
+			scene_refresh_reason,
+			..Self::default()
+		}
+	}
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SceneRefreshReason {
 	PresetLoaded,
@@ -121,12 +150,12 @@ impl AppModel {
 
 	pub(crate) fn update(&mut self, message: Message) -> Task<Message> {
 		let _span = trace_span!("editor_app.update", message = message_kind(&message)).entered();
-		let _ = self.perform(message.into());
+		self.perform(message.into());
 		self.perf.flush_canvas_metrics();
 		Task::none()
 	}
 
-	pub(super) fn perform(&mut self, command: AppCommand) -> Option<SessionTransition> {
+	pub(super) fn perform(&mut self, command: AppCommand) {
 		let _span = trace_span!("editor_app.command", command = command_kind(&command)).entered();
 		match command {
 			AppCommand::Control(message) => self.perform_control(message),
@@ -134,67 +163,62 @@ impl AppModel {
 			AppCommand::SelectSidebarTab(tab) => self.perform_sidebar_selection(tab),
 			AppCommand::HoverCanvas(target) => {
 				self.sidebar.set_hovered_target(target);
-				None
 			}
 			AppCommand::SetCanvasFocus(focused) => {
 				self.viewport.canvas_focused = focused;
-				None
 			}
 			AppCommand::SetCanvasScroll(scroll) => {
 				self.viewport.canvas_focused = true;
 				self.viewport.canvas_scroll = scroll;
-				None
 			}
 			AppCommand::BeginPointerSelection { target, intent } => {
 				self.viewport.canvas_focused = true;
 				self.sidebar.set_selected_target(target);
-				self.perform_editor(EditorIntent::Pointer(intent), EditorDispatchSource::PointerPress)
+				self.perform_editor(EditorIntent::Pointer(intent), EditorDispatchSource::PointerPress);
 			}
 			AppCommand::Editor { intent, source } => self.perform_editor(intent, source),
-			AppCommand::PerfTick => None,
+			AppCommand::PerfTick => {}
 			AppCommand::ObserveCanvasResize(size) => {
 				self.handle_canvas_viewport_resized(size);
-				None
 			}
 			AppCommand::FlushResizeReflow => self.perform_resize_reflow(),
 			AppCommand::ResizePane(event) => {
 				self.shell.chrome.resize(event.split, event.ratio);
-				None
 			}
 		}
 	}
 
-	pub(super) fn ensure_scene_ready(&mut self) -> Option<SessionTransition> {
+	pub(super) fn ensure_scene_ready(&mut self) {
 		self.perform_scene_refresh()
 	}
 
-	fn perform_control(&mut self, message: ControlsMessage) -> Option<SessionTransition> {
+	fn perform_control(&mut self, message: ControlsMessage) {
 		match message {
 			ControlsMessage::LoadPreset(preset) => self.perform_preset_load(preset),
 			ControlsMessage::FontSelected(font) => {
 				if self.controls.font == font {
-					return None;
+					return;
 				}
 				self.controls.font = font;
 				self.perform_scene_config_sync()
 			}
 			ControlsMessage::ShapingSelected(shaping) => {
 				if self.controls.shaping == shaping {
-					return None;
+					return;
 				}
 				self.controls.shaping = shaping;
 				self.perform_scene_config_sync()
 			}
 			ControlsMessage::WrappingSelected(wrapping) => {
 				if self.controls.wrapping == wrapping {
-					return None;
+					return;
 				}
 				self.controls.wrapping = wrapping;
 				self.perform_scene_config_sync()
 			}
 			ControlsMessage::FontSizeChanged(font_size) => {
 				if (self.controls.font_size - font_size).abs() < f32::EPSILON {
-					return None;
+					return;
 				}
 				self.controls.font_size = font_size;
 				self.controls.line_height = self.controls.line_height.max(self.controls.font_size);
@@ -202,21 +226,21 @@ impl AppModel {
 			}
 			ControlsMessage::LineHeightChanged(line_height) => {
 				if (self.controls.line_height - line_height).abs() < f32::EPSILON {
-					return None;
+					return;
 				}
 				self.controls.line_height = line_height;
 				self.perform_scene_config_sync()
 			}
 			ControlsMessage::ShowBaselinesChanged(show_baselines) => {
 				if self.controls.show_baselines == show_baselines {
-					return None;
+					return;
 				}
 				self.controls.show_baselines = show_baselines;
 				self.perform_scene_refresh()
 			}
 			ControlsMessage::ShowHitboxesChanged(show_hitboxes) => {
 				if self.controls.show_hitboxes == show_hitboxes {
-					return None;
+					return;
 				}
 				self.controls.show_hitboxes = show_hitboxes;
 				self.perform_scene_refresh()
@@ -224,10 +248,10 @@ impl AppModel {
 		}
 	}
 
-	fn perform_preset_load(&mut self, preset: SamplePreset) -> Option<SessionTransition> {
+	fn perform_preset_load(&mut self, preset: SamplePreset) {
 		self.controls.preset = preset;
 		if matches!(preset, SamplePreset::Custom) {
-			return None;
+			return;
 		}
 
 		let started = Instant::now();
@@ -236,78 +260,59 @@ impl AppModel {
 				text: preset.text().to_string(),
 				config: self.scene_config(),
 			},
-			self.scene_demand(),
+			self.derived_scene_consumer_active(),
 		);
-		self.apply_session_transition(
-			&transition,
-			ApplyPolicy {
-				scroll_behavior: ScrollBehavior::ResetScroll,
-				scene_refresh_reason: Some(SceneRefreshReason::PresetLoaded),
-				..ApplyPolicy::default()
-			},
-		);
+		self.apply_session_transition(&transition, ApplyPolicy::reset_scroll(SceneRefreshReason::PresetLoaded));
 		trace!(
 			preset = %preset,
 			duration_ms = duration_ms(started.elapsed()),
 			text_bytes = self.session.text().len(),
 			"preset loaded"
 		);
-		Some(transition)
 	}
 
-	fn perform_document_replacement(&mut self, text: String) -> Option<SessionTransition> {
+	fn perform_document_replacement(&mut self, text: String) {
 		self.controls.preset = SamplePreset::Custom;
 		let transition = self.session.execute(
 			SessionCommand::ReplaceDocument {
 				text,
 				config: self.scene_config(),
 			},
-			self.scene_demand(),
+			self.derived_scene_consumer_active(),
+		);
+		self.apply_session_transition(&transition, ApplyPolicy::reset_scroll(SceneRefreshReason::TextEdited));
+	}
+
+	fn perform_scene_config_sync(&mut self) {
+		let transition = self.session.execute(
+			SessionCommand::SyncConfig(self.scene_config()),
+			self.derived_scene_consumer_active(),
 		);
 		self.apply_session_transition(
 			&transition,
-			ApplyPolicy {
-				scroll_behavior: ScrollBehavior::ResetScroll,
-				scene_refresh_reason: Some(SceneRefreshReason::TextEdited),
-				..ApplyPolicy::default()
-			},
+			ApplyPolicy::reset_scroll(SceneRefreshReason::ControlsChanged),
 		);
-		Some(transition)
 	}
 
-	fn perform_scene_config_sync(&mut self) -> Option<SessionTransition> {
-		let transition = self
-			.session
-			.execute(SessionCommand::SyncConfig(self.scene_config()), self.scene_demand());
-		self.apply_session_transition(
-			&transition,
-			ApplyPolicy {
-				scroll_behavior: ScrollBehavior::ResetScroll,
-				scene_refresh_reason: Some(SceneRefreshReason::ControlsChanged),
-				..ApplyPolicy::default()
-			},
-		);
-		Some(transition)
-	}
-
-	fn perform_sidebar_selection(&mut self, tab: SidebarTab) -> Option<SessionTransition> {
+	fn perform_sidebar_selection(&mut self, tab: SidebarTab) {
 		if self.sidebar.active_tab == tab {
-			return None;
+			return;
 		}
 
 		self.sidebar.set_active_tab(tab);
-		matches!(tab, SidebarTab::Inspect | SidebarTab::Perf)
-			.then(|| self.perform_scene_refresh())
-			.flatten()
+		if matches!(tab, SidebarTab::Inspect | SidebarTab::Perf) {
+			self.perform_scene_refresh();
+		}
 	}
 
-	fn perform_editor(&mut self, intent: EditorIntent, source: EditorDispatchSource) -> Option<SessionTransition> {
+	fn perform_editor(&mut self, intent: EditorIntent, source: EditorDispatchSource) {
 		let _span = trace_span!("editor.intent", intent = ?intent, source = ?source).entered();
 		let command_started = Instant::now();
 		let apply_started = Instant::now();
-		let transition = self
-			.session
-			.execute(SessionCommand::ApplyEditorIntent(intent), self.scene_demand());
+		let transition = self.session.execute(
+			SessionCommand::ApplyEditorIntent(intent),
+			self.derived_scene_consumer_active(),
+		);
 		let apply_elapsed = apply_started.elapsed();
 		self.perf.record_editor_apply(apply_elapsed);
 
@@ -316,11 +321,10 @@ impl AppModel {
 		}
 		self.apply_session_transition(
 			&transition,
-			ApplyPolicy {
-				reveal_viewport: source.reveals_viewport() && transition.view_changed,
-				scene_refresh_reason: transition.document_changed().then_some(SceneRefreshReason::TextEdited),
-				..ApplyPolicy::default()
-			},
+			ApplyPolicy::reveal(
+				source.reveals_viewport() && transition.view_changed,
+				transition.document_changed().then_some(SceneRefreshReason::TextEdited),
+			),
 		);
 
 		let command_elapsed = command_started.elapsed();
@@ -363,32 +367,29 @@ impl AppModel {
 				"editor command applied"
 			);
 		}
-
-		Some(transition)
 	}
 
-	fn perform_resize_reflow(&mut self) -> Option<SessionTransition> {
+	fn perform_resize_reflow(&mut self) {
 		let Some(width) = self.viewport.flush_resize() else {
-			return None;
+			return;
 		};
 
 		let transition = self
 			.session
-			.execute(SessionCommand::SyncWidth(width), self.scene_demand());
+			.execute(SessionCommand::SyncWidth(width), self.derived_scene_consumer_active());
 		self.apply_session_transition(
 			&transition,
-			ApplyPolicy {
-				scene_refresh_reason: Some(SceneRefreshReason::ResizeReflow),
-				..ApplyPolicy::default()
-			},
+			ApplyPolicy::scene_refresh(SceneRefreshReason::ResizeReflow),
 		);
-		Some(transition)
 	}
 
-	fn perform_scene_refresh(&mut self) -> Option<SessionTransition> {
-		let transition = self.session.execute(SessionCommand::EnsureScene, self.scene_demand());
-		self.apply_session_transition(&transition, ApplyPolicy::default());
-		Some(transition)
+	fn perform_scene_refresh(&mut self) {
+		if !self.derived_scene_consumer_active() {
+			return;
+		}
+
+		let transition = self.session.ensure_scene_materialized();
+		self.apply_session_transition(&transition, ApplyPolicy::keep());
 	}
 
 	fn handle_canvas_viewport_resized(&mut self, size: Size) {
@@ -417,9 +418,11 @@ impl AppModel {
 		}
 
 		let reset_scroll = matches!(policy.scroll_behavior, ScrollBehavior::ResetScroll);
+		let viewport_metrics = self.session.snapshot().editor.viewport_metrics;
+		let viewport_target = self.session.snapshot().editor.editor.viewport_target;
 		if let Some(duration) = transition.scene_materialized {
 			self.sidebar.sync_after_scene_refresh();
-			self.viewport.finish_refresh(transition.viewport_metrics, reset_scroll);
+			self.viewport.finish_refresh(viewport_metrics, reset_scroll);
 
 			if let Some(reason) = policy.scene_refresh_reason {
 				self.perf.record_scene_build(duration);
@@ -431,19 +434,13 @@ impl AppModel {
 				}
 			}
 		} else if transition.changed() || reset_scroll {
-			self.viewport.finish_refresh(transition.viewport_metrics, reset_scroll);
+			self.viewport.finish_refresh(viewport_metrics, reset_scroll);
 		}
 
 		if policy.reveal_viewport && matches!(policy.scroll_behavior, ScrollBehavior::KeepClamped) {
 			self.viewport
-				.reveal_target_with_metrics(transition.viewport_target, transition.viewport_metrics);
+				.reveal_target_with_metrics(viewport_target, viewport_metrics);
 		}
-	}
-
-	fn scene_demand(&self) -> SceneDemand {
-		self.derived_scene_consumer_active()
-			.then_some(SceneDemand::Materialize)
-			.unwrap_or(SceneDemand::Skip)
 	}
 
 	fn derived_scene_consumer_active(&self) -> bool {

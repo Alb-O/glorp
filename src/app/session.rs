@@ -1,7 +1,6 @@
 use {
 	crate::{
-		editor::{EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorViewportMetrics},
-		overlay::LayoutRect,
+		editor::{EditorEngine, EditorIntent, EditorMode, EditorOutcome},
 		presentation::{EditorPresentation, ScenePresentation, SessionSnapshot},
 		scene::{SceneConfig, make_font_system},
 	},
@@ -16,36 +15,20 @@ use crate::{
 	types::{FontChoice, ShapingChoice, WrapChoice},
 };
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(super) enum SceneDemand {
-	#[default]
-	Skip,
-	Materialize,
-}
-
-impl SceneDemand {
-	fn materializes_scene(self) -> bool {
-		matches!(self, Self::Materialize)
-	}
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum SessionCommand {
 	ReplaceDocument { text: String, config: SceneConfig },
 	SyncConfig(SceneConfig),
 	SyncWidth(f32),
 	ApplyEditorIntent(EditorIntent),
-	EnsureScene,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub(super) struct SessionTransition {
 	pub(super) text_changed: bool,
 	pub(super) view_changed: bool,
 	pub(super) selection_changed: bool,
 	pub(super) mode_changed: bool,
-	pub(super) viewport_target: Option<LayoutRect>,
-	pub(super) viewport_metrics: EditorViewportMetrics,
 	pub(super) width_sync: Option<Duration>,
 	pub(super) scene_materialized: Option<Duration>,
 }
@@ -114,16 +97,26 @@ impl DocumentSession {
 		(self.snapshot.editor.undo_depth, self.snapshot.editor.redo_depth)
 	}
 
-	pub(super) fn execute(&mut self, command: SessionCommand, demand: SceneDemand) -> SessionTransition {
-		let transition = match command {
+	pub(super) fn execute(&mut self, command: SessionCommand, materialize_scene: bool) -> SessionTransition {
+		let mut transition = match command {
 			SessionCommand::ReplaceDocument { text, config } => self.execute_replace_document(&text, config),
 			SessionCommand::SyncConfig(config) => self.execute_sync_config(config),
 			SessionCommand::SyncWidth(width) => self.execute_sync_width(width),
 			SessionCommand::ApplyEditorIntent(intent) => self.execute_editor_intent(intent),
-			SessionCommand::EnsureScene => self.idle_transition(),
 		};
 
-		self.finalize_transition(transition, demand)
+		if materialize_scene {
+			transition.scene_materialized = self.materialize_scene_if_needed();
+		}
+
+		transition
+	}
+
+	pub(super) fn ensure_scene_materialized(&mut self) -> SessionTransition {
+		SessionTransition {
+			scene_materialized: self.materialize_scene_if_needed(),
+			..SessionTransition::default()
+		}
 	}
 
 	#[cfg(test)]
@@ -135,28 +128,28 @@ impl DocumentSession {
 		self.editor.reset(&mut self.font_system, text, config);
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		self.idle_transition_with_flags(true, true, true, true)
+		self.transition(true, true, true, true)
 	}
 
 	fn execute_sync_config(&mut self, config: SceneConfig) -> SessionTransition {
 		if !self.editor.sync_buffer_config(&mut self.font_system, config) {
-			return self.idle_transition();
+			return SessionTransition::default();
 		}
 
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		self.idle_transition_with_flags(false, true, false, false)
+		self.transition(false, true, false, false)
 	}
 
 	fn execute_sync_width(&mut self, width: f32) -> SessionTransition {
 		let started = Instant::now();
 		if !self.editor.sync_buffer_width(&mut self.font_system, width) {
-			return self.idle_transition();
+			return SessionTransition::default();
 		}
 
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		let mut transition = self.idle_transition_with_flags(false, true, false, false);
+		let mut transition = self.transition(false, true, false, false);
 		transition.width_sync = Some(started.elapsed());
 		transition
 	}
@@ -179,24 +172,10 @@ impl DocumentSession {
 			self.invalidate_scene();
 		}
 
-		self.idle_transition_with_flags(text_changed, view_changed, selection_changed, mode_changed)
+		self.transition(text_changed, view_changed, selection_changed, mode_changed)
 	}
 
-	fn finalize_transition(&mut self, mut transition: SessionTransition, demand: SceneDemand) -> SessionTransition {
-		if demand.materializes_scene() {
-			transition.scene_materialized = self.materialize_scene_if_needed();
-		}
-
-		transition.viewport_target = self.snapshot.editor.editor.viewport_target;
-		transition.viewport_metrics = self.snapshot.editor.viewport_metrics;
-		transition
-	}
-
-	fn idle_transition(&self) -> SessionTransition {
-		self.idle_transition_with_flags(false, false, false, false)
-	}
-
-	fn idle_transition_with_flags(
+	fn transition(
 		&self, text_changed: bool, view_changed: bool, selection_changed: bool, mode_changed: bool,
 	) -> SessionTransition {
 		SessionTransition {
@@ -204,10 +183,7 @@ impl DocumentSession {
 			view_changed,
 			selection_changed,
 			mode_changed,
-			viewport_target: self.snapshot.editor.editor.viewport_target,
-			viewport_metrics: self.snapshot.editor.viewport_metrics,
-			width_sync: None,
-			scene_materialized: None,
+			..SessionTransition::default()
 		}
 	}
 
@@ -278,17 +254,17 @@ mod tests {
 	#[test]
 	fn text_edit_without_scene_demand_invalidates_scene_without_rebuilding() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
-		let initial = session.execute(SessionCommand::EnsureScene, SceneDemand::Materialize);
+		let initial = session.ensure_scene_materialized();
 		assert!(initial.scene_materialized.is_some());
 		assert_eq!(session.derived_scene_build_count(), 1);
 
 		let _ = session.execute(
 			SessionCommand::ApplyEditorIntent(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
-			SceneDemand::Skip,
+			false,
 		);
 		let transition = session.execute(
 			SessionCommand::ApplyEditorIntent(EditorIntent::Edit(EditorEditIntent::InsertText("!".to_string()))),
-			SceneDemand::Skip,
+			false,
 		);
 
 		assert!(transition.document_changed());
@@ -300,18 +276,18 @@ mod tests {
 	#[test]
 	fn text_edit_with_scene_demand_rebuilds_scene_once() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
-		let _ = session.execute(SessionCommand::EnsureScene, SceneDemand::Materialize);
+		let _ = session.ensure_scene_materialized();
 		assert_eq!(session.derived_scene_build_count(), 1);
 
 		let _ = session.execute(
 			SessionCommand::ApplyEditorIntent(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
-			SceneDemand::Materialize,
+			true,
 		);
 		assert_eq!(session.derived_scene_build_count(), 1);
 
 		let transition = session.execute(
 			SessionCommand::ApplyEditorIntent(EditorIntent::Edit(EditorEditIntent::InsertText("!".to_string()))),
-			SceneDemand::Materialize,
+			true,
 		);
 
 		assert!(transition.document_changed());
@@ -324,7 +300,7 @@ mod tests {
 	fn sync_config_no_op_returns_empty_transition() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
 
-		let transition = session.execute(SessionCommand::SyncConfig(test_config(540.0)), SceneDemand::Skip);
+		let transition = session.execute(SessionCommand::SyncConfig(test_config(540.0)), false);
 
 		assert!(!transition.changed());
 		assert!(transition.scene_materialized.is_none());
@@ -334,11 +310,11 @@ mod tests {
 	fn width_sync_reports_duration_only_for_real_width_changes() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
 
-		let noop = session.execute(SessionCommand::SyncWidth(540.0), SceneDemand::Skip);
+		let noop = session.execute(SessionCommand::SyncWidth(540.0), false);
 		assert!(noop.width_sync.is_none());
 		assert!(!noop.changed());
 
-		let changed = session.execute(SessionCommand::SyncWidth(640.0), SceneDemand::Skip);
+		let changed = session.execute(SessionCommand::SyncWidth(640.0), false);
 		assert!(changed.width_sync.is_some());
 		assert!(changed.view_changed);
 	}
@@ -347,8 +323,8 @@ mod tests {
 	fn ensure_scene_is_a_no_op_when_already_materialized() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
 
-		let initial = session.execute(SessionCommand::EnsureScene, SceneDemand::Materialize);
-		let repeated = session.execute(SessionCommand::EnsureScene, SceneDemand::Materialize);
+		let initial = session.ensure_scene_materialized();
+		let repeated = session.ensure_scene_materialized();
 
 		assert!(initial.scene_materialized.is_some());
 		assert!(repeated.scene_materialized.is_none());

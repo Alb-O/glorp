@@ -389,7 +389,7 @@ impl HeadlessDriver<'_> {
 	}
 
 	fn dispatch_command(&mut self, command: AppCommand) {
-		let _ = self.app.perform(command);
+		self.app.perform(command);
 	}
 
 	fn begin_pointer_selection(&mut self, target: CanvasTarget, position: (f32, f32)) {
