@@ -44,7 +44,7 @@ impl EditorEngine {
 			EditorMode::Insert => {
 				self.set_insert_head(
 					layout,
-					next_char_boundary(self.text(), self.caret()).unwrap_or_else(|| self.text().len()),
+					next_char_boundary(self.text(), self.caret()).unwrap_or(self.text().len()),
 				);
 				self.set_preferred_x(None);
 			}
@@ -58,7 +58,7 @@ impl EditorEngine {
 				let Some(current) = self.active_selection(layout) else {
 					return;
 				};
-				let preferred_x = self.preferred_x().unwrap_or_else(|| current.center_x());
+				let preferred_x = self.preferred_x().unwrap_or(current.center_x());
 				let Some(target) = layout.nearest_cluster_on_adjacent_run(current.run_index, preferred_x, direction)
 				else {
 					return;
@@ -109,11 +109,11 @@ impl EditorEngine {
 				let target = if to_start {
 					layout
 						.first_cluster_in_run(caret.run_index)
-						.map_or_else(|| self.caret(), |index| layout.clusters()[index].byte_range.start)
+						.map_or(self.caret(), |index| layout.clusters()[index].byte_range.start)
 				} else {
 					layout
 						.last_cluster_in_run(caret.run_index)
-						.map_or_else(|| self.caret(), |index| layout.clusters()[index].byte_range.end)
+						.map_or(self.caret(), |index| layout.clusters()[index].byte_range.end)
 				};
 
 				self.set_insert_head(layout, target);

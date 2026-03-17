@@ -267,19 +267,11 @@ impl SidebarState {
 	}
 
 	pub(super) fn set_hovered_target(&mut self, target: Option<CanvasTarget>) {
-		self.hovered_target = if self.active_tab == SidebarTab::Inspect {
-			target
-		} else {
-			None
-		};
+		self.hovered_target = self.inspect_target(target);
 	}
 
 	pub(super) fn set_selected_target(&mut self, target: Option<CanvasTarget>) {
-		self.selected_target = if self.active_tab == SidebarTab::Inspect {
-			target
-		} else {
-			None
-		};
+		self.selected_target = self.inspect_target(target);
 	}
 
 	pub(super) fn sync_after_scene_refresh(&mut self) {
@@ -293,6 +285,10 @@ impl SidebarState {
 	fn clear_inspect_targets(&mut self) {
 		self.hovered_target = None;
 		self.selected_target = None;
+	}
+
+	fn inspect_target(&self, target: Option<CanvasTarget>) -> Option<CanvasTarget> {
+		(self.active_tab == SidebarTab::Inspect).then_some(target).flatten()
 	}
 }
 

@@ -176,22 +176,14 @@ impl PerfStore {
 	}
 
 	fn record_pending_durations(&mut self, kind: MetricKind, durations: VecDeque<Duration>) {
-		for duration in durations {
-			self.record(kind, duration);
-		}
+		durations.into_iter().for_each(|duration| self.record(kind, duration));
 	}
 }
 
 pub(super) fn average_ms(values: impl Iterator<Item = f32>) -> f32 {
-	let mut total = 0.0;
 	// The series already stores `f32`, so keep the accumulator in the same
 	// domain instead of counting as `usize` and casting back at the end.
-	let mut count = 0.0;
-
-	for value in values {
-		total += value;
-		count += 1.0;
-	}
+	let (total, count) = values.fold((0.0, 0.0), |(total, count), value| (total + value, count + 1.0));
 
 	if count == 0.0 { 0.0 } else { total / count }
 }

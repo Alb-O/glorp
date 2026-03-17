@@ -184,20 +184,29 @@ fn interaction_details(
 	editor: &EditorPresentation, scene: &DerivedScenePresentation, text: &str, hovered_target: Option<CanvasTarget>,
 	selected_target: Option<CanvasTarget>, undo_depth: usize, redo_depth: usize,
 ) -> Arc<str> {
+	let layout = scene.layout.as_ref();
 	Arc::<str>::from(format!(
 		"editor\n{}\n\nhover\n{}\n\nselection\n{}",
 		editor_selection_details(text, &editor.editor, undo_depth, redo_depth),
-		target_details_or_none(scene.layout.as_ref(), hovered_target),
-		target_details_or_none(scene.layout.as_ref(), selected_target),
+		target_details_or_none(layout, hovered_target),
+		target_details_or_none(layout, selected_target),
 	))
 }
 
 fn editor_selection_details(text: &str, editor: &EditorViewState, undo_depth: usize, redo_depth: usize) -> String {
 	let selection_rects = editor.overlay_count(OverlayRectKind::EditorSelection);
+	let Some(selection) = editor.selection.as_ref() else {
+		return match editor.mode {
+			EditorMode::Normal => format!("  mode: {}\n  selection: none", editor.mode),
+			EditorMode::Insert => format!(
+				"  mode: {}\n  selection: none\n  undo/redo: {undo_depth}/{redo_depth}",
+				editor.mode
+			),
+		};
+	};
 
-	match (editor.mode, editor.selection.as_ref()) {
-		(EditorMode::Normal, None) => format!("  mode: {}\n  selection: none", editor.mode),
-		(EditorMode::Normal, Some(selection)) => format!(
+	match editor.mode {
+		EditorMode::Normal => format!(
 			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}/{}",
 			editor.mode,
 			selection,
@@ -208,11 +217,7 @@ fn editor_selection_details(text: &str, editor: &EditorViewState, undo_depth: us
 			undo_depth,
 			redo_depth,
 		),
-		(EditorMode::Insert, None) => format!(
-			"  mode: {}\n  selection: none\n  undo/redo: {undo_depth}/{redo_depth}",
-			editor.mode
-		),
-		(EditorMode::Insert, Some(selection)) => format!(
+		EditorMode::Insert => format!(
 			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  head byte: {}\n  undo/redo: {}/{}",
 			editor.mode,
 			selection,

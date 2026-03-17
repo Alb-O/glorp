@@ -257,11 +257,7 @@ fn for_each_cluster_rect(buffer: &Buffer, text: &str, mut f: impl FnMut(usize, R
 					current_rect.y = current_rect.y.min(glyph_y);
 				}
 				_ => {
-					if let Some((byte_range, rect)) = current.take() {
-						f(run_index, byte_range, rect);
-					}
-
-					current = Some((
+					if let Some((byte_range, rect)) = current.replace((
 						byte_range,
 						LayoutRect {
 							x: glyph.x,
@@ -269,14 +265,16 @@ fn for_each_cluster_rect(buffer: &Buffer, text: &str, mut f: impl FnMut(usize, R
 							width: glyph.w.max(1.0),
 							height: glyph_height,
 						},
-					));
+					)) {
+						f(run_index, byte_range, rect);
+					}
 				}
 			}
 		}
 
-		if let Some((byte_range, rect)) = current.take() {
-			f(run_index, byte_range, rect);
-		}
+		current
+			.into_iter()
+			.for_each(|(byte_range, rect)| f(run_index, byte_range, rect));
 	}
 }
 

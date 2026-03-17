@@ -32,9 +32,8 @@ impl GlyphCanvas {
 		// Scene data may already be materialized for debug/perf consumers, but
 		// inspect hit testing should still stay off unless the Inspect path is
 		// explicitly active.
-		self.inspect_targets_active
-			.then(|| self.derived_scene.as_ref().map(|scene| scene.layout.as_ref()))
-			.flatten()
+		self.inspect_targets_active.then_some(())?;
+		self.derived_scene.as_ref().map(|scene| scene.layout.as_ref())
 	}
 }
 

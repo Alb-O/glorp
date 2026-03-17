@@ -77,17 +77,12 @@ impl CanvasAction {
 	}
 
 	pub(super) fn into_iced(self) -> Option<canvas::Action<Message>> {
-		match self {
-			Self::None => None,
-			Self::RequestRedraw(capture) => {
-				let action = canvas::Action::request_redraw();
-				Some(if capture { action.and_capture() } else { action })
-			}
-			Self::Publish(message, capture) => {
-				let action = canvas::Action::publish(message);
-				Some(if capture { action.and_capture() } else { action })
-			}
-		}
+		let (action, capture) = match self {
+			Self::None => return None,
+			Self::RequestRedraw(capture) => (canvas::Action::request_redraw(), capture),
+			Self::Publish(message, capture) => (canvas::Action::publish(message), capture),
+		};
+		Some(if capture { action.and_capture() } else { action })
 	}
 }
 

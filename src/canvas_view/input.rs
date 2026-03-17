@@ -85,19 +85,9 @@ fn key_intent(
 				return None;
 			}
 
-			match key.as_ref() {
-				key::Key::Named(key::Named::ArrowLeft) => Some(EditorIntent::Motion(EditorMotion::Left)),
-				key::Key::Named(key::Named::ArrowRight) => Some(EditorIntent::Motion(EditorMotion::Right)),
-				key::Key::Named(key::Named::ArrowUp) => Some(EditorIntent::Motion(EditorMotion::Up)),
-				key::Key::Named(key::Named::ArrowDown) => Some(EditorIntent::Motion(EditorMotion::Down)),
-				key::Key::Named(key::Named::Home) => Some(EditorIntent::Motion(EditorMotion::LineStart)),
-				key::Key::Named(key::Named::End) => Some(EditorIntent::Motion(EditorMotion::LineEnd)),
-				key::Key::Named(key::Named::Backspace | key::Named::Delete) => {
-					Some(EditorIntent::Edit(EditorEditIntent::DeleteSelection))
-				}
-				key::Key::Named(key::Named::Enter) => Some(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
-				key::Key::Named(key::Named::Escape) => Some(EditorIntent::Mode(EditorModeIntent::ExitInsert)),
-				_ => match latin {
+			match navigation_key_intent(key).or_else(|| normal_named_key_intent(key)) {
+				Some(intent) => Some(intent),
+				None => match latin {
 					Some('h') => Some(EditorIntent::Motion(EditorMotion::Left)),
 					Some('l') => Some(EditorIntent::Motion(EditorMotion::Right)),
 					Some('k') => Some(EditorIntent::Motion(EditorMotion::Up)),
@@ -109,23 +99,9 @@ fn key_intent(
 				},
 			}
 		}
-		EditorMode::Insert => match key.as_ref() {
-			key::Key::Named(key::Named::ArrowLeft) => Some(EditorIntent::Motion(EditorMotion::Left)),
-			key::Key::Named(key::Named::ArrowRight) => Some(EditorIntent::Motion(EditorMotion::Right)),
-			key::Key::Named(key::Named::ArrowUp) => Some(EditorIntent::Motion(EditorMotion::Up)),
-			key::Key::Named(key::Named::ArrowDown) => Some(EditorIntent::Motion(EditorMotion::Down)),
-			key::Key::Named(key::Named::Home) => Some(EditorIntent::Motion(EditorMotion::LineStart)),
-			key::Key::Named(key::Named::End) => Some(EditorIntent::Motion(EditorMotion::LineEnd)),
-			key::Key::Named(key::Named::Backspace) => Some(EditorIntent::Edit(EditorEditIntent::Backspace)),
-			key::Key::Named(key::Named::Delete) => Some(EditorIntent::Edit(EditorEditIntent::DeleteForward)),
-			key::Key::Named(key::Named::Enter) => {
-				Some(EditorIntent::Edit(EditorEditIntent::InsertText("\n".to_string())))
-			}
-			key::Key::Named(key::Named::Tab) => {
-				Some(EditorIntent::Edit(EditorEditIntent::InsertText("\t".to_string())))
-			}
-			key::Key::Named(key::Named::Escape) => Some(EditorIntent::Mode(EditorModeIntent::ExitInsert)),
-			_ => {
+		EditorMode::Insert => match navigation_key_intent(key).or_else(|| insert_named_key_intent(key)) {
+			Some(intent) => Some(intent),
+			None => {
 				if modifiers.alt() {
 					return None;
 				}
@@ -134,5 +110,39 @@ fn key_intent(
 					.map(|text| EditorIntent::Edit(EditorEditIntent::InsertText(text.to_string())))
 			}
 		},
+	}
+}
+
+fn navigation_key_intent(key: &keyboard::Key) -> Option<EditorIntent> {
+	match key.as_ref() {
+		key::Key::Named(key::Named::ArrowLeft) => Some(EditorIntent::Motion(EditorMotion::Left)),
+		key::Key::Named(key::Named::ArrowRight) => Some(EditorIntent::Motion(EditorMotion::Right)),
+		key::Key::Named(key::Named::ArrowUp) => Some(EditorIntent::Motion(EditorMotion::Up)),
+		key::Key::Named(key::Named::ArrowDown) => Some(EditorIntent::Motion(EditorMotion::Down)),
+		key::Key::Named(key::Named::Home) => Some(EditorIntent::Motion(EditorMotion::LineStart)),
+		key::Key::Named(key::Named::End) => Some(EditorIntent::Motion(EditorMotion::LineEnd)),
+		_ => None,
+	}
+}
+
+fn normal_named_key_intent(key: &keyboard::Key) -> Option<EditorIntent> {
+	match key.as_ref() {
+		key::Key::Named(key::Named::Backspace | key::Named::Delete) => {
+			Some(EditorIntent::Edit(EditorEditIntent::DeleteSelection))
+		}
+		key::Key::Named(key::Named::Enter) => Some(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
+		key::Key::Named(key::Named::Escape) => Some(EditorIntent::Mode(EditorModeIntent::ExitInsert)),
+		_ => None,
+	}
+}
+
+fn insert_named_key_intent(key: &keyboard::Key) -> Option<EditorIntent> {
+	match key.as_ref() {
+		key::Key::Named(key::Named::Backspace) => Some(EditorIntent::Edit(EditorEditIntent::Backspace)),
+		key::Key::Named(key::Named::Delete) => Some(EditorIntent::Edit(EditorEditIntent::DeleteForward)),
+		key::Key::Named(key::Named::Enter) => Some(EditorIntent::Edit(EditorEditIntent::InsertText("\n".into()))),
+		key::Key::Named(key::Named::Tab) => Some(EditorIntent::Edit(EditorEditIntent::InsertText("\t".into()))),
+		key::Key::Named(key::Named::Escape) => Some(EditorIntent::Mode(EditorModeIntent::ExitInsert)),
+		_ => None,
 	}
 }

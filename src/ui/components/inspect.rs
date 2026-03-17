@@ -30,32 +30,26 @@ pub(crate) fn view_inspect_tab(props: &InspectTabProps) -> Element<'static, Mess
 }
 
 fn view_warnings_panel(warnings: &[String]) -> Element<'static, Message> {
-	let warnings_text = if warnings.is_empty() {
-		"No warnings".to_string()
-	} else {
-		warnings.join("\n")
-	};
 	let has_warnings = !warnings.is_empty();
+	let warnings_text = if has_warnings {
+		warnings.join("\n")
+	} else {
+		"No warnings".into()
+	};
 
 	container(text(warnings_text).size(14).width(Length::Fill))
 		.padding(12)
 		.style(move |theme: &Theme| {
 			let palette = theme.palette();
+			let (background, border) = if has_warnings {
+				(palette.warning.weak.color, palette.warning.strong.color)
+			} else {
+				(palette.background.weak.color, palette.background.strong.color)
+			};
 			container::Style {
-				background: Some(
-					if has_warnings {
-						palette.warning.weak.color
-					} else {
-						palette.background.weak.color
-					}
-					.into(),
-				),
+				background: Some(background.into()),
 				border: iced::Border {
-					color: if has_warnings {
-						palette.warning.strong.color
-					} else {
-						palette.background.strong.color
-					},
+					color: border,
 					width: 1.0,
 					radius: CONTROL_RADIUS.into(),
 				},

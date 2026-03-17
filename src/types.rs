@@ -154,16 +154,16 @@ impl SamplePreset {
 
 impl Display for SamplePreset {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			SamplePreset::Tall => write!(f, "Tall"),
-			SamplePreset::Mixed => write!(f, "Mixed"),
-			SamplePreset::Rust => write!(f, "Rust"),
-			SamplePreset::Ligatures => write!(f, "Ligatures"),
-			SamplePreset::Arabic => write!(f, "Arabic"),
-			SamplePreset::Cjk => write!(f, "CJK"),
-			SamplePreset::Emoji => write!(f, "Emoji"),
-			SamplePreset::Custom => write!(f, "Custom"),
-		}
+		f.write_str(match self {
+			SamplePreset::Tall => "Tall",
+			SamplePreset::Mixed => "Mixed",
+			SamplePreset::Rust => "Rust",
+			SamplePreset::Ligatures => "Ligatures",
+			SamplePreset::Arabic => "Arabic",
+			SamplePreset::Cjk => "CJK",
+			SamplePreset::Emoji => "Emoji",
+			SamplePreset::Custom => "Custom",
+		})
 	}
 }
 
@@ -195,12 +195,12 @@ impl FontChoice {
 
 impl Display for FontChoice {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			FontChoice::JetBrainsMono => write!(f, "JetBrains Mono"),
-			FontChoice::Monospace => write!(f, "Monospace family"),
-			FontChoice::NotoSansCjk => write!(f, "Noto Sans CJK SC"),
-			FontChoice::SansSerif => write!(f, "Sans Serif family"),
-		}
+		f.write_str(match self {
+			FontChoice::JetBrainsMono => "JetBrains Mono",
+			FontChoice::Monospace => "Monospace family",
+			FontChoice::NotoSansCjk => "Noto Sans CJK SC",
+			FontChoice::SansSerif => "Sans Serif family",
+		})
 	}
 }
 
@@ -216,13 +216,8 @@ impl ShapingChoice {
 
 	pub(crate) fn to_cosmic(self, text: &str) -> cosmic_text::Shaping {
 		match self {
-			ShapingChoice::Auto => {
-				if text.is_ascii() {
-					cosmic_text::Shaping::Basic
-				} else {
-					cosmic_text::Shaping::Advanced
-				}
-			}
+			ShapingChoice::Auto if text.is_ascii() => cosmic_text::Shaping::Basic,
+			ShapingChoice::Auto => cosmic_text::Shaping::Advanced,
 			ShapingChoice::Basic => cosmic_text::Shaping::Basic,
 			ShapingChoice::Advanced => cosmic_text::Shaping::Advanced,
 		}
@@ -231,11 +226,11 @@ impl ShapingChoice {
 
 impl Display for ShapingChoice {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			ShapingChoice::Auto => write!(f, "Auto"),
-			ShapingChoice::Basic => write!(f, "Basic"),
-			ShapingChoice::Advanced => write!(f, "Advanced"),
-		}
+		f.write_str(match self {
+			ShapingChoice::Auto => "Auto",
+			ShapingChoice::Basic => "Basic",
+			ShapingChoice::Advanced => "Advanced",
+		})
 	}
 }
 
@@ -262,11 +257,11 @@ impl WrapChoice {
 
 impl Display for WrapChoice {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			WrapChoice::None => write!(f, "None"),
-			WrapChoice::Word => write!(f, "Word"),
-			WrapChoice::Glyph => write!(f, "Glyph"),
-			WrapChoice::WordOrGlyph => write!(f, "Word or glyph"),
-		}
+		f.write_str(match self {
+			WrapChoice::None => "None",
+			WrapChoice::Word => "Word",
+			WrapChoice::Glyph => "Glyph",
+			WrapChoice::WordOrGlyph => "Word or glyph",
+		})
 	}
 }

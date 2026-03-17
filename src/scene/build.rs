@@ -62,12 +62,6 @@ impl DocumentLayout {
 
 		let byte_order = build_byte_order(&clusters);
 
-		let warnings = if runs.is_empty() {
-			Arc::from(["No layout runs were produced. Check the font choice and text content.".to_string()])
-		} else {
-			Arc::from([])
-		};
-
 		Self {
 			text,
 			wrapping: config.wrapping,
@@ -77,11 +71,15 @@ impl DocumentLayout {
 			glyph_count,
 			cluster_count: clusters.len(),
 			font_count: font_names.len(),
+			warnings: if runs.is_empty() {
+				Arc::from(["No layout runs were produced. Check the font choice and text content.".to_string()])
+			} else {
+				Arc::from([])
+			},
 			runs: runs.into(),
 			clusters: clusters.into(),
 			line_byte_offsets,
 			byte_order: byte_order.into(),
-			warnings,
 		}
 	}
 }
@@ -133,12 +131,7 @@ fn build_clusters(
 				}
 			}
 			_ => {
-				if let Some(cluster) = current.take() {
-					clusters.push(cluster);
-				}
-
-				cluster_font_id = Some(glyph.font_id);
-				current = Some(LayoutCluster {
+				if let Some(cluster) = current.replace(LayoutCluster {
 					byte_range,
 					glyph_count: 1,
 					run_index,
@@ -147,14 +140,15 @@ fn build_clusters(
 					y: glyph_y,
 					height: glyph_height.max(1.0),
 					font_summary: lookup_font_name(font_names, glyph.font_id),
-				});
+				}) {
+					clusters.push(cluster);
+				}
+				cluster_font_id = Some(glyph.font_id);
 			}
 		}
 	}
 
-	if let Some(cluster) = current {
-		clusters.push(cluster);
-	}
+	clusters.extend(current);
 
 	clusters
 }

@@ -139,20 +139,15 @@ impl EditorApp {
 	fn inspect_overlays(
 		&self, scene: Option<&crate::presentation::DerivedScenePresentation>, active: bool,
 	) -> Arc<[crate::overlay::OverlayPrimitive]> {
-		if !active {
+		let Some(scene) = active.then_some(scene).flatten() else {
 			return Arc::from([]);
-		}
+		};
 
-		scene.map_or_else(
-			|| Arc::from([]),
-			|scene| {
-				scene.layout.inspect_overlay_primitives(
-					self.sidebar.hovered_target,
-					self.sidebar.selected_target,
-					self.viewport.layout_width,
-					self.controls.show_hitboxes,
-				)
-			},
+		scene.layout.inspect_overlay_primitives(
+			self.sidebar.hovered_target,
+			self.sidebar.selected_target,
+			self.viewport.layout_width,
+			self.controls.show_hitboxes,
 		)
 	}
 }

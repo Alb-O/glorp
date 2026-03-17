@@ -33,12 +33,10 @@ impl DocumentLayout {
 	) -> Arc<[OverlayPrimitive]> {
 		let mut overlays = Vec::with_capacity(4);
 
-		if let Some(target) = hovered_target {
-			self.append_target_overlay_primitives(&mut overlays, target, false, layout_width, show_hitboxes);
-		}
-
-		if let Some(target) = selected_target {
-			self.append_target_overlay_primitives(&mut overlays, target, true, layout_width, show_hitboxes);
+		for (target, selected) in [(hovered_target, false), (selected_target, true)] {
+			if let Some(target) = target {
+				self.append_target_overlay_primitives(&mut overlays, target, selected, layout_width, show_hitboxes);
+			}
 		}
 
 		overlays.into()
@@ -88,26 +86,23 @@ impl DocumentLayout {
 }
 
 fn run_overlay_kind(selected: bool) -> OverlayRectKind {
-	if selected {
-		OverlayRectKind::InspectRunSelected
-	} else {
-		OverlayRectKind::InspectRunHover
+	match selected {
+		true => OverlayRectKind::InspectRunSelected,
+		false => OverlayRectKind::InspectRunHover,
 	}
 }
 
 fn cluster_overlay_kind(selected: bool) -> OverlayRectKind {
-	if selected {
-		OverlayRectKind::InspectGlyphSelected
-	} else {
-		OverlayRectKind::InspectGlyphHover
+	match selected {
+		true => OverlayRectKind::InspectGlyphSelected,
+		false => OverlayRectKind::InspectGlyphHover,
 	}
 }
 
 fn cluster_hitbox_overlay_kind(selected: bool) -> OverlayRectKind {
-	if selected {
-		OverlayRectKind::InspectGlyphHitboxSelected
-	} else {
-		OverlayRectKind::InspectGlyphHitboxHover
+	match selected {
+		true => OverlayRectKind::InspectGlyphHitboxSelected,
+		false => OverlayRectKind::InspectGlyphHitboxHover,
 	}
 }
 
