@@ -23,7 +23,9 @@ pub(super) fn decode_event(
 ) -> Option<DecodedEvent> {
 	let cursor_position = cursor.position_in(bounds);
 	let cursor_local = cursor_position.map(|position| to_scene_local(position, scroll));
-	let cursor_target = layout.and_then(|layout| cursor_local.and_then(|position| layout.hit_test(position)));
+	let cursor_target = layout
+		.zip(cursor_local)
+		.and_then(|(layout, position)| layout.hit_test(position));
 
 	match event {
 		canvas::Event::Mouse(mouse::Event::WheelScrolled { delta }) if cursor.is_over(bounds) => {
@@ -68,15 +70,9 @@ fn key_intent(
 	let latin = key
 		.to_latin(physical_key)
 		.map(|character| character.to_ascii_lowercase());
-	let redo_modifier = modifiers.shift();
 
 	if modifiers.command() {
-		return match latin {
-			Some('z') if redo_modifier => Some(EditorIntent::History(EditorHistoryIntent::Redo)),
-			Some('z') => Some(EditorIntent::History(EditorHistoryIntent::Undo)),
-			Some('y') => Some(EditorIntent::History(EditorHistoryIntent::Redo)),
-			_ => None,
-		};
+		return command_key_intent(latin, modifiers.shift());
 	}
 
 	match mode {
@@ -87,24 +83,20 @@ fn key_intent(
 
 			navigation_key_intent(key)
 				.or_else(|| normal_named_key_intent(key))
-				.or(match latin {
-					Some('h') => Some(EditorIntent::Motion(EditorMotion::Left)),
-					Some('l') => Some(EditorIntent::Motion(EditorMotion::Right)),
-					Some('k') => Some(EditorIntent::Motion(EditorMotion::Up)),
-					Some('j') => Some(EditorIntent::Motion(EditorMotion::Down)),
-					Some('i') => Some(EditorIntent::Mode(EditorModeIntent::EnterInsertBefore)),
-					Some('a') => Some(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
-					Some('x') => Some(EditorIntent::Edit(EditorEditIntent::DeleteSelection)),
-					_ => None,
-				})
+				.or_else(|| normal_latin_key_intent(latin))
 		}
 		EditorMode::Insert => navigation_key_intent(key)
 			.or_else(|| insert_named_key_intent(key))
-			.or_else(|| {
-				(!modifiers.alt()).then_some(())?;
-				text.filter(|text| !text.chars().all(char::is_control))
-					.map(|text| EditorIntent::Edit(EditorEditIntent::InsertText(text.to_string())))
-			}),
+			.or_else(|| insert_text_intent(text, modifiers)),
+	}
+}
+
+fn command_key_intent(latin: Option<char>, redo_modifier: bool) -> Option<EditorIntent> {
+	match latin {
+		Some('z') if redo_modifier => Some(EditorIntent::History(EditorHistoryIntent::Redo)),
+		Some('z') => Some(EditorIntent::History(EditorHistoryIntent::Undo)),
+		Some('y') => Some(EditorIntent::History(EditorHistoryIntent::Redo)),
+		_ => None,
 	}
 }
 
@@ -131,6 +123,19 @@ fn normal_named_key_intent(key: &keyboard::Key) -> Option<EditorIntent> {
 	}
 }
 
+fn normal_latin_key_intent(latin: Option<char>) -> Option<EditorIntent> {
+	match latin {
+		Some('h') => Some(EditorIntent::Motion(EditorMotion::Left)),
+		Some('l') => Some(EditorIntent::Motion(EditorMotion::Right)),
+		Some('k') => Some(EditorIntent::Motion(EditorMotion::Up)),
+		Some('j') => Some(EditorIntent::Motion(EditorMotion::Down)),
+		Some('i') => Some(EditorIntent::Mode(EditorModeIntent::EnterInsertBefore)),
+		Some('a') => Some(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
+		Some('x') => Some(EditorIntent::Edit(EditorEditIntent::DeleteSelection)),
+		_ => None,
+	}
+}
+
 fn insert_named_key_intent(key: &keyboard::Key) -> Option<EditorIntent> {
 	match key.as_ref() {
 		key::Key::Named(key::Named::Backspace) => Some(EditorIntent::Edit(EditorEditIntent::Backspace)),
@@ -140,4 +145,12 @@ fn insert_named_key_intent(key: &keyboard::Key) -> Option<EditorIntent> {
 		key::Key::Named(key::Named::Escape) => Some(EditorIntent::Mode(EditorModeIntent::ExitInsert)),
 		_ => None,
 	}
+}
+
+fn insert_text_intent(text: Option<&str>, modifiers: keyboard::Modifiers) -> Option<EditorIntent> {
+	(!modifiers.alt())
+		.then_some(text)
+		.flatten()
+		.filter(|text| !text.chars().all(char::is_control))
+		.map(|text| EditorIntent::Edit(EditorEditIntent::InsertText(text.into())))
 }

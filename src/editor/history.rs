@@ -42,15 +42,11 @@ impl EditorHistory {
 	}
 
 	pub(super) fn undo(&mut self) -> Option<HistoryEntry> {
-		let entry = self.undo.pop_back()?;
-		self.redo.push_back(entry.clone());
-		Some(entry)
+		move_tail(&mut self.undo, &mut self.redo)
 	}
 
 	pub(super) fn redo(&mut self) -> Option<HistoryEntry> {
-		let entry = self.redo.pop_back()?;
-		self.undo.push_back(entry.clone());
-		Some(entry)
+		move_tail(&mut self.redo, &mut self.undo)
 	}
 
 	pub(super) fn undo_len(&self) -> usize {
@@ -60,4 +56,10 @@ impl EditorHistory {
 	pub(super) fn redo_len(&self) -> usize {
 		self.redo.len()
 	}
+}
+
+fn move_tail(from: &mut VecDeque<HistoryEntry>, to: &mut VecDeque<HistoryEntry>) -> Option<HistoryEntry> {
+	let entry = from.pop_back()?;
+	to.push_back(entry.clone());
+	Some(entry)
 }

@@ -91,6 +91,21 @@ pub(super) struct SessionFeedback {
 }
 
 impl SessionDelta {
+	fn with_changes(changes: SessionChanges) -> Self {
+		Self {
+			changes,
+			..Self::default()
+		}
+	}
+
+	fn with_width_sync(changes: SessionChanges, width_sync: Duration) -> Self {
+		Self {
+			changes,
+			width_sync: Some(width_sync),
+			..Self::default()
+		}
+	}
+
 	pub(super) fn changed(&self) -> bool {
 		!self.changes.is_empty() || self.width_sync.is_some() || self.scene_materialized.is_some()
 	}
@@ -194,14 +209,13 @@ impl DocumentSession {
 		self.editor.reset(&mut self.font_system, text, config);
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		SessionDelta {
-			changes: SessionChanges::default()
+		SessionDelta::with_changes(
+			SessionChanges::default()
 				.with(SessionChange::Text)
 				.with(SessionChange::View)
 				.with(SessionChange::Selection)
 				.with(SessionChange::Mode),
-			..SessionDelta::default()
-		}
+		)
 	}
 
 	fn execute_sync_config(&mut self, config: SceneConfig) -> SessionDelta {
@@ -211,10 +225,7 @@ impl DocumentSession {
 
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		SessionDelta {
-			changes: SessionChanges::default().with(SessionChange::View),
-			..SessionDelta::default()
-		}
+		SessionDelta::with_changes(SessionChanges::default().with(SessionChange::View))
 	}
 
 	fn execute_sync_width(&mut self, width: f32) -> SessionDelta {
@@ -225,11 +236,7 @@ impl DocumentSession {
 
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		SessionDelta {
-			changes: SessionChanges::default().with(SessionChange::View),
-			width_sync: Some(started.elapsed()),
-			..SessionDelta::default()
-		}
+		SessionDelta::with_width_sync(SessionChanges::default().with(SessionChange::View), started.elapsed())
 	}
 
 	fn execute_editor_intent(&mut self, intent: EditorIntent) -> SessionDelta {
@@ -250,14 +257,13 @@ impl DocumentSession {
 			self.invalidate_scene();
 		}
 
-		SessionDelta {
-			changes: SessionChanges::default()
+		SessionDelta::with_changes(
+			SessionChanges::default()
 				.with_if(text_changed, SessionChange::Text)
 				.with_if(view_changed, SessionChange::View)
 				.with_if(selection_changed, SessionChange::Selection)
 				.with_if(mode_changed, SessionChange::Mode),
-			..SessionDelta::default()
-		}
+		)
 	}
 
 	fn refresh_editor_snapshot(&mut self) {

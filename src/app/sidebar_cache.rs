@@ -135,10 +135,13 @@ impl InspectSidebarArgs<'_> {
 fn cached_or_build<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, key: K, build: impl FnOnce() -> V) -> Arc<V>
 where
 	K: Copy + Eq, {
-	if let Some(entry) = cache.borrow().as_ref()
-		&& entry.key == key
+	if let Some(data) = cache
+		.borrow()
+		.as_ref()
+		.filter(|entry| entry.key == key)
+		.map(|entry| Arc::clone(&entry.data))
 	{
-		return Arc::clone(&entry.data);
+		return data;
 	}
 
 	let data = Arc::new(build());
@@ -167,10 +170,13 @@ fn editor_selection_details(text: &str, editor: &EditorPresentation) -> String {
 	let selection_rects = view.overlay_count(OverlayRectKind::EditorSelection);
 	let undo_redo = format!("{}/{}", editor.undo_depth, editor.redo_depth);
 	let Some(selection) = view.selection.as_ref() else {
-		let undo_redo = matches!(view.mode, EditorMode::Insert)
-			.then(|| format!("\n  undo/redo: {undo_redo}"))
-			.unwrap_or_default();
-		return format!("  mode: {}\n  selection: none{undo_redo}", view.mode);
+		return format!(
+			"  mode: {}\n  selection: none{}",
+			view.mode,
+			matches!(view.mode, EditorMode::Insert)
+				.then(|| format!("\n  undo/redo: {undo_redo}"))
+				.unwrap_or_default(),
+		);
 	};
 	let head = view.selection_head.unwrap_or(selection.start);
 	let selection_details = match view.mode {

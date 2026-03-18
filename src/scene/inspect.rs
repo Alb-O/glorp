@@ -44,43 +44,41 @@ impl DocumentLayout {
 	fn target_overlay_primitives(
 		&self, target: CanvasTarget, selected: bool, layout_width: f32, show_hitboxes: bool,
 	) -> impl Iterator<Item = OverlayPrimitive> {
-		let Some(rect) = self.target_rect(target) else {
-			return [None, None].into_iter().flatten();
-		};
-		let (rect, kind, hitbox_kind) = match target {
-			CanvasTarget::Run(_) => (
-				LayoutRect {
-					width: layout_width.max(rect.width).max(1.0),
-					..rect
-				},
-				if selected {
-					OverlayRectKind::InspectRunSelected
-				} else {
-					OverlayRectKind::InspectRunHover
-				},
-				None,
-			),
-			CanvasTarget::Cluster(_) => (
-				rect,
-				if selected {
-					OverlayRectKind::InspectGlyphSelected
-				} else {
-					OverlayRectKind::InspectGlyphHover
-				},
-				show_hitboxes.then_some(if selected {
-					OverlayRectKind::InspectGlyphHitboxSelected
-				} else {
-					OverlayRectKind::InspectGlyphHitboxHover
-				}),
-			),
-		};
+		self.target_rect(target).into_iter().flat_map(move |rect| {
+			let (rect, kind, hitbox_kind) = match target {
+				CanvasTarget::Run(_) => (
+					LayoutRect {
+						width: layout_width.max(rect.width).max(1.0),
+						..rect
+					},
+					if selected {
+						OverlayRectKind::InspectRunSelected
+					} else {
+						OverlayRectKind::InspectRunHover
+					},
+					None,
+				),
+				CanvasTarget::Cluster(_) => (
+					rect,
+					if selected {
+						OverlayRectKind::InspectGlyphSelected
+					} else {
+						OverlayRectKind::InspectGlyphHover
+					},
+					show_hitboxes.then_some(if selected {
+						OverlayRectKind::InspectGlyphHitboxSelected
+					} else {
+						OverlayRectKind::InspectGlyphHitboxHover
+					}),
+				),
+			};
 
-		[
-			Some(OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText)),
-			hitbox_kind.map(|kind| OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText)),
-		]
-		.into_iter()
-		.flatten()
+			std::iter::once(OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText)).chain(
+				hitbox_kind
+					.into_iter()
+					.map(move |kind| OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText)),
+			)
+		})
 	}
 }
 

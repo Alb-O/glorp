@@ -216,7 +216,7 @@ impl DocumentLayout {
 			clusters: clusters.into(),
 			line_byte_offsets,
 			byte_order: byte_order.into(),
-			warnings: Vec::new().into(),
+			warnings: Arc::from([]),
 		}
 	}
 }

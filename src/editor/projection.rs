@@ -48,7 +48,7 @@ impl EditorEngine {
 			// Seed the retained snapshot on first demand so later presentation reads
 			// observe one derived layout instead of rebuilding independently.
 			let layout = Arc::new(self.document_layout());
-			self.layout.set_document_layout(layout.clone());
+			self.layout.set_document_layout(Arc::clone(&layout));
 			layout
 		})
 	}
@@ -248,21 +248,19 @@ impl EditorEngine {
 	fn insert_overlays(
 		tone: EditorOverlayTone, insert_cursor: Option<LayoutRect>, viewport_target: Option<LayoutRect>,
 	) -> Arc<[OverlayPrimitive]> {
-		[
-			viewport_target.map(|insert_block| {
+		viewport_target
+			.into_iter()
+			.map(|insert_block| {
 				OverlayPrimitive::scene_rect(
 					insert_block,
 					OverlayRectKind::EditorInsertBlock(tone),
 					OverlayLayer::UnderText,
 				)
-			}),
-			insert_cursor.map(|caret| {
+			})
+			.chain(insert_cursor.into_iter().map(|caret| {
 				OverlayPrimitive::scene_rect(caret, OverlayRectKind::EditorCaret(tone), OverlayLayer::UnderText)
-			}),
-		]
-		.into_iter()
-		.flatten()
-		.collect()
+			}))
+			.collect()
 	}
 
 	fn normal_overlays(
