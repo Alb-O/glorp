@@ -343,14 +343,11 @@ fn host_binary_path() -> Result<PathBuf, LabeledError> {
 		return Ok(PathBuf::from(path));
 	}
 
-	if let Ok(current) = std::env::current_exe() {
-		let sibling = current.with_file_name("glorp_host");
-		if sibling.exists() {
-			return Ok(sibling);
-		}
-	}
-
-	Ok(PathBuf::from("glorp_host"))
+	Ok(std::env::current_exe()
+		.ok()
+		.map(|current| current.with_file_name("glorp_host"))
+		.filter(|sibling| sibling.exists())
+		.unwrap_or_else(|| PathBuf::from("glorp_host")))
 }
 
 fn wait_for_socket(socket: &Path) -> Result<(), LabeledError> {

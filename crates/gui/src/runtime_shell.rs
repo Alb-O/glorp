@@ -242,8 +242,8 @@ impl RuntimeShell {
 
 	fn handle_controls(&mut self, message: ControlsMessage) -> Result<(), GlorpError> {
 		match message {
-			ControlsMessage::LoadPreset(preset) => {
-				let commands = std::iter::once(config_set("editor.preset", enum_string_value(preset)))
+			ControlsMessage::LoadPreset(preset) => self.execute(GlorpCommand::Txn(GlorpTxn {
+				commands: std::iter::once(config_set("editor.preset", enum_string_value(preset)))
 					.chain(
 						(preset != glorp_api::SamplePreset::Custom).then_some(GlorpCommand::Document(
 							DocumentCommand::Replace {
@@ -255,9 +255,8 @@ impl RuntimeShell {
 						(preset != glorp_api::SamplePreset::Custom)
 							.then_some(GlorpCommand::Ui(UiCommand::ViewportScrollTo { x: 0.0, y: 0.0 })),
 					)
-					.collect::<Vec<_>>();
-				self.execute(GlorpCommand::Txn(GlorpTxn { commands }))
-			}
+					.collect(),
+			})),
 			ControlsMessage::FontSelected(font) => self.execute(config_set("editor.font", enum_string_value(font))),
 			ControlsMessage::ShapingSelected(shaping) => {
 				self.execute(config_set("editor.shaping", enum_string_value(shaping)))
@@ -292,7 +291,7 @@ impl RuntimeShell {
 				x: scroll.x,
 				y: scroll.y,
 			})),
-			CanvasEvent::PointerSelectionStarted { target, intent } => self.execute_many(vec![
+			CanvasEvent::PointerSelectionStarted { target, intent } => self.execute_many([
 				GlorpCommand::Ui(UiCommand::CanvasFocusSet { focused: true }),
 				GlorpCommand::Ui(UiCommand::InspectTargetSelect {
 					target: inspect_target(self.frame.ui.active_tab, target),
@@ -310,11 +309,12 @@ impl RuntimeShell {
 		self.refresh_frame()
 	}
 
-	fn execute_many(&mut self, commands: Vec<GlorpCommand>) -> Result<(), GlorpError> {
+	fn execute_many(&mut self, commands: impl IntoIterator<Item = GlorpCommand>) -> Result<(), GlorpError> {
 		self.with_host(|host| {
-			commands
-				.into_iter()
-				.try_for_each(|command| host.execute(command).map(|_| ()))
+			commands.into_iter().try_for_each(|command| {
+				host.execute(command)?;
+				Ok(())
+			})
 		})?;
 		self.refresh_frame()
 	}

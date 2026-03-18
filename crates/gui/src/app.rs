@@ -24,7 +24,8 @@ where
 	}
 
 	pub fn send(&mut self, message: GuiMessage) -> Result<(), GlorpError> {
-		self.host.execute(update::to_command(message)).map(|_| ())
+		self.host.execute(update::to_command(message))?;
+		Ok(())
 	}
 
 	pub fn presentation(&mut self) -> Result<GuiPresentation, GlorpError> {

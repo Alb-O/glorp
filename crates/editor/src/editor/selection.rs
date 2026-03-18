@@ -56,7 +56,8 @@ impl EditorEngine {
 		};
 		self.set_mode(EditorMode::Normal);
 		let range = self.word_range(cluster.byte_range.clone());
-		self.set_selection(Some(EditorSelection::new(range.clone(), range.start)));
+		let head = range.start;
+		self.set_selection(Some(EditorSelection::new(range, head)));
 		self.set_preferred_x(Some(cluster.center_x()));
 		self.clear_pointer_anchor();
 	}
