@@ -84,52 +84,29 @@ fn eval_to_value(plugin_test: &mut PluginTest, nu_source: &str) -> Value {
 		.expect("pipeline should convert to a value")
 }
 
-fn call(host: &mut impl GlorpHost, glorp_call: GlorpCall) -> GlorpCallResult {
+fn call(host: &mut impl GlorpCaller, glorp_call: GlorpCall) -> GlorpCallResult {
 	host.call(glorp_call).expect("call should succeed")
 }
 
-fn outcome(host: &mut impl GlorpHost, glorp_call: GlorpCall) -> GlorpOutcome {
-	match call(host, glorp_call) {
-		GlorpCallResult::Txn(outcome)
-		| GlorpCallResult::ConfigSet(outcome)
-		| GlorpCallResult::ConfigReset(outcome)
-		| GlorpCallResult::ConfigPatch(outcome)
-		| GlorpCallResult::ConfigReload(outcome)
-		| GlorpCallResult::ConfigPersist(outcome)
-		| GlorpCallResult::DocumentReplace(outcome)
-		| GlorpCallResult::EditorMotion(outcome)
-		| GlorpCallResult::EditorMode(outcome)
-		| GlorpCallResult::EditorInsert(outcome)
-		| GlorpCallResult::EditorBackspace(outcome)
-		| GlorpCallResult::EditorDeleteForward(outcome)
-		| GlorpCallResult::EditorDeleteSelection(outcome)
-		| GlorpCallResult::EditorHistory(outcome) => outcome,
-		other => panic!("unexpected outcome payload: {other:?}"),
-	}
+fn outcome(host: &mut impl GlorpCaller, glorp_call: GlorpCall) -> GlorpOutcome {
+	let result = call(host, glorp_call);
+	let id = result.id.clone();
+	decode_call_output::<GlorpOutcome>(&id, &result.output).expect("outcome payload should decode")
 }
 
-fn document_text(host: &mut impl GlorpHost) -> String {
-	match call(host, GlorpCall::DocumentText) {
-		GlorpCallResult::DocumentText(text) => text,
-		other => panic!("unexpected document text response: {other:?}"),
-	}
+fn document_text(host: &mut impl GlorpCaller) -> String {
+	calls::DocumentText::call(host, ()).expect("document-text should succeed")
 }
 
-fn config(host: &mut impl GlorpHost) -> GlorpConfig {
-	match call(host, GlorpCall::Config) {
-		GlorpCallResult::Config(config) => config,
-		other => panic!("unexpected config response: {other:?}"),
-	}
+fn config(host: &mut impl GlorpCaller) -> GlorpConfig {
+	calls::Config::call(host, ()).expect("config should succeed")
 }
 
-fn editor_state(host: &mut impl GlorpHost) -> EditorStateView {
-	match call(host, GlorpCall::Editor) {
-		GlorpCallResult::Editor(editor) => editor,
-		other => panic!("unexpected editor response: {other:?}"),
-	}
+fn editor_state(host: &mut impl GlorpCaller) -> EditorStateView {
+	calls::Editor::call(host, ()).expect("editor should succeed")
 }
 
-fn host_state(host: &mut impl GlorpHost) -> (String, EditorStateView, GlorpConfig) {
+fn host_state(host: &mut impl GlorpCaller) -> (String, EditorStateView, GlorpConfig) {
 	(document_text(host), editor_state(host), config(host))
 }
 
@@ -150,52 +127,49 @@ fn int_field(value: &Value, field: &str) -> i64 {
 		.unwrap_or_else(|| panic!("{field} field should be int"))
 }
 
-fn subscribe_changes(host: &mut impl GlorpHost) -> u64 {
-	match call(host, GlorpCall::EventsSubscribe) {
-		GlorpCallResult::EventsSubscribe(stream) => stream.token,
-		other => panic!("unexpected subscribe response: {other:?}"),
-	}
+fn subscribe_changes(host: &mut impl GlorpCaller) -> u64 {
+	calls::EventsSubscribe::call(host, ())
+		.expect("events-subscribe should succeed")
+		.token
 }
 
-fn next_event(host: &mut impl GlorpHost, token: u64) -> Option<GlorpEvent> {
-	match call(host, GlorpCall::EventsNext(StreamTokenInput { token })) {
-		GlorpCallResult::EventsNext(event) => event,
-		other => panic!("unexpected next-event response: {other:?}"),
-	}
+fn next_event(host: &mut impl GlorpCaller, token: u64) -> Option<GlorpEvent> {
+	calls::EventsNext::call(host, StreamTokenInput { token }).expect("events-next should succeed")
 }
 
 fn txn(calls: Vec<GlorpCall>) -> GlorpCall {
-	GlorpCall::Txn(GlorpTxn { calls })
+	calls::Txn::build(GlorpTxn { calls }).expect("txn should build")
 }
 
 fn config_set(path: &str, value: GlorpValue) -> GlorpCall {
-	GlorpCall::ConfigSet(ConfigAssignment {
+	calls::ConfigSet::build(ConfigAssignment {
 		path: path.to_owned(),
 		value,
 	})
+	.expect("config-set should build")
 }
 
 fn document_replace(text: &str) -> GlorpCall {
-	GlorpCall::DocumentReplace(TextInput { text: text.to_owned() })
+	calls::DocumentReplace::build(TextInput { text: text.to_owned() }).expect("document-replace should build")
 }
 
 fn editor_mode(mode: EditorModeCommand) -> GlorpCall {
-	GlorpCall::EditorMode(EditorModeInput { mode })
+	calls::EditorMode::build(EditorModeInput { mode }).expect("editor-mode should build")
 }
 
 fn editor_motion(motion: EditorMotion) -> GlorpCall {
-	GlorpCall::EditorMotion(EditorMotionInput { motion })
+	calls::EditorMotion::build(EditorMotionInput { motion }).expect("editor-motion should build")
 }
 
 fn editor_insert(text: &str) -> GlorpCall {
-	GlorpCall::EditorInsert(TextInput { text: text.to_owned() })
+	calls::EditorInsert::build(TextInput { text: text.to_owned() }).expect("editor-insert should build")
 }
 
 fn editor_history(action: EditorHistoryCommand) -> GlorpCall {
-	GlorpCall::EditorHistory(EditorHistoryInput { action })
+	calls::EditorHistory::build(EditorHistoryInput { action }).expect("editor-history should build")
 }
 
-fn run_standard_transcript(host: &mut impl GlorpHost) -> (String, EditorStateView, GlorpConfig) {
+fn run_standard_transcript(host: &mut impl GlorpCaller) -> (String, EditorStateView, GlorpConfig) {
 	let _ = outcome(
 		host,
 		config_set("editor.wrapping", GlorpValue::String("word".to_owned())),
@@ -240,12 +214,9 @@ fn schema_export_smoke_test() {
 	harness.export_surface();
 	let mut host = harness.runtime();
 
-	let schema = match call(&mut host, GlorpCall::Schema) {
-		GlorpCallResult::Schema(schema) => schema,
-		other => panic!("unexpected schema response: {other:?}"),
-	};
+	let schema = calls::Schema::call(&mut host, ()).expect("schema should succeed");
 
-	assert_eq!(schema.version, 5);
+	assert_eq!(schema.version, 6);
 	assert!(schema.calls.iter().any(|operation| operation.id == "editor"));
 	assert!(schema.calls.iter().all(|operation| operation.id != "snapshot"));
 	assert!(schema.calls.iter().all(|operation| operation.id != "selection"));
@@ -293,10 +264,7 @@ fn invalid_config_rejection_e2e() {
 	let mut host = Harness::new().runtime();
 	let before_text = document_text(&mut host);
 	let before_editor = editor_state(&mut host);
-	let before_config = match call(&mut host, GlorpCall::Config) {
-		GlorpCallResult::Config(config) => config,
-		other => panic!("unexpected config response: {other:?}"),
-	};
+	let before_config = calls::Config::call(&mut host, ()).expect("config should succeed");
 
 	let error = host
 		.call(config_set(
@@ -317,10 +285,7 @@ fn invalid_config_rejection_e2e() {
 
 	assert_eq!(before_text, document_text(&mut host));
 	assert_eq!(before_editor, editor_state(&mut host));
-	let after_config = match call(&mut host, GlorpCall::Config) {
-		GlorpCallResult::Config(config) => config,
-		other => panic!("unexpected config response: {other:?}"),
-	};
+	let after_config = calls::Config::call(&mut host, ()).expect("config should succeed");
 	assert_eq!(before_config, after_config);
 }
 
@@ -354,6 +319,54 @@ fn nested_transaction_rejection_e2e() {
 
 	match error {
 		GlorpError::Validation { message, .. } => assert!(message.contains("nested transactions")),
+		other => panic!("unexpected error: {other:?}"),
+	}
+}
+
+#[test]
+fn transaction_rejects_non_transactional_and_non_runtime_calls_e2e() {
+	let mut host = Harness::new().runtime();
+
+	for nested_call in [
+		calls::Schema::build(()).expect("schema should build"),
+		calls::SessionShutdown::build(()).expect("session-shutdown should build"),
+	] {
+		let error = host.call(txn(vec![nested_call])).expect_err("txn should fail");
+		match error {
+			GlorpError::Validation { message, .. } => assert!(message.contains("not allowed inside `txn`")),
+			other => panic!("unexpected error: {other:?}"),
+		}
+	}
+}
+
+#[test]
+fn runtime_dispatch_rejects_non_runtime_routes_e2e() {
+	let mut host = Harness::new().runtime();
+
+	for call in [
+		calls::SessionAttach::build(()).expect("session-attach should build"),
+		calls::SessionShutdown::build(()).expect("session-shutdown should build"),
+	] {
+		let error = host.call(call).expect_err("runtime should reject non-runtime routes");
+		match error {
+			GlorpError::Validation { message, .. } => assert!(message.contains("route")),
+			other => panic!("unexpected error: {other:?}"),
+		}
+	}
+}
+
+#[test]
+fn ipc_transport_rejects_client_route_calls_e2e() {
+	let mut harness = Harness::new();
+	harness.start_server();
+	let mut client = harness.ipc_client();
+
+	let error = client
+		.call(calls::SessionAttach::build(()).expect("session-attach should build"))
+		.expect_err("client route should be rejected over IPC");
+
+	match error {
+		GlorpError::Validation { message, .. } => assert!(message.contains("client route")),
 		other => panic!("unexpected error: {other:?}"),
 	}
 }
@@ -575,7 +588,7 @@ fn persistence_smoke_test() {
 		&mut host,
 		config_set("editor.wrapping", GlorpValue::String("glyph".to_owned())),
 	);
-	let _ = outcome(&mut host, GlorpCall::ConfigPersist);
+	let _ = calls::ConfigPersist::call(&mut host, ()).expect("config-persist should succeed");
 	drop(host);
 
 	let mut fresh = RuntimeHost::new(RuntimeOptions { paths }).expect("fresh runtime should start");
@@ -679,11 +692,11 @@ fn plugin_transaction_e2e() {
 			r#"
 			glorp call txn {{
 			  calls: [
-			    {{op: "config-set", input: {{path: "editor.wrapping", value: "glyph"}}}}
-			    {{op: "document-replace", input: {{text: "hello"}}}}
-			    {{op: "editor-mode", input: {{mode: "enter-insert-after"}}}}
-			    {{op: "editor-motion", input: {{motion: "line-end"}}}}
-			    {{op: "editor-insert", input: {{text: " world"}}}}
+			    {{id: "config-set", input: {{path: "editor.wrapping", value: "glyph"}}}}
+			    {{id: "document-replace", input: {{text: "hello"}}}}
+			    {{id: "editor-mode", input: {{mode: "enter-insert-after"}}}}
+			    {{id: "editor-motion", input: {{motion: "line-end"}}}}
+			    {{id: "editor-insert", input: {{text: " world"}}}}
 			  ]
 			}} --repo-root "{repo_root}"
 			"#,

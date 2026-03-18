@@ -1,6 +1,6 @@
 use {
 	cosmic_text::Buffer,
-	glorp_api::{EditorConfig, GlorpCall, GlorpCallResult, GlorpError, GlorpHost},
+	glorp_api::{EditorConfig, GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
 	glorp_editor::{
 		EditorPresentation, EditorTextLayerState, SessionSnapshot, build_buffer, make_font_system, scene_config,
 	},
@@ -180,7 +180,7 @@ impl GuiRuntimeClient {
 	}
 }
 
-impl GlorpHost for GuiRuntimeClient {
+impl GlorpCaller for GuiRuntimeClient {
 	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
 		self.client.call(call)
 	}
@@ -226,12 +226,10 @@ fn ensure_socket_parent(socket_path: &Path) -> Result<(), GlorpError> {
 	})
 }
 
-fn ensure_runtime_capabilities(client: &mut impl GlorpHost, error: &'static str) -> Result<(), GlorpError> {
-	let GlorpCallResult::Capabilities(_) = client.call(GlorpCall::Capabilities)? else {
-		return Err(GlorpError::transport(error));
-	};
-
-	Ok(())
+fn ensure_runtime_capabilities(client: &mut impl GlorpCaller, error: &'static str) -> Result<(), GlorpError> {
+	glorp_api::calls::Capabilities::call(client, ())
+		.map(|_| ())
+		.map_err(|_| GlorpError::transport(error))
 }
 
 fn wait_for_socket(socket_path: &Path) -> Result<(), GlorpError> {

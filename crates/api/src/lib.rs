@@ -23,6 +23,6 @@ pub enum GlorpSubscription {
 	Changes,
 }
 
-pub trait GlorpHost {
+pub trait GlorpCaller {
 	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError>;
 }

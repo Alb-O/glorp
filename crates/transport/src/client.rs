@@ -2,7 +2,7 @@ use {
 	crate::{
 		GuiTransportRequest, GuiTransportResponse, ServerRequest, ServerResponse, TransportRequest, TransportResponse,
 	},
-	glorp_api::{GlorpCall, GlorpCallResult, GlorpError, GlorpHost},
+	glorp_api::{GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
 	serde::{Serialize, de::DeserializeOwned},
 	std::{
 		io::{BufRead, BufReader, Write},
@@ -28,10 +28,7 @@ impl IpcClient {
 pub fn socket_is_live(socket_path: &Path) -> bool {
 	socket_path.exists() && {
 		let mut client = IpcClient::new(socket_path);
-		matches!(
-			client.call(GlorpCall::Capabilities),
-			Ok(GlorpCallResult::Capabilities(_))
-		)
+		glorp_api::calls::Capabilities::call(&mut client, ()).is_ok()
 	}
 }
 
@@ -78,7 +75,7 @@ where
 	serde_json::from_str(&response).map_err(|error| GlorpError::internal(format!("failed to decode response: {error}")))
 }
 
-impl GlorpHost for IpcClient {
+impl GlorpCaller for IpcClient {
 	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
 		expect_response(
 			self.response(TransportRequest::Call(call)),

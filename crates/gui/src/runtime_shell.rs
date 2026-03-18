@@ -12,8 +12,8 @@ use {
 		},
 	},
 	glorp_api::{
-		ConfigAssignment, EditorHistoryInput, EditorModeInput, EditorMotionInput, EnumValue, GlorpCall, GlorpError,
-		GlorpHost, GlorpTxn, GlorpValue, TextInput, WrapChoice,
+		ConfigAssignment, EditorHistoryInput, EditorModeInput, EditorMotionInput, EnumValue, GlorpCall,
+		GlorpCallDescriptor, GlorpCaller, GlorpError, GlorpTxn, GlorpValue, TextInput, WrapChoice,
 	},
 	glorp_editor::{
 		CanvasTarget, EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion,
@@ -242,16 +242,13 @@ impl RuntimeShell {
 			ControlsMessage::LoadPreset(preset) => {
 				let calls = [
 					Some(config_set("editor.preset", enum_value(preset))),
-					(preset != glorp_api::SamplePreset::Custom).then(|| {
-						GlorpCall::DocumentReplace(TextInput {
-							text: sample_preset_text(preset).to_owned(),
-						})
-					}),
+					(preset != glorp_api::SamplePreset::Custom)
+						.then(|| document_replace(sample_preset_text(preset).to_owned())),
 				]
 				.into_iter()
 				.flatten()
 				.collect();
-				self.execute(GlorpCall::Txn(GlorpTxn { calls }))?;
+				self.execute(public_call::<glorp_api::calls::Txn>(GlorpTxn { calls }))?;
 				if preset != glorp_api::SamplePreset::Custom {
 					self.execute_gui(GuiCommand::ViewportScrollTo { x: 0.0, y: 0.0 })?;
 				}
@@ -342,10 +339,14 @@ impl RuntimeShell {
 }
 
 fn config_set(path: &str, value: GlorpValue) -> GlorpCall {
-	GlorpCall::ConfigSet(ConfigAssignment {
+	public_call::<glorp_api::calls::ConfigSet>(ConfigAssignment {
 		path: path.to_owned(),
 		value,
 	})
+}
+
+fn document_replace(text: impl Into<String>) -> GlorpCall {
+	public_call::<glorp_api::calls::DocumentReplace>(TextInput { text: text.into() })
 }
 
 fn enum_value<T>(value: T) -> GlorpValue
@@ -413,7 +414,7 @@ fn clamp_scroll(scroll: Vector, metrics: EditorViewportMetrics, layout_width: f3
 fn editor_intent_command(intent: EditorIntent) -> GlorpCall {
 	match intent {
 		EditorIntent::Pointer(_) => unreachable!("pointer intents stay on the private GUI command path"),
-		EditorIntent::Motion(motion) => GlorpCall::EditorMotion(EditorMotionInput {
+		EditorIntent::Motion(motion) => public_call::<glorp_api::calls::EditorMotion>(EditorMotionInput {
 			motion: match motion {
 				EditorMotion::Left => glorp_api::EditorMotion::Left,
 				EditorMotion::Right => glorp_api::EditorMotion::Right,
@@ -423,7 +424,7 @@ fn editor_intent_command(intent: EditorIntent) -> GlorpCall {
 				EditorMotion::LineEnd => glorp_api::EditorMotion::LineEnd,
 			},
 		}),
-		EditorIntent::Mode(mode) => GlorpCall::EditorMode(EditorModeInput {
+		EditorIntent::Mode(mode) => public_call::<glorp_api::calls::EditorMode>(EditorModeInput {
 			mode: match mode {
 				EditorModeIntent::EnterInsertBefore => glorp_api::EditorModeCommand::EnterInsertBefore,
 				EditorModeIntent::EnterInsertAfter => glorp_api::EditorModeCommand::EnterInsertAfter,
@@ -431,18 +432,24 @@ fn editor_intent_command(intent: EditorIntent) -> GlorpCall {
 			},
 		}),
 		EditorIntent::Edit(edit) => match edit {
-			EditorEditIntent::Backspace => GlorpCall::EditorBackspace,
-			EditorEditIntent::DeleteForward => GlorpCall::EditorDeleteForward,
-			EditorEditIntent::DeleteSelection => GlorpCall::EditorDeleteSelection,
-			EditorEditIntent::InsertText(text) => GlorpCall::EditorInsert(TextInput { text }),
+			EditorEditIntent::Backspace => public_call::<glorp_api::calls::EditorBackspace>(()),
+			EditorEditIntent::DeleteForward => public_call::<glorp_api::calls::EditorDeleteForward>(()),
+			EditorEditIntent::DeleteSelection => public_call::<glorp_api::calls::EditorDeleteSelection>(()),
+			EditorEditIntent::InsertText(text) => public_call::<glorp_api::calls::EditorInsert>(TextInput { text }),
 		},
-		EditorIntent::History(history) => GlorpCall::EditorHistory(EditorHistoryInput {
+		EditorIntent::History(history) => public_call::<glorp_api::calls::EditorHistory>(EditorHistoryInput {
 			action: match history {
 				EditorHistoryIntent::Undo => glorp_api::EditorHistoryCommand::Undo,
 				EditorHistoryIntent::Redo => glorp_api::EditorHistoryCommand::Redo,
 			},
 		}),
 	}
+}
+
+fn public_call<D>(input: D::Input) -> GlorpCall
+where
+	D: GlorpCallDescriptor, {
+	D::build(input).expect("GUI public call should encode")
 }
 
 fn pointer_command(pointer: EditorPointerIntent) -> GuiCommand {

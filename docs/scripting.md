@@ -15,11 +15,11 @@ let session = (glorp call session-attach)
 
 glorp call txn {
   calls: [
-    {op: "config-set", input: {path: "editor.wrapping", value: "glyph"}}
-    {op: "document-replace", input: {text: "hello"}}
-    {op: "editor-mode", input: {mode: "enter-insert-after"}}
-    {op: "editor-motion", input: {motion: "line-end"}}
-    {op: "editor-insert", input: {text: " world"}}
+    {id: "config-set", input: {path: "editor.wrapping", value: "glyph"}}
+    {id: "document-replace", input: {text: "hello"}}
+    {id: "editor-mode", input: {mode: "enter-insert-after"}}
+    {id: "editor-motion", input: {motion: "line-end"}}
+    {id: "editor-insert", input: {text: " world"}}
   ]
 } --session $session
 

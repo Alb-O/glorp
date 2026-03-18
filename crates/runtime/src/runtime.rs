@@ -1,6 +1,6 @@
 use {
 	crate::{ConfigStore, ConfigStorePaths, events::SubscriptionSet, execute, state::RuntimeState},
-	glorp_api::{GlorpCall, GlorpCallResult, GlorpError, GlorpHost, GlorpOutcome, SamplePreset},
+	glorp_api::{GlorpCall, GlorpCallResult, GlorpCaller, GlorpError, GlorpOutcome, SamplePreset},
 	glorp_editor::sample_preset_text,
 };
 
@@ -78,7 +78,7 @@ impl GlorpRuntime {
 	}
 }
 
-impl GlorpHost for GlorpRuntime {
+impl GlorpCaller for GlorpRuntime {
 	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
 		execute::call(self, call)
 	}

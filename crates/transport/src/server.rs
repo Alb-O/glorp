@@ -2,7 +2,10 @@ use {
 	crate::{
 		GuiTransportRequest, GuiTransportResponse, ServerRequest, ServerResponse, TransportRequest, TransportResponse,
 	},
-	glorp_api::{GlorpCall, GlorpCallResult, GlorpError, GlorpHost, OkView},
+	glorp_api::{
+		GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCallRoute, GlorpCaller, GlorpError, OkView,
+		TransportCallDispatcher, call_spec, dispatch_transport_call,
+	},
 	glorp_runtime::RuntimeHost,
 	std::{
 		io::{BufRead, BufReader, Write},
@@ -31,7 +34,12 @@ impl IpcServerHandle {
 
 	pub fn shutdown(mut self) -> Result<(), GlorpError> {
 		self.stop.store(true, Ordering::SeqCst);
-		let _ = super::transport_request(&self.socket_path, TransportRequest::Call(GlorpCall::SessionShutdown));
+		let _ = super::transport_request(
+			&self.socket_path,
+			TransportRequest::Call(
+				glorp_api::calls::SessionShutdown::build(()).expect("session-shutdown should build"),
+			),
+		);
 		self.join()
 	}
 
@@ -135,11 +143,7 @@ fn dispatch_public_request(
 	request: TransportRequest, host: &mut RuntimeHost, stop: &Arc<AtomicBool>,
 ) -> TransportResponse {
 	match request {
-		TransportRequest::Call(GlorpCall::SessionShutdown) => {
-			stop.store(true, Ordering::SeqCst);
-			TransportResponse::Call(Box::new(Ok(GlorpCallResult::SessionShutdown(OkView { ok: true }))))
-		}
-		TransportRequest::Call(call) => TransportResponse::Call(Box::new(host.call(call))),
+		TransportRequest::Call(call) => TransportResponse::Call(Box::new(dispatch_public_call(call, host, stop))),
 	}
 }
 
@@ -147,5 +151,33 @@ fn dispatch_gui_request(request: GuiTransportRequest, host: &mut RuntimeHost) ->
 	match request {
 		GuiTransportRequest::ExecuteGui(command) => GuiTransportResponse::ExecuteGui(host.execute_gui(command)),
 		GuiTransportRequest::GuiFrame => GuiTransportResponse::GuiFrame(Box::new(Ok(host.gui_transport_frame()))),
+	}
+}
+
+fn dispatch_public_call(
+	call: GlorpCall, host: &mut RuntimeHost, stop: &Arc<AtomicBool>,
+) -> Result<GlorpCallResult, GlorpError> {
+	let Some(spec) = call_spec(&call.id) else {
+		return Err(GlorpError::not_found(format!("unknown call `{}`", call.id)));
+	};
+
+	match spec.route {
+		GlorpCallRoute::Runtime => host.call(call),
+		GlorpCallRoute::Transport => dispatch_transport_call(&mut ServerTransportDispatcher { stop }, call),
+		GlorpCallRoute::Client => Err(GlorpError::validation(
+			None,
+			format!("call `{}` must be handled by the client route", spec.id),
+		)),
+	}
+}
+
+struct ServerTransportDispatcher<'a> {
+	stop: &'a Arc<AtomicBool>,
+}
+
+impl TransportCallDispatcher for ServerTransportDispatcher<'_> {
+	fn session_shutdown(&mut self, _input: ()) -> Result<OkView, GlorpError> {
+		self.stop.store(true, Ordering::SeqCst);
+		Ok(OkView { ok: true })
 	}
 }

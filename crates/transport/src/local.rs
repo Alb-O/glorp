@@ -1,5 +1,5 @@
 use {
-	glorp_api::{GlorpCall, GlorpCallResult, GlorpError, GlorpHost},
+	glorp_api::{GlorpCall, GlorpCallResult, GlorpCaller, GlorpError},
 	glorp_runtime::RuntimeHost,
 	std::sync::{Arc, Mutex},
 };
@@ -36,7 +36,7 @@ impl LocalClient {
 	}
 }
 
-impl GlorpHost for LocalClient {
+impl GlorpCaller for LocalClient {
 	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
 		self.with_host(|host| host.call(call))
 	}

@@ -6,8 +6,9 @@ use {
 	},
 	glorp_api::{
 		ConfigAssignment, ConfigPath, EditorHistoryCommand, EditorModeCommand, EditorMotion, GlorpCall,
-		GlorpCallResult, GlorpCallRoute, GlorpConfig, GlorpDelta, GlorpError, GlorpOutcome, GlorpRevisions,
-		GlorpSubscription, GlorpTxn, TokenAckView, call_spec,
+		GlorpCallResult, GlorpConfig, GlorpDelta, GlorpError, GlorpOutcome, GlorpRevisions, GlorpSubscription,
+		GlorpTxn, RuntimeCallDispatcher, TokenAckView, decode_call_output, dispatch_runtime_call,
+		transactional_call_spec,
 	},
 	glorp_editor::{
 		EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion as EngineMotion,
@@ -16,57 +17,7 @@ use {
 };
 
 pub fn call(runtime: &mut GlorpRuntime, glorp_call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
-	Ok(match glorp_call {
-		GlorpCall::Txn(txn) => GlorpCallResult::Txn(execute_txn(runtime, txn)?),
-		GlorpCall::ConfigSet(input) => GlorpCallResult::ConfigSet(execute_config_set(runtime, input)?),
-		GlorpCall::ConfigReset(input) => GlorpCallResult::ConfigReset(execute_config_reset(runtime, input)?),
-		GlorpCall::ConfigPatch(input) => GlorpCallResult::ConfigPatch(execute_config_patch(runtime, input)?),
-		GlorpCall::ConfigReload => GlorpCallResult::ConfigReload(execute_config_reload(runtime)?),
-		GlorpCall::ConfigPersist => GlorpCallResult::ConfigPersist(execute_config_persist(runtime)?),
-		GlorpCall::DocumentReplace(input) => {
-			GlorpCallResult::DocumentReplace(publish_session(runtime, SessionRequest::ReplaceDocument(input.text)))
-		}
-		GlorpCall::EditorMotion(input) => GlorpCallResult::EditorMotion(execute_editor_motion(runtime, input.motion)),
-		GlorpCall::EditorMode(input) => GlorpCallResult::EditorMode(execute_editor_mode(runtime, input.mode)),
-		GlorpCall::EditorInsert(input) => {
-			GlorpCallResult::EditorInsert(execute_editor_edit(runtime, EditorEditIntent::InsertText(input.text)))
-		}
-		GlorpCall::EditorBackspace => {
-			GlorpCallResult::EditorBackspace(execute_editor_edit(runtime, EditorEditIntent::Backspace))
-		}
-		GlorpCall::EditorDeleteForward => {
-			GlorpCallResult::EditorDeleteForward(execute_editor_edit(runtime, EditorEditIntent::DeleteForward))
-		}
-		GlorpCall::EditorDeleteSelection => {
-			GlorpCallResult::EditorDeleteSelection(execute_editor_edit(runtime, EditorEditIntent::DeleteSelection))
-		}
-		GlorpCall::EditorHistory(input) => {
-			GlorpCallResult::EditorHistory(execute_editor_history(runtime, input.action))
-		}
-		GlorpCall::Schema => GlorpCallResult::Schema(glorp_api::glorp_schema()),
-		GlorpCall::Config => GlorpCallResult::Config(runtime.state.config.clone()),
-		GlorpCall::DocumentText => GlorpCallResult::DocumentText(runtime.state.session.text().into()),
-		GlorpCall::Editor => GlorpCallResult::Editor(project::editor_view_from_state(&runtime.state)),
-		GlorpCall::Capabilities => GlorpCallResult::Capabilities(capabilities()),
-		GlorpCall::EventsSubscribe => {
-			let token = runtime.subscriptions.subscribe(GlorpSubscription::Changes);
-			GlorpCallResult::EventsSubscribe(glorp_api::GlorpEventStreamView {
-				token,
-				subscription: "changes".to_owned(),
-			})
-		}
-		GlorpCall::EventsNext(input) => GlorpCallResult::EventsNext(runtime.subscriptions.next_event(input.token)?),
-		GlorpCall::EventsUnsubscribe(input) => {
-			runtime.subscriptions.unsubscribe(input.token)?;
-			GlorpCallResult::EventsUnsubscribe(TokenAckView {
-				ok: true,
-				token: input.token,
-			})
-		}
-		GlorpCall::SessionAttach => return Err(unsupported_route("session-attach", GlorpCallRoute::Client)),
-		GlorpCall::SessionShutdown => return Err(unsupported_route("session-shutdown", GlorpCallRoute::Transport)),
-		GlorpCall::ConfigValidate(_) => return Err(unsupported_route("config-validate", GlorpCallRoute::Client)),
-	})
+	dispatch_runtime_call(runtime, glorp_call)
 }
 
 pub fn execute_gui(runtime: &mut GlorpRuntime, command: GuiCommand) -> Result<(), GlorpError> {
@@ -120,8 +71,11 @@ fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome
 	txn.calls
 		.into_iter()
 		.try_fold(GlorpOutcome::default(), |mut accumulated, nested_call| {
-			validate_transaction_call(&nested_call)?;
-			merge_outcome(&mut accumulated, call_outcome(call(runtime, nested_call)?)?);
+			transactional_call_spec(&nested_call)?;
+			merge_outcome(
+				&mut accumulated,
+				call_outcome(dispatch_runtime_call(runtime, nested_call)?)?,
+			);
 			Ok(accumulated)
 		})
 		.inspect_err(|_| {
@@ -130,32 +84,10 @@ fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome
 		})
 }
 
-fn validate_transaction_call(call: &GlorpCall) -> Result<(), GlorpError> {
-	if matches!(call, GlorpCall::Txn(_)) {
-		return Err(GlorpError::validation(None, "nested transactions are not supported"));
-	}
-
-	let Some(spec) = call_spec(call.id()) else {
-		return Err(GlorpError::not_found(format!("unknown call `{}`", call.id())));
-	};
-
-	if !spec.transactional {
-		return Err(GlorpError::validation(
-			None,
-			format!("call `{}` is not allowed inside `txn`", spec.id),
-		));
-	}
-
-	Ok(())
-}
-
 fn call_outcome(result: GlorpCallResult) -> Result<GlorpOutcome, GlorpError> {
-	result.into_outcome().map_err(|other| {
-		GlorpError::internal(format!(
-			"transactional call returned non-outcome payload for `{}`",
-			other.id()
-		))
-	})
+	let id = result.id.clone();
+	decode_call_output::<GlorpOutcome>(&id, &result.output)
+		.map_err(|_| GlorpError::internal(format!("transactional call returned non-outcome payload for `{}`", id)))
 }
 
 fn capabilities() -> glorp_api::GlorpCapabilities {
@@ -164,13 +96,6 @@ fn capabilities() -> glorp_api::GlorpCapabilities {
 		subscriptions: true,
 		transports: vec!["local".into(), "ipc".into()],
 	}
-}
-
-fn unsupported_route(id: &str, route: GlorpCallRoute) -> GlorpError {
-	GlorpError::validation(
-		None,
-		format!("call `{id}` must be handled by the {route:?} route").to_lowercase(),
-	)
 }
 
 fn execute_config_set(runtime: &mut GlorpRuntime, input: ConfigAssignment) -> Result<GlorpOutcome, GlorpError> {
@@ -361,5 +286,103 @@ fn flatten_patch_into(path: &str, value: &glorp_api::GlorpValue) -> Result<Vec<C
 			path: path.to_owned(),
 			value: value.clone(),
 		}]),
+	}
+}
+
+impl RuntimeCallDispatcher for GlorpRuntime {
+	fn txn(&mut self, input: GlorpTxn) -> Result<GlorpOutcome, GlorpError> {
+		execute_txn(self, input)
+	}
+
+	fn config_set(&mut self, input: ConfigAssignment) -> Result<GlorpOutcome, GlorpError> {
+		execute_config_set(self, input)
+	}
+
+	fn config_reset(&mut self, input: glorp_api::ConfigPathInput) -> Result<GlorpOutcome, GlorpError> {
+		execute_config_reset(self, input)
+	}
+
+	fn config_patch(&mut self, input: glorp_api::ConfigPatchInput) -> Result<GlorpOutcome, GlorpError> {
+		execute_config_patch(self, input)
+	}
+
+	fn config_reload(&mut self, _input: ()) -> Result<GlorpOutcome, GlorpError> {
+		execute_config_reload(self)
+	}
+
+	fn config_persist(&mut self, _input: ()) -> Result<GlorpOutcome, GlorpError> {
+		execute_config_persist(self)
+	}
+
+	fn document_replace(&mut self, input: glorp_api::TextInput) -> Result<GlorpOutcome, GlorpError> {
+		Ok(publish_session(self, SessionRequest::ReplaceDocument(input.text)))
+	}
+
+	fn editor_motion(&mut self, input: glorp_api::EditorMotionInput) -> Result<GlorpOutcome, GlorpError> {
+		Ok(execute_editor_motion(self, input.motion))
+	}
+
+	fn editor_mode(&mut self, input: glorp_api::EditorModeInput) -> Result<GlorpOutcome, GlorpError> {
+		Ok(execute_editor_mode(self, input.mode))
+	}
+
+	fn editor_insert(&mut self, input: glorp_api::TextInput) -> Result<GlorpOutcome, GlorpError> {
+		Ok(execute_editor_edit(self, EditorEditIntent::InsertText(input.text)))
+	}
+
+	fn editor_backspace(&mut self, _input: ()) -> Result<GlorpOutcome, GlorpError> {
+		Ok(execute_editor_edit(self, EditorEditIntent::Backspace))
+	}
+
+	fn editor_delete_forward(&mut self, _input: ()) -> Result<GlorpOutcome, GlorpError> {
+		Ok(execute_editor_edit(self, EditorEditIntent::DeleteForward))
+	}
+
+	fn editor_delete_selection(&mut self, _input: ()) -> Result<GlorpOutcome, GlorpError> {
+		Ok(execute_editor_edit(self, EditorEditIntent::DeleteSelection))
+	}
+
+	fn editor_history(&mut self, input: glorp_api::EditorHistoryInput) -> Result<GlorpOutcome, GlorpError> {
+		Ok(execute_editor_history(self, input.action))
+	}
+
+	fn schema(&mut self, _input: ()) -> Result<glorp_api::GlorpSchema, GlorpError> {
+		Ok(glorp_api::glorp_schema())
+	}
+
+	fn config(&mut self, _input: ()) -> Result<GlorpConfig, GlorpError> {
+		Ok(self.state.config.clone())
+	}
+
+	fn document_text(&mut self, _input: ()) -> Result<String, GlorpError> {
+		Ok(self.state.session.text().into())
+	}
+
+	fn editor(&mut self, _input: ()) -> Result<glorp_api::EditorStateView, GlorpError> {
+		Ok(project::editor_view_from_state(&self.state))
+	}
+
+	fn capabilities(&mut self, _input: ()) -> Result<glorp_api::GlorpCapabilities, GlorpError> {
+		Ok(capabilities())
+	}
+
+	fn events_subscribe(&mut self, _input: ()) -> Result<glorp_api::GlorpEventStreamView, GlorpError> {
+		let token = self.subscriptions.subscribe(GlorpSubscription::Changes);
+		Ok(glorp_api::GlorpEventStreamView {
+			token,
+			subscription: "changes".to_owned(),
+		})
+	}
+
+	fn events_next(&mut self, input: glorp_api::StreamTokenInput) -> Result<Option<glorp_api::GlorpEvent>, GlorpError> {
+		self.subscriptions.next_event(input.token)
+	}
+
+	fn events_unsubscribe(&mut self, input: glorp_api::StreamTokenInput) -> Result<TokenAckView, GlorpError> {
+		self.subscriptions.unsubscribe(input.token)?;
+		Ok(TokenAckView {
+			ok: true,
+			token: input.token,
+		})
 	}
 }

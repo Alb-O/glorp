@@ -322,45 +322,11 @@ pub fn glorp_schema() -> GlorpSchema {
 	}
 
 	GlorpSchema {
-		version: 5,
+		version: 6,
 		types: registry.into_types(),
 		calls,
 		events,
 	}
-}
-
-fn call_variants(
-	registry: &mut TypeRegistry, filter: impl Fn(&GlorpCallSpec) -> bool,
-	payload: impl Fn(&GlorpCallSpec) -> Option<TypeRef>,
-) -> Vec<TaggedVariantSchema> {
-	crate::call_specs()
-		.iter()
-		.filter(|call| filter(call))
-		.map(|call| {
-			if let Some(input) = call.input.as_ref() {
-				register_type_ref(registry, input);
-			}
-			TaggedVariantSchema {
-				name: call.id.clone(),
-				docs: call.docs.clone(),
-				payload: payload(call),
-			}
-		})
-		.collect()
-}
-
-fn call_result_variants(registry: &mut TypeRegistry) -> Vec<TaggedVariantSchema> {
-	crate::call_specs()
-		.iter()
-		.map(|call| {
-			register_type_ref(registry, &call.output);
-			TaggedVariantSchema {
-				name: call.id.clone(),
-				docs: call.docs.clone(),
-				payload: Some(call.output.clone()),
-			}
-		})
-		.collect()
 }
 
 pub fn event_schemas() -> Vec<EventSchema> {
@@ -796,10 +762,18 @@ impl SchemaType for crate::GlorpCall {
 	}
 
 	fn register(registry: &mut TypeRegistry) {
-		registry.register_named("GlorpCall", "Typed public calls.", |registry| TypeSchema::TaggedUnion {
-			tag: "op".to_owned(),
-			content: "input".to_owned(),
-			variants: call_variants(registry, |_| true, |call| call.input.clone()),
+		registry.register_named("GlorpCall", "Raw public call envelope.", |registry| {
+			TypeSchema::Record {
+				fields: vec![
+					field::<String>(registry, "id", "Call identifier."),
+					FieldSchema {
+						name: "input".to_owned(),
+						docs: "Optional raw input payload.".to_owned(),
+						ty: Option::<crate::GlorpValue>::type_ref(),
+						required: true,
+					},
+				],
+			}
 		});
 	}
 }
@@ -810,11 +784,12 @@ impl SchemaType for crate::GlorpCallResult {
 	}
 
 	fn register(registry: &mut TypeRegistry) {
-		registry.register_named("GlorpCallResult", "Typed public call results.", |registry| {
-			TypeSchema::TaggedUnion {
-				tag: "op".to_owned(),
-				content: "output".to_owned(),
-				variants: call_result_variants(registry),
+		registry.register_named("GlorpCallResult", "Raw public call result envelope.", |registry| {
+			TypeSchema::Record {
+				fields: vec![
+					field::<String>(registry, "id", "Call identifier."),
+					field::<crate::GlorpValue>(registry, "output", "Raw output payload."),
+				],
 			}
 		});
 	}

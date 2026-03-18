@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "types": [
     {
       "name": "BuiltinType",
@@ -512,6 +512,216 @@
       }
     },
     {
+      "name": "GlorpCall",
+      "docs": "Raw public call envelope.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "id",
+            "docs": "Call identifier.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "input",
+            "docs": "Optional raw input payload.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "builtin",
+                "value": "any"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpTxn",
+      "docs": "Multiple mutation calls applied atomically.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "calls",
+            "docs": "Ordered mutation calls.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "GlorpCall"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpDelta",
+      "docs": "Boolean change flags.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "text_changed",
+            "docs": "Document text changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "view_changed",
+            "docs": "Editor view changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "selection_changed",
+            "docs": "Selection changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "mode_changed",
+            "docs": "Mode changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "config_changed",
+            "docs": "Config changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpRevisions",
+      "docs": "Runtime revisions.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "editor",
+            "docs": "Editor revision.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "config",
+            "docs": "Config revision.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpWarning",
+      "docs": "Runtime warning payload.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "code",
+            "docs": "Warning code.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "message",
+            "docs": "Warning message.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpOutcome",
+      "docs": "Revisioned outcome for a successful command.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "delta",
+            "docs": "Change flags.",
+            "ty": {
+              "kind": "named",
+              "value": "GlorpDelta"
+            },
+            "required": true
+          },
+          {
+            "name": "revisions",
+            "docs": "Post-command revisions.",
+            "ty": {
+              "kind": "named",
+              "value": "GlorpRevisions"
+            },
+            "required": true
+          },
+          {
+            "name": "changed_config_paths",
+            "docs": "Config paths changed by the command.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "builtin",
+                "value": "string"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "warnings",
+            "docs": "Warnings emitted while handling the operation.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "GlorpWarning"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
       "name": "ConfigAssignment",
       "docs": "One path-based config assignment.",
       "kind": {
@@ -711,376 +921,6 @@
             "ty": {
               "kind": "named",
               "value": "EditorHistoryCommand"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "StreamTokenInput",
-      "docs": "Subscription token input.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "token",
-            "docs": "Subscription token.",
-            "ty": {
-              "kind": "builtin",
-              "value": "int"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "GlorpCall",
-      "docs": "Typed public calls.",
-      "kind": {
-        "kind": "tagged-union",
-        "tag": "op",
-        "content": "input",
-        "variants": [
-          {
-            "name": "txn",
-            "docs": "Apply multiple mutation calls atomically.",
-            "payload": {
-              "kind": "named",
-              "value": "GlorpTxn"
-            }
-          },
-          {
-            "name": "config-set",
-            "docs": "Set one config field.",
-            "payload": {
-              "kind": "named",
-              "value": "ConfigAssignment"
-            }
-          },
-          {
-            "name": "config-reset",
-            "docs": "Reset one config field to its default.",
-            "payload": {
-              "kind": "named",
-              "value": "ConfigPathInput"
-            }
-          },
-          {
-            "name": "config-patch",
-            "docs": "Patch config with a record.",
-            "payload": {
-              "kind": "named",
-              "value": "ConfigPatchInput"
-            }
-          },
-          {
-            "name": "config-reload",
-            "docs": "Reload the durable config file.",
-            "payload": null
-          },
-          {
-            "name": "config-persist",
-            "docs": "Persist the effective config file.",
-            "payload": null
-          },
-          {
-            "name": "document-replace",
-            "docs": "Replace the document text.",
-            "payload": {
-              "kind": "named",
-              "value": "TextInput"
-            }
-          },
-          {
-            "name": "editor-motion",
-            "docs": "Apply a typed editor motion.",
-            "payload": {
-              "kind": "named",
-              "value": "EditorMotionInput"
-            }
-          },
-          {
-            "name": "editor-mode",
-            "docs": "Apply a typed editor mode change.",
-            "payload": {
-              "kind": "named",
-              "value": "EditorModeInput"
-            }
-          },
-          {
-            "name": "editor-insert",
-            "docs": "Insert text at the current selection.",
-            "payload": {
-              "kind": "named",
-              "value": "TextInput"
-            }
-          },
-          {
-            "name": "editor-backspace",
-            "docs": "Delete backward.",
-            "payload": null
-          },
-          {
-            "name": "editor-delete-forward",
-            "docs": "Delete forward.",
-            "payload": null
-          },
-          {
-            "name": "editor-delete-selection",
-            "docs": "Delete the current selection.",
-            "payload": null
-          },
-          {
-            "name": "editor-history",
-            "docs": "Apply editor history navigation.",
-            "payload": {
-              "kind": "named",
-              "value": "EditorHistoryInput"
-            }
-          },
-          {
-            "name": "schema",
-            "docs": "Return the protocol reflection schema.",
-            "payload": null
-          },
-          {
-            "name": "config",
-            "docs": "Return the effective runtime config.",
-            "payload": null
-          },
-          {
-            "name": "document-text",
-            "docs": "Return the current document text.",
-            "payload": null
-          },
-          {
-            "name": "editor",
-            "docs": "Return the current editor read model.",
-            "payload": null
-          },
-          {
-            "name": "capabilities",
-            "docs": "Return stable runtime capability flags.",
-            "payload": null
-          },
-          {
-            "name": "session-attach",
-            "docs": "Resolve and validate a live Glorp session.",
-            "payload": null
-          },
-          {
-            "name": "session-shutdown",
-            "docs": "Stop the live shared runtime for the resolved session.",
-            "payload": null
-          },
-          {
-            "name": "config-validate",
-            "docs": "Validate a config value without mutating runtime state.",
-            "payload": {
-              "kind": "named",
-              "value": "ConfigAssignment"
-            }
-          },
-          {
-            "name": "events-subscribe",
-            "docs": "Subscribe to runtime change events.",
-            "payload": null
-          },
-          {
-            "name": "events-next",
-            "docs": "Poll the next event for a subscription token.",
-            "payload": {
-              "kind": "named",
-              "value": "StreamTokenInput"
-            }
-          },
-          {
-            "name": "events-unsubscribe",
-            "docs": "Release a subscription token.",
-            "payload": {
-              "kind": "named",
-              "value": "StreamTokenInput"
-            }
-          }
-        ]
-      }
-    },
-    {
-      "name": "GlorpTxn",
-      "docs": "Multiple mutation calls applied atomically.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "calls",
-            "docs": "Ordered mutation calls.",
-            "ty": {
-              "kind": "list",
-              "value": {
-                "kind": "named",
-                "value": "GlorpCall"
-              }
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "GlorpDelta",
-      "docs": "Boolean change flags.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "text_changed",
-            "docs": "Document text changed.",
-            "ty": {
-              "kind": "builtin",
-              "value": "bool"
-            },
-            "required": true
-          },
-          {
-            "name": "view_changed",
-            "docs": "Editor view changed.",
-            "ty": {
-              "kind": "builtin",
-              "value": "bool"
-            },
-            "required": true
-          },
-          {
-            "name": "selection_changed",
-            "docs": "Selection changed.",
-            "ty": {
-              "kind": "builtin",
-              "value": "bool"
-            },
-            "required": true
-          },
-          {
-            "name": "mode_changed",
-            "docs": "Mode changed.",
-            "ty": {
-              "kind": "builtin",
-              "value": "bool"
-            },
-            "required": true
-          },
-          {
-            "name": "config_changed",
-            "docs": "Config changed.",
-            "ty": {
-              "kind": "builtin",
-              "value": "bool"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "GlorpRevisions",
-      "docs": "Runtime revisions.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "editor",
-            "docs": "Editor revision.",
-            "ty": {
-              "kind": "builtin",
-              "value": "int"
-            },
-            "required": true
-          },
-          {
-            "name": "config",
-            "docs": "Config revision.",
-            "ty": {
-              "kind": "builtin",
-              "value": "int"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "GlorpWarning",
-      "docs": "Runtime warning payload.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "code",
-            "docs": "Warning code.",
-            "ty": {
-              "kind": "builtin",
-              "value": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "message",
-            "docs": "Warning message.",
-            "ty": {
-              "kind": "builtin",
-              "value": "string"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "GlorpOutcome",
-      "docs": "Revisioned outcome for a successful command.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "delta",
-            "docs": "Change flags.",
-            "ty": {
-              "kind": "named",
-              "value": "GlorpDelta"
-            },
-            "required": true
-          },
-          {
-            "name": "revisions",
-            "docs": "Post-command revisions.",
-            "ty": {
-              "kind": "named",
-              "value": "GlorpRevisions"
-            },
-            "required": true
-          },
-          {
-            "name": "changed_config_paths",
-            "docs": "Config paths changed by the command.",
-            "ty": {
-              "kind": "list",
-              "value": {
-                "kind": "builtin",
-                "value": "string"
-              }
-            },
-            "required": true
-          },
-          {
-            "name": "warnings",
-            "docs": "Warnings emitted while handling the operation.",
-            "ty": {
-              "kind": "list",
-              "value": {
-                "kind": "named",
-                "value": "GlorpWarning"
-              }
             },
             "required": true
           }
@@ -1657,6 +1497,24 @@
             "ty": {
               "kind": "builtin",
               "value": "string"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "StreamTokenInput",
+      "docs": "Subscription token input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "token",
+            "docs": "Subscription token.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
             },
             "required": true
           }

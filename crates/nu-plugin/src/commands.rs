@@ -1,7 +1,8 @@
 use {
 	crate::plugin::GlorpPlugin,
 	glorp_api::{
-		GlorpCall, GlorpCallResult, GlorpCallRoute, GlorpError, GlorpHost, GlorpValue, OkView, build_call, call_spec,
+		ClientCallDispatcher, GlorpCallDescriptor, GlorpCallResult, GlorpCallRoute, GlorpCaller, GlorpError,
+		GlorpValue, OkView, build_call, call_spec, dispatch_client_call,
 	},
 	glorp_transport::{IpcClient, default_socket_path, socket_is_live},
 	nu_plugin::{EvaluatedCall, PluginCommand},
@@ -63,12 +64,14 @@ impl PluginCommand for OperationCommand {
 		let operation: String = call.req(0)?;
 		let input = call.opt::<Value>(1)?.map(glorp_value).transpose()?;
 		let glorp_call = build_call(&operation, input.as_ref()).map_err(to_labeled_error)?;
-		let Some(spec) = call_spec(glorp_call.id()) else {
-			return Err(LabeledError::new(format!("unknown call `{}`", glorp_call.id())));
+		let Some(spec) = call_spec(&glorp_call.id) else {
+			return Err(LabeledError::new(format!("unknown call `{}`", glorp_call.id)));
 		};
 
 		let result = match spec.route {
-			GlorpCallRoute::Client => run_local_call(glorp_call, call)?,
+			GlorpCallRoute::Client => {
+				dispatch_client_call(&mut PluginClientDispatcher { call }, glorp_call).map_err(to_labeled_error)?
+			}
 			GlorpCallRoute::Runtime | GlorpCallRoute::Transport => {
 				let mut client = resolve_session(call)?.client;
 				client.call(glorp_call).map_err(to_labeled_error)?
@@ -76,28 +79,6 @@ impl PluginCommand for OperationCommand {
 		};
 
 		Ok(value_pipeline(call_to_value(result, span)))
-	}
-}
-
-fn run_local_call(glorp_call: GlorpCall, call: &EvaluatedCall) -> Result<GlorpCallResult, LabeledError> {
-	match glorp_call {
-		GlorpCall::ConfigValidate(input) => {
-			glorp_api::GlorpConfig::validate_path(&input.path, &input.value).map_err(to_labeled_error)?;
-			Ok(GlorpCallResult::ConfigValidate(OkView { ok: true }))
-		}
-		GlorpCall::SessionAttach => {
-			let mut resolved = resolve_session(call)?;
-			let capabilities = capabilities(&mut resolved.client)?;
-			Ok(GlorpCallResult::SessionAttach(glorp_api::GlorpSessionView {
-				socket: resolved.socket.display().to_string(),
-				repo_root: Some(resolved.repo_root.display().to_string()),
-				capabilities,
-			}))
-		}
-		other => Err(LabeledError::new(format!(
-			"call `{}` is marked client-local but is not implemented locally",
-			other.id()
-		))),
 	}
 }
 
@@ -140,13 +121,8 @@ fn ensure_session(repo_root: PathBuf, socket: PathBuf) -> Result<ResolvedSession
 	})
 }
 
-fn capabilities(client: &mut impl GlorpHost) -> Result<glorp_api::GlorpCapabilities, LabeledError> {
-	let GlorpCallResult::Capabilities(capabilities) = client.call(GlorpCall::Capabilities).map_err(to_labeled_error)?
-	else {
-		return Err(LabeledError::new("unexpected capabilities response"));
-	};
-
-	Ok(capabilities)
+fn capabilities(client: &mut impl GlorpCaller) -> Result<glorp_api::GlorpCapabilities, LabeledError> {
+	glorp_api::calls::Capabilities::call(client, ()).map_err(to_labeled_error)
 }
 
 fn spawn_host(repo_root: &Path, socket: &Path) -> Result<(), LabeledError> {
@@ -230,7 +206,7 @@ const fn value_pipeline(value: Value) -> PipelineData {
 }
 
 fn call_to_value(result: GlorpCallResult, span: Span) -> Value {
-	json_to_nu_value(result.into_output_value().unwrap_or(JsonValue::Null), span)
+	json_to_nu_value((&result.output).into(), span)
 }
 
 fn glorp_value(value: Value) -> Result<GlorpValue, LabeledError> {
@@ -255,6 +231,27 @@ fn glorp_value(value: Value) -> Result<GlorpValue, LabeledError> {
 			"unsupported value type `{}`",
 			other.get_type()
 		))),
+	}
+}
+
+struct PluginClientDispatcher<'a> {
+	call: &'a EvaluatedCall,
+}
+
+impl ClientCallDispatcher for PluginClientDispatcher<'_> {
+	fn session_attach(&mut self, _input: ()) -> Result<glorp_api::GlorpSessionView, GlorpError> {
+		let mut resolved = resolve_session(self.call).map_err(|error| GlorpError::transport(error.to_string()))?;
+		let capabilities = glorp_api::calls::Capabilities::call(&mut resolved.client, ())?;
+		Ok(glorp_api::GlorpSessionView {
+			socket: resolved.socket.display().to_string(),
+			repo_root: Some(resolved.repo_root.display().to_string()),
+			capabilities,
+		})
+	}
+
+	fn config_validate(&mut self, input: glorp_api::ConfigAssignment) -> Result<OkView, GlorpError> {
+		glorp_api::GlorpConfig::validate_path(&input.path, &input.value)?;
+		Ok(OkView { ok: true })
 	}
 }
 

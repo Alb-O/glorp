@@ -4,6 +4,11 @@ Glorp now exposes one flat call protocol:
 
 `GlorpCall` -> `GlorpCallResult` / `GlorpEvent`
 
+The public wire format is raw-envelope based:
+
+- `GlorpCall { id: String, input: Option<GlorpValue> }`
+- `GlorpCallResult { id: String, output: GlorpValue }`
+
 Transactions are typed mutation batches:
 
 `GlorpTxn { calls: Vec<GlorpCall> }`
