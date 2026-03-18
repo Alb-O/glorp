@@ -542,13 +542,12 @@ fn glorp_value(value: Value) -> Result<GlorpValue, LabeledError> {
 			.map(glorp_value)
 			.collect::<Result<Vec<_>, _>>()
 			.map(GlorpValue::List),
-		Value::Record { val, .. } => {
-			let mut record = std::collections::BTreeMap::new();
-			for (key, value) in val.into_owned() {
-				record.insert(key, glorp_value(value)?);
-			}
-			Ok(GlorpValue::Record(record))
-		}
+		Value::Record { val, .. } => val
+			.into_owned()
+			.into_iter()
+			.map(|(key, value)| glorp_value(value).map(|value| (key, value)))
+			.collect::<Result<_, _>>()
+			.map(GlorpValue::Record),
 		other => Err(LabeledError::new(format!(
 			"unsupported value type `{}`",
 			other.get_type()
@@ -558,14 +557,13 @@ fn glorp_value(value: Value) -> Result<GlorpValue, LabeledError> {
 
 fn flatten_record(prefix: Option<&str>, value: GlorpValue) -> Result<Vec<ConfigAssignment>, LabeledError> {
 	match value {
-		GlorpValue::Record(fields) => {
-			let mut assignments = Vec::new();
-			for (key, value) in fields {
-				let path = prefix.map(|prefix| format!("{prefix}.{key}")).unwrap_or(key);
+		GlorpValue::Record(fields) => fields
+			.into_iter()
+			.try_fold(Vec::new(), |mut assignments, (key, value)| {
+				let path = prefix.map_or(key.clone(), |prefix| format!("{prefix}.{key}"));
 				assignments.extend(flatten_record(Some(&path), value)?);
-			}
-			Ok(assignments)
-		}
+				Ok(assignments)
+			}),
 		value => Ok(vec![ConfigAssignment {
 			path: prefix.unwrap_or_default().to_owned(),
 			value,
@@ -644,25 +642,23 @@ fn json_to_nu_value(value: JsonValue, span: Span) -> Value {
 	match value {
 		JsonValue::Null => Value::nothing(span),
 		JsonValue::Bool(value) => Value::bool(value, span),
-		JsonValue::Number(number) => {
-			if let Some(value) = number.as_i64() {
-				Value::int(value, span)
-			} else {
-				Value::float(number.as_f64().unwrap_or_default(), span)
-			}
-		}
+		JsonValue::Number(number) => number.as_i64().map_or_else(
+			|| Value::float(number.as_f64().unwrap_or_default(), span),
+			|value| Value::int(value, span),
+		),
 		JsonValue::String(value) => Value::string(value, span),
 		JsonValue::Array(values) => Value::list(
 			values.into_iter().map(|value| json_to_nu_value(value, span)).collect(),
 			span,
 		),
-		JsonValue::Object(values) => {
-			let mut record = Record::new();
-			for (key, value) in values {
-				record.push(key, json_to_nu_value(value, span));
-			}
-			Value::record(record, span)
-		}
+		JsonValue::Object(values) => Value::record(
+			Record::from_iter(
+				values
+					.into_iter()
+					.map(|(key, value)| (key, json_to_nu_value(value, span))),
+			),
+			span,
+		),
 	}
 }
 

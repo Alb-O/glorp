@@ -6,7 +6,8 @@ pub struct GuiPresentation {
 }
 
 impl GuiPresentation {
-	pub fn active_tab(&self) -> glorp_api::SidebarTab {
+	#[must_use]
+	pub const fn active_tab(&self) -> glorp_api::SidebarTab {
 		self.snapshot.ui.active_tab
 	}
 }

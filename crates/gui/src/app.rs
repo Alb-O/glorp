@@ -12,14 +12,14 @@ impl<H> GlorpGui<H>
 where
 	H: GlorpHost,
 {
-	pub fn new(host: H) -> Self {
+	pub const fn new(host: H) -> Self {
 		Self {
 			host,
 			theme: GuiTheme::Classic,
 		}
 	}
 
-	pub fn theme(&self) -> GuiTheme {
+	pub const fn theme(&self) -> GuiTheme {
 		self.theme
 	}
 
@@ -30,13 +30,15 @@ where
 	}
 
 	pub fn presentation(&mut self) -> Result<GuiPresentation, GlorpError> {
-		match self.host.query(GlorpQuery::Snapshot {
+		let GlorpQueryResult::Snapshot(snapshot) = self.host.query(GlorpQuery::Snapshot {
 			scene: SceneLevel::IfReady,
 			include_document_text: false,
-		})? {
-			GlorpQueryResult::Snapshot(snapshot) => Ok(GuiPresentation { snapshot }),
-			_ => Err(GlorpError::internal("unexpected snapshot response")),
-		}
+		})?
+		else {
+			return Err(GlorpError::internal("unexpected snapshot response"));
+		};
+
+		Ok(GuiPresentation { snapshot })
 	}
 
 	pub fn into_host(self) -> H {

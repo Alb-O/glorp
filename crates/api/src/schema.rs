@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{ConfigPath, GlorpValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct GlorpSchema {
@@ -10,7 +10,7 @@ pub struct GlorpSchema {
 	pub events: Vec<EventSchema>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct NamedTypeSchema {
 	pub name: String,
 	pub docs: String,
@@ -26,7 +26,7 @@ pub struct ConfigFieldSchema {
 	pub mutable: bool,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct CommandSchema {
 	pub path: String,
 	pub docs: String,
@@ -34,14 +34,14 @@ pub struct CommandSchema {
 	pub output: TypeRef,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct QuerySchema {
 	pub path: String,
 	pub docs: String,
 	pub output: TypeRef,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct EventSchema {
 	pub path: String,
 	pub docs: String,
@@ -63,7 +63,7 @@ pub enum BuiltinType {
 	String,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum TypeSchema {
 	Enum { variants: Vec<EnumVariantSchema> },
 	Record { fields: Vec<FieldSchema> },
@@ -71,7 +71,7 @@ pub enum TypeSchema {
 	Option { item: TypeRef },
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct FieldSchema {
 	pub name: String,
 	pub docs: String,
@@ -79,7 +79,7 @@ pub struct FieldSchema {
 	pub required: bool,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct EnumVariantSchema {
 	pub name: String,
 	pub docs: String,
@@ -997,9 +997,9 @@ fn enum_type(name: &str, docs: &str, variants: &[(&str, &str)]) -> NamedTypeSche
 		kind: TypeSchema::Enum {
 			variants: variants
 				.iter()
-				.map(|(name, docs)| EnumVariantSchema {
-					name: (*name).to_owned(),
-					docs: (*docs).to_owned(),
+				.map(|&(name, docs)| EnumVariantSchema {
+					name: name.to_owned(),
+					docs: docs.to_owned(),
 				})
 				.collect(),
 		},

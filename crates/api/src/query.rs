@@ -90,7 +90,7 @@ pub struct SceneStateView {
 	pub cluster_count: usize,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct InspectStateView {
 	pub hovered_target: Option<CanvasTarget>,
 	pub selected_target: Option<CanvasTarget>,
@@ -106,7 +106,7 @@ pub struct SelectionStateView {
 	pub viewport_target: Option<LayoutRectView>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct InspectDetailsView {
 	pub hovered_target: Option<CanvasTarget>,
 	pub selected_target: Option<CanvasTarget>,
@@ -116,7 +116,7 @@ pub struct InspectDetailsView {
 	pub scene: Option<InspectSceneView>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct InspectSceneView {
 	pub revision: u64,
 	pub run_count: usize,
@@ -185,7 +185,7 @@ pub struct GlorpEventStreamView {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct ExampleView {
 	pub font: FontChoice,
 	pub shaping: ShapingChoice,

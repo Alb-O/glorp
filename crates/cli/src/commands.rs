@@ -405,14 +405,11 @@ fn parse_value(input: &str) -> GlorpValue {
 
 fn flatten_patch(prefix: Option<&str>, value: &GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {
 	match value {
-		GlorpValue::Record(fields) => {
-			let mut assignments = Vec::new();
-			for (key, value) in fields {
-				let path = prefix.map_or_else(|| key.clone(), |prefix| format!("{prefix}.{key}"));
-				assignments.extend(flatten_patch(Some(&path), value)?);
-			}
+		GlorpValue::Record(fields) => fields.iter().try_fold(Vec::new(), |mut assignments, (key, value)| {
+			let path = prefix.map_or_else(|| key.clone(), |prefix| format!("{prefix}.{key}"));
+			assignments.extend(flatten_patch(Some(&path), value)?);
 			Ok(assignments)
-		}
+		}),
 		other => Ok(vec![ConfigAssignment {
 			path: prefix.unwrap_or_default().to_owned(),
 			value: other.clone(),

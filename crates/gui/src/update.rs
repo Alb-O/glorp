@@ -3,7 +3,8 @@ use {
 	glorp_api::{GlorpCommand, UiCommand},
 };
 
-pub fn to_command(message: GuiMessage) -> GlorpCommand {
+#[must_use]
+pub const fn to_command(message: GuiMessage) -> GlorpCommand {
 	GlorpCommand::Ui(match message {
 		GuiMessage::SidebarSelect(tab) => UiCommand::SidebarSelect { tab },
 		GuiMessage::InspectTargetSelect(target) => UiCommand::InspectTargetSelect { target },

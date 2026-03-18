@@ -96,6 +96,7 @@ impl GuiRuntimeSession {
 		}
 	}
 
+	#[must_use]
 	pub fn socket_path(&self) -> &Path {
 		&self.socket_path
 	}
@@ -108,7 +109,8 @@ impl GuiRuntimeSession {
 		)
 	}
 
-	pub fn owns_server(&self) -> bool {
+	#[must_use]
+	pub const fn owns_server(&self) -> bool {
 		self.server.is_some()
 	}
 

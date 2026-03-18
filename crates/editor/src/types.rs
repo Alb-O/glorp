@@ -8,10 +8,10 @@ pub trait FontChoiceExt {
 impl FontChoiceExt for FontChoice {
 	fn to_iced_font(self) -> Font {
 		match self {
-			FontChoice::JetBrainsMono => Font::new("JetBrains Mono"),
-			FontChoice::Monospace => Font::MONOSPACE,
-			FontChoice::NotoSansCjk => Font::new("Noto Sans CJK SC"),
-			FontChoice::SansSerif => Font::DEFAULT,
+			Self::JetBrainsMono => Font::new("JetBrains Mono"),
+			Self::Monospace => Font::MONOSPACE,
+			Self::NotoSansCjk => Font::new("Noto Sans CJK SC"),
+			Self::SansSerif => Font::DEFAULT,
 		}
 	}
 }
@@ -23,9 +23,9 @@ pub trait ShapingChoiceExt {
 impl ShapingChoiceExt for ShapingChoice {
 	fn to_cosmic(self, text: &str) -> cosmic_text::Shaping {
 		match self {
-			ShapingChoice::Auto if text.is_ascii() => cosmic_text::Shaping::Basic,
-			ShapingChoice::Basic => cosmic_text::Shaping::Basic,
-			ShapingChoice::Auto | ShapingChoice::Advanced => cosmic_text::Shaping::Advanced,
+			Self::Auto if text.is_ascii() => cosmic_text::Shaping::Basic,
+			Self::Basic => cosmic_text::Shaping::Basic,
+			Self::Auto | Self::Advanced => cosmic_text::Shaping::Advanced,
 		}
 	}
 }
@@ -37,10 +37,10 @@ pub trait WrapChoiceExt {
 impl WrapChoiceExt for WrapChoice {
 	fn to_cosmic(self) -> cosmic_text::Wrap {
 		match self {
-			WrapChoice::None => cosmic_text::Wrap::None,
-			WrapChoice::Word => cosmic_text::Wrap::Word,
-			WrapChoice::Glyph => cosmic_text::Wrap::Glyph,
-			WrapChoice::WordOrGlyph => cosmic_text::Wrap::WordOrGlyph,
+			Self::None => cosmic_text::Wrap::None,
+			Self::Word => cosmic_text::Wrap::Word,
+			Self::Glyph => cosmic_text::Wrap::Glyph,
+			Self::WordOrGlyph => cosmic_text::Wrap::WordOrGlyph,
 		}
 	}
 }

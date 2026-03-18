@@ -170,7 +170,7 @@ pub enum WrapChoice {
 	WordOrGlyph,
 }
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct TextRange {
 	pub start: u64,
 	pub end: u64,
