@@ -181,7 +181,7 @@ fn draw_series(frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSe
 			builder.line_to(*point);
 		}
 
-		let last = *points.last().unwrap_or(&first);
+		let last = points.last().copied().unwrap_or(first);
 		builder.line_to(Point::new(last.x, bounds.y + bounds.height));
 		builder.close();
 	});
@@ -251,15 +251,16 @@ fn graph_points(bounds: Rectangle, graph: &PerfGraphSeries) -> Vec<Point> {
 
 	let steps = graph.samples_ms.len().saturating_sub(1) as f32;
 	let step = bounds.width / steps.max(1.0);
-	let mut x = bounds.x;
 
 	graph
 		.samples_ms
 		.iter()
-		.map(|sample| {
-			let point = Point::new(x, sample_y(bounds, *sample, graph.ceiling_ms));
-			x += step;
-			point
+		.enumerate()
+		.map(|(index, sample)| {
+			Point::new(
+				bounds.x + step * index as f32,
+				sample_y(bounds, *sample, graph.ceiling_ms),
+			)
 		})
 		.collect()
 }
@@ -297,14 +298,12 @@ fn format_duration_label(ms: f32) -> String {
 }
 
 fn join_lines(lines: impl IntoIterator<Item = String>) -> String {
-	let mut joined = String::new();
-
-	for line in lines {
-		if !joined.is_empty() {
+	lines
+		.into_iter()
+		.reduce(|mut joined, line| {
 			joined.push('\n');
-		}
-		joined.push_str(&line);
-	}
-
-	joined
+			joined.push_str(&line);
+			joined
+		})
+		.unwrap_or_default()
 }

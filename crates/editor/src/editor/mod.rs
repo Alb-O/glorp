@@ -142,6 +142,22 @@ pub struct TextEdit {
 	pub inserted: String,
 }
 
+impl TextEdit {
+	fn insert(at: usize, inserted: String) -> Self {
+		Self {
+			range: at..at,
+			inserted,
+		}
+	}
+
+	fn delete(range: Range<usize>) -> Self {
+		Self {
+			range,
+			inserted: String::new(),
+		}
+	}
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct EditorOutcome {
 	pub view_changed: bool,

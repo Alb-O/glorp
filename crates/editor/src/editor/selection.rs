@@ -54,20 +54,19 @@ impl EditorEngine {
 		else {
 			return;
 		};
-		let range = self.word_range(cluster.byte_range.clone());
 		self.set_mode(EditorMode::Normal);
-		let head = range.start;
-		self.set_selection(Some(EditorSelection::new(range, head)));
+		let range = self.word_range(cluster.byte_range.clone());
+		self.set_selection(Some(EditorSelection::new(range.clone(), range.start)));
 		self.set_preferred_x(Some(cluster.center_x()));
 		self.clear_pointer_anchor();
 	}
 
 	fn word_range(&self, fallback: std::ops::Range<usize>) -> std::ops::Range<usize> {
 		let text = self.text();
-		let Some(slice) = text.get(fallback.start..fallback.end) else {
-			return fallback;
-		};
-		if !slice.chars().any(is_word_char) {
+		if !text
+			.get(fallback.start..fallback.end)
+			.is_some_and(|slice| slice.chars().any(is_word_char))
+		{
 			return fallback;
 		}
 

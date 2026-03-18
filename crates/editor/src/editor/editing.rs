@@ -28,10 +28,7 @@ impl EditorEngine {
 
 		let before = self.history_snapshot();
 		let selection_start = selection.start;
-		let text_edit = TextEdit {
-			range: selection,
-			inserted: String::new(),
-		};
+		let text_edit = TextEdit::delete(selection);
 		let inverse = self.apply_document_edit(
 			font_system,
 			&text_edit,
@@ -86,10 +83,7 @@ impl EditorEngine {
 
 		let before = self.history_snapshot();
 		let caret = clamp_char_boundary(self.text(), self.caret());
-		let text_edit = TextEdit {
-			range: caret..caret,
-			inserted: text,
-		};
+		let text_edit = TextEdit::insert(caret, text);
 		let next_head = caret + text_edit.inserted.len();
 		let structural = edit_changes_line_structure(self.text(), &text_edit);
 		let inverse = self.apply_document_edit(font_system, &text_edit, structural);
@@ -118,10 +112,7 @@ impl EditorEngine {
 		&mut self, font_system: &mut FontSystem, range: std::ops::Range<usize>, next_head: usize,
 	) -> ApplyResult {
 		let before = self.history_snapshot();
-		let text_edit = TextEdit {
-			range,
-			inserted: String::new(),
-		};
+		let text_edit = TextEdit::delete(range);
 		let structural = edit_changes_line_structure(self.text(), &text_edit);
 		let inverse = self.apply_document_edit(font_system, &text_edit, structural);
 		self.set_preferred_x(None);

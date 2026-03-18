@@ -107,12 +107,7 @@ pub fn selection_rectangles(layout: &DocumentLayout, range: &Range<usize>) -> Ar
 	let mut span_end = span_start;
 
 	for cluster in selected {
-		let continues_span = {
-			let same_run = cluster.run_index == span_end.run_index;
-			let touches_span = span_end.byte_range.end >= cluster.byte_range.start;
-			same_run && touches_span
-		};
-		if !continues_span {
+		if cluster.run_index != span_end.run_index || span_end.byte_range.end < cluster.byte_range.start {
 			rectangles.push(span_rectangle(span_start, span_end));
 			span_start = cluster;
 		}
