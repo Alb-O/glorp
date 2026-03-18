@@ -155,7 +155,7 @@ enum EventsSubcommand {
 }
 
 enum Host {
-	Local(RuntimeHost),
+	Local(Box<RuntimeHost>),
 	Ipc(IpcClient),
 }
 
@@ -306,20 +306,17 @@ impl Cli {
 		let options = RuntimeOptions {
 			paths: default_runtime_paths(repo_root),
 		};
-		Ok(Host::Local(RuntimeHost::new(options)?))
+		Ok(Host::Local(Box::new(RuntimeHost::new(options)?)))
 	}
 
 	fn attach_session(&self) -> Result<GlorpSessionView, GlorpError> {
 		let (socket, repo_root) = self.live_socket()?;
 		let mut client = IpcClient::new(socket.clone());
-		let capabilities = match client.query(GlorpQuery::Capabilities)? {
-			GlorpQueryResult::Capabilities(capabilities) => capabilities,
-			_ => {
-				return Err(GlorpError::transport(format!(
-					"unexpected capabilities response from {}",
-					socket.display()
-				)));
-			}
+		let GlorpQueryResult::Capabilities(capabilities) = client.query(GlorpQuery::Capabilities)? else {
+			return Err(GlorpError::transport(format!(
+				"unexpected capabilities response from {}",
+				socket.display()
+			)));
 		};
 		Ok(GlorpSessionView {
 			socket: socket.display().to_string(),

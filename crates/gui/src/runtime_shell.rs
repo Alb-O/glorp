@@ -146,17 +146,21 @@ impl RuntimeShell {
 
 	fn view_canvas(&self, snapshot: Arc<SessionSnapshot>, stacked: bool) -> Element<'static, Message> {
 		let inspect_targets_active = self.frame.ui.active_tab == SidebarTab::Inspect;
-		let inspect_overlays = snapshot.scene.as_ref().filter(|_| inspect_targets_active).map_or_else(
-			|| Arc::<[OverlayPrimitive]>::from([]),
-			|scene| {
-				scene.layout.inspect_overlay_primitives(
-					self.frame.ui.hovered_target,
-					self.frame.ui.selected_target,
-					self.frame.ui.layout_width,
-					self.frame.config.inspect.show_hitboxes,
-				)
-			},
-		);
+		let inspect_overlays = if inspect_targets_active {
+			snapshot.scene.as_ref().map_or_else(
+				|| Arc::<[OverlayPrimitive]>::from([]),
+				|scene| {
+					scene.layout.inspect_overlay_primitives(
+						self.frame.ui.hovered_target,
+						self.frame.ui.selected_target,
+						self.frame.ui.layout_width,
+						self.frame.config.inspect.show_hitboxes,
+					)
+				},
+			)
+		} else {
+			Arc::<[OverlayPrimitive]>::from([])
+		};
 
 		view_canvas_pane(CanvasPaneProps {
 			snapshot,
@@ -239,13 +243,19 @@ impl RuntimeShell {
 	fn handle_controls(&mut self, message: ControlsMessage) -> Result<(), GlorpError> {
 		match message {
 			ControlsMessage::LoadPreset(preset) => {
-				let mut commands = vec![config_set("editor.preset", enum_string_value(preset))];
-				if preset != glorp_api::SamplePreset::Custom {
-					commands.push(GlorpCommand::Document(DocumentCommand::Replace {
-						text: sample_preset_text(preset).to_owned(),
-					}));
-					commands.push(GlorpCommand::Ui(UiCommand::ViewportScrollTo { x: 0.0, y: 0.0 }));
-				}
+				let commands = std::iter::once(config_set("editor.preset", enum_string_value(preset)))
+					.chain(
+						(preset != glorp_api::SamplePreset::Custom).then_some(GlorpCommand::Document(
+							DocumentCommand::Replace {
+								text: sample_preset_text(preset).to_owned(),
+							},
+						)),
+					)
+					.chain(
+						(preset != glorp_api::SamplePreset::Custom)
+							.then_some(GlorpCommand::Ui(UiCommand::ViewportScrollTo { x: 0.0, y: 0.0 })),
+					)
+					.collect();
 				self.execute(GlorpCommand::Txn(GlorpTxn { commands }))
 			}
 			ControlsMessage::FontSelected(font) => self.execute(config_set("editor.font", enum_string_value(font))),
@@ -346,7 +356,7 @@ fn config_set(path: &str, value: GlorpValue) -> GlorpCommand {
 fn enum_string_value<T>(value: T) -> GlorpValue
 where
 	T: EnumValue, {
-	GlorpValue::String(value.as_ref().to_owned())
+	value.as_ref().into()
 }
 
 const fn message_tab(message: crate::types::SidebarMessage) -> SidebarTab {
@@ -356,7 +366,7 @@ const fn message_tab(message: crate::types::SidebarMessage) -> SidebarTab {
 }
 
 fn inspect_target(active_tab: SidebarTab, target: Option<glorp_api::CanvasTarget>) -> Option<glorp_api::CanvasTarget> {
-	(active_tab == SidebarTab::Inspect).then_some(target).flatten()
+	target.filter(|_| active_tab == SidebarTab::Inspect)
 }
 
 const fn scene_required(frame: &GuiRuntimeFrame) -> bool {

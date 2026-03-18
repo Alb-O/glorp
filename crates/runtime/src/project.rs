@@ -29,17 +29,12 @@ pub fn snapshot_from_state(
 
 pub fn selection_view_from_state(state: &crate::state::RuntimeState) -> SelectionStateView {
 	let editor = &state.session.snapshot().editor;
+	let text = state.session.text();
 	let selection = editor.editor.selection.as_ref();
 	let range = state::selection_range(selection);
 	SelectionStateView {
 		mode: state::mode(editor.editor.mode),
-		selected_text: selection.and_then(|selection| {
-			state
-				.session
-				.text()
-				.get(selection.start..selection.end)
-				.map(ToOwned::to_owned)
-		}),
+		selected_text: selection.and_then(|selection| text.get(selection.clone()).map(ToOwned::to_owned)),
 		range,
 		selection_head: state::selection_head(&editor.editor),
 		pointer_anchor: state::pointer_anchor(&editor.editor),

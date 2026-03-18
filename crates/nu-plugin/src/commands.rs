@@ -207,9 +207,10 @@ impl_simple_command!(
 	|call, span, _input| {
 		let socket = socket_from_call(call)?;
 		let mut client = IpcClient::new(socket.clone());
-		let capabilities = match client.query(GlorpQuery::Capabilities).map_err(to_labeled_error)? {
-			GlorpQueryResult::Capabilities(capabilities) => capabilities,
-			_ => return Err(LabeledError::new("unexpected capabilities response")),
+		let GlorpQueryResult::Capabilities(capabilities) =
+			client.query(GlorpQuery::Capabilities).map_err(to_labeled_error)?
+		else {
+			return Err(LabeledError::new("unexpected capabilities response"));
 		};
 		Ok(value_pipeline(json_to_nu_value(
 			serde_json::to_value(GlorpSessionView {

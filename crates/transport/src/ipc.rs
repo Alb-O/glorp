@@ -13,7 +13,7 @@ pub enum TransportRequest {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum TransportResponse {
 	Execute(Result<GlorpOutcome, GlorpError>),
-	Query(Result<GlorpQueryResult, GlorpError>),
+	Query(Box<Result<GlorpQueryResult, GlorpError>>),
 	Subscribe(Result<GlorpStreamToken, GlorpError>),
 	NextEvent(Result<Option<GlorpEvent>, GlorpError>),
 	Unsubscribe(Result<(), GlorpError>),

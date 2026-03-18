@@ -48,13 +48,13 @@ impl EditorEngine {
 	}
 
 	pub fn select_word_at(&mut self, layout: &DocumentLayout, position: Point) {
-		let Some((cluster, range)) = self.pointer_cluster_index(layout, position).and_then(|cluster_index| {
-			layout
-				.cluster(cluster_index)
-				.map(|cluster| (cluster, self.word_range(cluster.byte_range.clone())))
-		}) else {
+		let Some(cluster) = self
+			.pointer_cluster_index(layout, position)
+			.and_then(|cluster_index| layout.cluster(cluster_index))
+		else {
 			return;
 		};
+		let range = self.word_range(cluster.byte_range.clone());
 		self.set_mode(EditorMode::Normal);
 		let head = range.start;
 		self.set_selection(Some(EditorSelection::new(range, head)));
@@ -64,10 +64,10 @@ impl EditorEngine {
 
 	fn word_range(&self, fallback: std::ops::Range<usize>) -> std::ops::Range<usize> {
 		let text = self.text();
-		if text
-			.get(fallback.clone())
-			.is_none_or(|slice| !slice.chars().any(is_word_char))
-		{
+		let Some(slice) = text.get(fallback.clone()) else {
+			return fallback;
+		};
+		if !slice.chars().any(is_word_char) {
 			return fallback;
 		}
 

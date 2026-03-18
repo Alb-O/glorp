@@ -105,7 +105,7 @@ fn handle_connection(stream: UnixStream, host: Arc<Mutex<RuntimeHost>>) -> Resul
 			.map_err(|_| GlorpError::transport("runtime lock poisoned"))?;
 		match request {
 			TransportRequest::Execute(command) => TransportResponse::Execute(host.execute(command)),
-			TransportRequest::Query(query) => TransportResponse::Query(host.query(query)),
+			TransportRequest::Query(query) => TransportResponse::Query(Box::new(host.query(query))),
 			TransportRequest::Subscribe(request) => TransportResponse::Subscribe(host.subscribe(request)),
 			TransportRequest::NextEvent(token) => TransportResponse::NextEvent(host.next_event(token)),
 			TransportRequest::Unsubscribe(token) => TransportResponse::Unsubscribe(host.unsubscribe(token)),

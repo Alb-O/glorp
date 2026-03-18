@@ -63,7 +63,7 @@ impl GlorpHost for IpcClient {
 
 	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
 		match transport_request::<TransportResponse>(&self.socket_path, TransportRequest::Query(query))? {
-			TransportResponse::Query(result) => result,
+			TransportResponse::Query(result) => *result,
 			_ => Err(GlorpError::transport("unexpected query response")),
 		}
 	}

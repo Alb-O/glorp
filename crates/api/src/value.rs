@@ -100,7 +100,7 @@ impl From<String> for GlorpValue {
 
 impl From<&str> for GlorpValue {
 	fn from(value: &str) -> Self {
-		Self::String(value.to_owned())
+		Self::String(value.into())
 	}
 }
 
@@ -115,13 +115,10 @@ impl From<serde_json::Value> for GlorpValue {
 				.or_else(|| value.as_f64().map(Self::Float))
 				.unwrap_or(Self::Null),
 			serde_json::Value::String(value) => Self::String(value),
-			serde_json::Value::Array(values) => Self::List(values.into_iter().map(Self::from).collect()),
-			serde_json::Value::Object(values) => Self::Record(
-				values
-					.into_iter()
-					.map(|(key, value)| (key, Self::from(value)))
-					.collect(),
-			),
+			serde_json::Value::Array(values) => Self::List(values.into_iter().map(Into::into).collect()),
+			serde_json::Value::Object(values) => {
+				Self::Record(values.into_iter().map(|(key, value)| (key, value.into())).collect())
+			}
 		}
 	}
 }
@@ -134,13 +131,10 @@ impl From<GlorpValue> for serde_json::Value {
 			GlorpValue::Int(value) => Self::Number(value.into()),
 			GlorpValue::Float(value) => serde_json::json!(value),
 			GlorpValue::String(value) => Self::String(value),
-			GlorpValue::List(values) => Self::Array(values.into_iter().map(Self::from).collect()),
-			GlorpValue::Record(values) => Self::Object(
-				values
-					.into_iter()
-					.map(|(key, value)| (key, Self::from(value)))
-					.collect(),
-			),
+			GlorpValue::List(values) => Self::Array(values.into_iter().map(Into::into).collect()),
+			GlorpValue::Record(values) => {
+				Self::Object(values.into_iter().map(|(key, value)| (key, value.into())).collect())
+			}
 		}
 	}
 }
