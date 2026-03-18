@@ -117,10 +117,9 @@ pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Messa
 	.width(Length::Fill)
 	.height(Length::Fill);
 
-	let static_layer = snapshot
-		.scene
-		.clone()
-		.filter(|_| decorations.show_baselines || decorations.show_hitboxes)
+	let static_layer = (decorations.show_baselines || decorations.show_hitboxes)
+		.then_some(snapshot.scene.clone())
+		.flatten()
 		.map(|scene| {
 			// The static scene cache only exists for debug geometry. Inspect overlays
 			// and the footer can still use the derived scene without paying for this

@@ -135,13 +135,10 @@ impl InspectSidebarArgs<'_> {
 fn cached_or_build<K, V>(cache: &RefCell<Option<CachedEntry<K, V>>>, key: K, build: impl FnOnce() -> V) -> Arc<V>
 where
 	K: Copy + Eq, {
-	if let Some(data) = cache
-		.borrow()
-		.as_ref()
-		.filter(|entry| entry.key == key)
-		.map(|entry| Arc::clone(&entry.data))
+	if let Some(entry) = cache.borrow().as_ref()
+		&& entry.key == key
 	{
-		return data;
+		return Arc::clone(&entry.data);
 	}
 
 	let data = Arc::new(build());

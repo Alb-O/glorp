@@ -117,11 +117,17 @@ fn parse_count(flag: &str, value: &str) -> Result<usize, String> {
 }
 
 fn usage() -> String {
-	let scenarios = PerfScenario::ALL
-		.into_iter()
-		.map(PerfScenario::label)
-		.collect::<Vec<_>>()
-		.join("|");
+	let scenarios =
+		PerfScenario::ALL
+			.into_iter()
+			.map(PerfScenario::label)
+			.fold(String::new(), |mut scenarios, label| {
+				if !scenarios.is_empty() {
+					scenarios.push('|');
+				}
+				scenarios.push_str(label);
+				scenarios
+			});
 
 	format!("Usage: glorp [--perf-scenario <{scenarios}>] [--warmup <frames>] [--samples <frames>]")
 }

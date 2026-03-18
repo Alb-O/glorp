@@ -89,10 +89,9 @@ impl EditorEngine {
 	}
 
 	fn active_viewport_target(&self, layout: &DocumentLayout) -> Option<LayoutRect> {
-		if matches!(self.mode(), EditorMode::Insert) {
-			self.layout.insert_cursor_block(self.text(), self.caret())
-		} else {
-			self.active_selection(layout).map(cluster_rectangle)
+		match self.mode() {
+			EditorMode::Insert => self.layout.insert_cursor_block(self.text(), self.caret()),
+			EditorMode::Normal => self.active_selection(layout).map(cluster_rectangle),
 		}
 	}
 
@@ -145,14 +144,15 @@ impl EditorEngine {
 		&self, layout: &DocumentLayout, selection: Option<&EditorSelection>, insert_cursor: Option<LayoutRect>,
 		viewport_target: Option<LayoutRect>, tone: EditorOverlayTone,
 	) -> Arc<[OverlayPrimitive]> {
-		if matches!(self.mode(), EditorMode::Insert) {
-			Self::insert_overlays(tone, insert_cursor, viewport_target)
-		} else {
-			let selection_rectangles = selection.map_or_else(
-				|| Arc::from([]),
-				|selection| selection_rectangles(layout, selection.range()),
-			);
-			Self::normal_overlays(tone, selection_rectangles.as_ref(), viewport_target)
+		match self.mode() {
+			EditorMode::Insert => Self::insert_overlays(tone, insert_cursor, viewport_target),
+			EditorMode::Normal => {
+				let selection_rectangles = selection.map_or_else(
+					|| Arc::from([]),
+					|selection| selection_rectangles(layout, selection.range()),
+				);
+				Self::normal_overlays(tone, selection_rectangles.as_ref(), viewport_target)
+			}
 		}
 	}
 

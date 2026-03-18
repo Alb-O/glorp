@@ -111,7 +111,7 @@ impl HeadlessDriver<'_> {
 		match scenario {
 			HeadlessScenario::Default => {}
 			HeadlessScenario::Tall => {
-				self.dispatch_command(AppCommand::Control(ControlsMessage::LoadPreset(SamplePreset::Tall)))
+				self.dispatch_command(AppCommand::Control(ControlsMessage::LoadPreset(SamplePreset::Tall)));
 			}
 			HeadlessScenario::TallInspect => {
 				self.dispatch_command(AppCommand::Control(ControlsMessage::LoadPreset(SamplePreset::Tall)));
@@ -156,25 +156,14 @@ impl HeadlessDriver<'_> {
 	}
 
 	pub(crate) fn configure_perf_scenario(&mut self, scenario: PerfScenario) {
-		match scenario {
-			PerfScenario::Default | PerfScenario::Tall | PerfScenario::TallInspect | PerfScenario::TallPerf => {
-				self.configure_scenario(match scenario {
-					PerfScenario::Default => HeadlessScenario::Default,
-					PerfScenario::Tall => HeadlessScenario::Tall,
-					PerfScenario::TallInspect => HeadlessScenario::TallInspect,
-					PerfScenario::TallPerf => HeadlessScenario::TallPerf,
-					_ => unreachable!("handled by the outer match"),
-				});
-			}
-			PerfScenario::IncrementalTyping | PerfScenario::MotionSweep | PerfScenario::InspectInteraction => self
-				.configure_script_scenario(match scenario {
-					PerfScenario::IncrementalTyping => HeadlessScriptScenario::IncrementalTyping,
-					PerfScenario::MotionSweep => HeadlessScriptScenario::MotionSweep,
-					PerfScenario::InspectInteraction => HeadlessScriptScenario::InspectInteractionSweep,
-					_ => unreachable!("handled by the outer match"),
-				}),
-			PerfScenario::ResizeReflow => {
-				self.configure_script_scenario(HeadlessScriptScenario::ResizeReflowSweep);
+		if let Some(headless) = perf_headless_scenario(scenario) {
+			self.configure_scenario(headless);
+			return;
+		}
+
+		if let Some(script) = perf_script_scenario(scenario) {
+			self.configure_script_scenario(script);
+			if scenario == PerfScenario::ResizeReflow {
 				self.dispatch_command(AppCommand::SelectSidebarTab(SidebarTab::Inspect));
 			}
 		}
@@ -196,7 +185,7 @@ impl HeadlessDriver<'_> {
 			HeadlessScriptScenario::LargePaste => self.apply_insert(headless_large_paste_chunk()),
 			HeadlessScriptScenario::IncrementalTyping => {
 				for step in 0..HEADLESS_INCREMENTAL_TYPING_STEPS {
-					self.apply_insert(headless_incremental_typing_char(step).to_string());
+					self.apply_char(headless_incremental_typing_char(step));
 				}
 			}
 			HeadlessScriptScenario::IncrementalLineBreaks => {
@@ -213,7 +202,7 @@ impl HeadlessDriver<'_> {
 				self.repeat_history(EditorHistoryIntent::Redo, HEADLESS_UNDO_REDO_STEPS);
 			}
 			HeadlessScriptScenario::BackspaceBurst | HeadlessScriptScenario::DeleteForwardBurst => {
-				self.repeat_edit(&delete_burst_intent(scenario), delete_seed_char_count())
+				self.repeat_edit(&delete_burst_intent(scenario), delete_seed_char_count());
 			}
 			HeadlessScriptScenario::MotionSweep => self.perform_motion_sweep(),
 			HeadlessScriptScenario::PointerSelectionSweep => self.perform_pointer_selection_sweep(),
@@ -254,6 +243,11 @@ impl HeadlessDriver<'_> {
 
 	fn apply_insert(&mut self, text: impl Into<String>) {
 		self.apply_edit(EditorEditIntent::InsertText(text.into()));
+	}
+
+	fn apply_char(&mut self, ch: char) {
+		let mut text = [0; 4];
+		self.apply_insert(ch.encode_utf8(&mut text));
 	}
 
 	fn apply_edit(&mut self, intent: EditorEditIntent) {
@@ -323,7 +317,7 @@ impl HeadlessDriver<'_> {
 	}
 
 	fn perform_incremental_typing_step(&mut self, step: usize) {
-		self.apply_insert(headless_incremental_typing_char(step).to_string());
+		self.apply_char(headless_incremental_typing_char(step));
 	}
 
 	fn perform_motion_sweep_step(&mut self, step: usize) {
@@ -496,6 +490,29 @@ fn delete_seed_char_count() -> usize {
 	static COUNT: OnceLock<usize> = OnceLock::new();
 
 	*COUNT.get_or_init(|| headless_delete_seed_chunk().chars().count())
+}
+
+fn perf_headless_scenario(scenario: PerfScenario) -> Option<HeadlessScenario> {
+	match scenario {
+		PerfScenario::Default => Some(HeadlessScenario::Default),
+		PerfScenario::Tall => Some(HeadlessScenario::Tall),
+		PerfScenario::TallInspect => Some(HeadlessScenario::TallInspect),
+		PerfScenario::TallPerf => Some(HeadlessScenario::TallPerf),
+		PerfScenario::IncrementalTyping
+		| PerfScenario::MotionSweep
+		| PerfScenario::ResizeReflow
+		| PerfScenario::InspectInteraction => None,
+	}
+}
+
+fn perf_script_scenario(scenario: PerfScenario) -> Option<HeadlessScriptScenario> {
+	match scenario {
+		PerfScenario::IncrementalTyping => Some(HeadlessScriptScenario::IncrementalTyping),
+		PerfScenario::MotionSweep => Some(HeadlessScriptScenario::MotionSweep),
+		PerfScenario::ResizeReflow => Some(HeadlessScriptScenario::ResizeReflowSweep),
+		PerfScenario::InspectInteraction => Some(HeadlessScriptScenario::InspectInteractionSweep),
+		PerfScenario::Default | PerfScenario::Tall | PerfScenario::TallInspect | PerfScenario::TallPerf => None,
+	}
 }
 
 #[cfg(test)]

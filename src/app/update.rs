@@ -184,7 +184,7 @@ impl AppModel {
 	}
 
 	pub(super) fn ensure_scene_ready(&mut self) {
-		self.perform_scene_refresh()
+		self.perform_scene_refresh();
 	}
 
 	fn perform_control(&mut self, message: ControlsMessage) {
@@ -195,21 +195,21 @@ impl AppModel {
 					return;
 				}
 				self.controls.font = font;
-				self.perform_scene_config_sync()
+				self.perform_scene_config_sync();
 			}
 			ControlsMessage::ShapingSelected(shaping) => {
 				if self.controls.shaping == shaping {
 					return;
 				}
 				self.controls.shaping = shaping;
-				self.perform_scene_config_sync()
+				self.perform_scene_config_sync();
 			}
 			ControlsMessage::WrappingSelected(wrapping) => {
 				if self.controls.wrapping == wrapping {
 					return;
 				}
 				self.controls.wrapping = wrapping;
-				self.perform_scene_config_sync()
+				self.perform_scene_config_sync();
 			}
 			ControlsMessage::FontSizeChanged(font_size) => {
 				if (self.controls.font_size - font_size).abs() < f32::EPSILON {
@@ -217,28 +217,28 @@ impl AppModel {
 				}
 				self.controls.font_size = font_size;
 				self.controls.line_height = self.controls.line_height.max(self.controls.font_size);
-				self.perform_scene_config_sync()
+				self.perform_scene_config_sync();
 			}
 			ControlsMessage::LineHeightChanged(line_height) => {
 				if (self.controls.line_height - line_height).abs() < f32::EPSILON {
 					return;
 				}
 				self.controls.line_height = line_height;
-				self.perform_scene_config_sync()
+				self.perform_scene_config_sync();
 			}
 			ControlsMessage::ShowBaselinesChanged(show_baselines) => {
 				if self.controls.show_baselines == show_baselines {
 					return;
 				}
 				self.controls.show_baselines = show_baselines;
-				self.perform_scene_refresh()
+				self.perform_scene_refresh();
 			}
 			ControlsMessage::ShowHitboxesChanged(show_hitboxes) => {
 				if self.controls.show_hitboxes == show_hitboxes {
 					return;
 				}
 				self.controls.show_hitboxes = show_hitboxes;
-				self.perform_scene_refresh()
+				self.perform_scene_refresh();
 			}
 		}
 	}
@@ -404,7 +404,8 @@ impl AppModel {
 	}
 
 	fn apply_session_transition(&mut self, transition: &SessionTransition, policy: ApplyPolicy) {
-		if !transition.changed() && !policy.reveal_viewport && policy.scroll_behavior == ScrollBehavior::KeepClamped {
+		let keep_clamped = policy.scroll_behavior == ScrollBehavior::KeepClamped;
+		if !transition.changed() && !policy.reveal_viewport && keep_clamped {
 			return;
 		}
 
@@ -412,9 +413,10 @@ impl AppModel {
 			self.perf.record_editor_width_sync(duration);
 		}
 
-		let reset_scroll = matches!(policy.scroll_behavior, ScrollBehavior::ResetScroll);
-		let viewport_metrics = self.session.snapshot().editor.viewport_metrics;
-		let viewport_target = self.session.snapshot().editor.editor.viewport_target;
+		let reset_scroll = policy.scroll_behavior == ScrollBehavior::ResetScroll;
+		let snapshot = self.session.snapshot();
+		let viewport_metrics = snapshot.editor.viewport_metrics;
+		let viewport_target = snapshot.editor.editor.viewport_target;
 		if let Some(duration) = transition.scene_materialized {
 			self.sidebar.sync_after_scene_refresh();
 			self.viewport.finish_refresh(viewport_metrics, reset_scroll);
@@ -424,15 +426,21 @@ impl AppModel {
 				if reason.records_resize_reflow() {
 					self.perf.record_resize_reflow(duration);
 				}
-				if let Some(scene) = self.session.snapshot().scene.as_ref() {
-					log_scene_refresh("scene rebuilt", duration, scene.layout.as_ref());
+				if let Some(layout) = self
+					.session
+					.snapshot()
+					.scene
+					.as_ref()
+					.map(|scene| scene.layout.as_ref())
+				{
+					log_scene_refresh("scene rebuilt", duration, layout);
 				}
 			}
 		} else if transition.changed() || reset_scroll {
 			self.viewport.finish_refresh(viewport_metrics, reset_scroll);
 		}
 
-		if policy.reveal_viewport && matches!(policy.scroll_behavior, ScrollBehavior::KeepClamped) {
+		if policy.reveal_viewport && keep_clamped {
 			self.viewport
 				.reveal_target_with_metrics(viewport_target, viewport_metrics);
 		}

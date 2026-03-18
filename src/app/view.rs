@@ -51,16 +51,13 @@ impl AppModel {
 
 		responsive(move |size| {
 			if is_stacked_shell(size) {
-				view_stacked_shell(
-					render_sidebar(render.clone(), true),
-					render_canvas(render.clone(), true),
-				)
+				view_stacked_shell(render_sidebar(&render, true), render_canvas(&render, true))
 			} else {
 				let render = render.clone();
 				let grid = pane_grid(&self.shell.chrome, move |_, pane, _| {
 					let content = match pane {
-						ShellPane::Sidebar => render_sidebar(render.clone(), false),
-						ShellPane::Canvas => render_canvas(render.clone(), false),
+						ShellPane::Sidebar => render_sidebar(&render, false),
+						ShellPane::Canvas => render_canvas(&render, false),
 					};
 
 					pane_grid::Content::new(content)
@@ -89,7 +86,7 @@ impl AppModel {
 
 	#[cfg(test)]
 	pub(super) fn test_view_sidebar(&self) -> Element<'_, Message> {
-		render_sidebar(self.render_model(), false)
+		render_sidebar(&self.render_model(), false)
 	}
 
 	fn render_model(&self) -> AppRenderModel {
@@ -171,7 +168,7 @@ impl AppModel {
 	}
 }
 
-fn render_sidebar(render: AppRenderModel, stacked: bool) -> Element<'static, Message> {
+fn render_sidebar(render: &AppRenderModel, stacked: bool) -> Element<'static, Message> {
 	view_sidebar(SidebarProps {
 		active_tab: render.sidebar.active_tab,
 		editor_mode: render.sidebar.editor_mode,
@@ -183,12 +180,12 @@ fn render_sidebar(render: AppRenderModel, stacked: bool) -> Element<'static, Mes
 	})
 }
 
-fn render_canvas(render: AppRenderModel, stacked: bool) -> Element<'static, Message> {
+fn render_canvas(render: &AppRenderModel, stacked: bool) -> Element<'static, Message> {
 	view_canvas_pane(CanvasPaneProps {
-		snapshot: render.snapshot.clone(),
+		snapshot: Arc::clone(&render.snapshot),
 		layout_width: render.layout_width,
 		decorations: render.decorations,
-		inspect_overlays: render.inspect_overlays.clone(),
+		inspect_overlays: Arc::clone(&render.inspect_overlays),
 		inspect_targets_active: render.inspect_targets_active,
 		focused: render.focused,
 		scroll: render.scroll,

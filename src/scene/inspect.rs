@@ -79,11 +79,11 @@ impl DocumentLayout {
 			),
 		};
 
-		overlays.push(OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText));
-
-		if let Some(kind) = hitbox_kind {
-			overlays.push(OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText));
-		}
+		overlays.extend(
+			std::iter::once(kind)
+				.chain(hitbox_kind)
+				.map(|kind| OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText)),
+		);
 	}
 }
 

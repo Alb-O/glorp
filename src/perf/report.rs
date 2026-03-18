@@ -4,7 +4,7 @@ use {
 		percentile_ms,
 	},
 	crate::{editor::EditorMode, scene::DocumentLayout},
-	std::sync::Arc,
+	std::{fmt::Write as _, sync::Arc},
 };
 
 const GRAPH_METRICS: [MetricKind; 12] = [
@@ -118,18 +118,17 @@ pub(crate) struct PerfRecentActivity {
 impl PerfRecentActivity {
 	pub(crate) fn text(&self) -> String {
 		if self.recent_ms.is_empty() {
-			format!("{:<14} no samples", self.label)
-		} else {
-			format!(
-				"{:<14} {}",
-				self.label,
-				self.recent_ms
-					.iter()
-					.map(|value| format!("{value:>5.2}"))
-					.collect::<Vec<_>>()
-					.join("  "),
-			)
+			return format!("{:<14} no samples", self.label);
 		}
+
+		let mut text = format!("{:<14} ", self.label);
+		for (index, value) in self.recent_ms.iter().enumerate() {
+			if index > 0 {
+				text.push_str("  ");
+			}
+			let _ = write!(text, "{value:>5.2}");
+		}
+		text
 	}
 }
 
