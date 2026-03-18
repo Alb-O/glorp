@@ -136,8 +136,8 @@ impl GuiRuntimeClient {
 }
 
 impl GlorpHost for GuiRuntimeClient {
-	fn execute(&mut self, command: glorp_api::GlorpCommand) -> Result<glorp_api::GlorpOutcome, GlorpError> {
-		self.as_glorp_host().execute(command)
+	fn execute(&mut self, exec: glorp_api::GlorpExec) -> Result<glorp_api::GlorpOutcome, GlorpError> {
+		self.as_glorp_host().execute(exec)
 	}
 
 	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {

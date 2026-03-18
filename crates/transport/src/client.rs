@@ -1,7 +1,7 @@
 use {
 	crate::{TransportRequest, TransportResponse},
 	glorp_api::{
-		GlorpCommand, GlorpError, GlorpEvent, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
+		GlorpError, GlorpEvent, GlorpExec, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
 		GlorpSubscription,
 	},
 	serde::de::DeserializeOwned,
@@ -55,8 +55,8 @@ where
 }
 
 impl GlorpHost for IpcClient {
-	fn execute(&mut self, command: GlorpCommand) -> Result<GlorpOutcome, GlorpError> {
-		let TransportResponse::Execute(result) = self.response(&TransportRequest::Execute(command))? else {
+	fn execute(&mut self, exec: GlorpExec) -> Result<GlorpOutcome, GlorpError> {
+		let TransportResponse::Execute(result) = self.response(&TransportRequest::Execute(exec))? else {
 			return Err(unexpected_response("execute"));
 		};
 		result

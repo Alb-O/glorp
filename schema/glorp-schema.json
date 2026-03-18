@@ -1,2153 +1,3250 @@
 {
-  "version": 2,
-  "named_types": [
+  "version": 3,
+  "types": [
     {
-      "name": "SamplePreset",
-      "docs": "Built-in sample document presets.",
+      "name": "BuiltinType",
+      "docs": "Builtin scalar categories.",
       "kind": {
-        "Enum": {
-          "variants": [
-            {
-              "name": "tall",
-              "docs": "A tall multi-script sample."
-            },
-            {
-              "name": "mixed",
-              "docs": "A short mixed-script sample."
-            },
-            {
-              "name": "rust",
-              "docs": "A Rust source sample."
-            },
-            {
-              "name": "ligatures",
-              "docs": "A ligature-heavy sample."
-            },
-            {
-              "name": "arabic",
-              "docs": "An Arabic sample."
-            },
-            {
-              "name": "cjk",
-              "docs": "A CJK sample."
-            },
-            {
-              "name": "emoji",
-              "docs": "An emoji-heavy sample."
-            },
-            {
-              "name": "custom",
-              "docs": "No built-in sample."
-            }
-          ]
-        }
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "null",
+            "docs": "Null value."
+          },
+          {
+            "name": "bool",
+            "docs": "Boolean value."
+          },
+          {
+            "name": "int",
+            "docs": "Integer value."
+          },
+          {
+            "name": "float",
+            "docs": "Floating-point value."
+          },
+          {
+            "name": "string",
+            "docs": "String value."
+          },
+          {
+            "name": "any",
+            "docs": "Arbitrary JSON-like value."
+          }
+        ]
       }
     },
     {
-      "name": "WrapChoice",
-      "docs": "Stable editor wrapping choices.",
+      "name": "TaggedVariantSchema",
+      "docs": "Tagged union variant schema.",
       "kind": {
-        "Enum": {
-          "variants": [
-            {
-              "name": "none",
-              "docs": "Do not wrap lines."
+        "kind": "record",
+        "fields": [
+          {
+            "name": "name",
+            "docs": "Variant name.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "word",
-              "docs": "Wrap at word boundaries."
+            "required": true
+          },
+          {
+            "name": "docs",
+            "docs": "Variant documentation.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "glyph",
-              "docs": "Wrap at glyph boundaries."
+            "required": true
+          },
+          {
+            "name": "payload",
+            "docs": "Variant payload type.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "TypeRef"
+              }
             },
-            {
-              "name": "word-or-glyph",
-              "docs": "Prefer word boundaries, fall back to glyph boundaries."
-            }
-          ]
-        }
+            "required": true
+          }
+        ]
       }
     },
     {
-      "name": "FontChoice",
-      "docs": "Stable editor font families.",
+      "name": "TaggedUnionSchema",
+      "docs": "Tagged union schema payload.",
       "kind": {
-        "Enum": {
-          "variants": [
-            {
-              "name": "jetbrains-mono",
-              "docs": "JetBrains Mono."
+        "kind": "record",
+        "fields": [
+          {
+            "name": "tag",
+            "docs": "Tag field name.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "monospace",
-              "docs": "The platform monospace family."
+            "required": true
+          },
+          {
+            "name": "content",
+            "docs": "Content field name.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "noto-sans-cjk",
-              "docs": "Noto Sans CJK."
+            "required": true
+          },
+          {
+            "name": "variants",
+            "docs": "Tagged union variants.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "TaggedVariantSchema"
+              }
             },
-            {
-              "name": "sans-serif",
-              "docs": "The platform sans-serif family."
-            }
-          ]
-        }
+            "required": true
+          }
+        ]
       }
     },
     {
-      "name": "ShapingChoice",
-      "docs": "Stable shaping choices.",
+      "name": "TypeRef",
+      "docs": "Reference to a builtin, named, or composite type.",
       "kind": {
-        "Enum": {
-          "variants": [
-            {
-              "name": "auto",
-              "docs": "Choose shaping based on content."
-            },
-            {
-              "name": "basic",
-              "docs": "Use basic shaping."
-            },
-            {
-              "name": "advanced",
-              "docs": "Use advanced shaping."
+        "kind": "tagged-union",
+        "tag": "kind",
+        "content": "value",
+        "variants": [
+          {
+            "name": "builtin",
+            "docs": "Builtin scalar type.",
+            "payload": {
+              "kind": "named",
+              "value": "BuiltinType"
             }
-          ]
-        }
+          },
+          {
+            "name": "named",
+            "docs": "Named schema type.",
+            "payload": {
+              "kind": "builtin",
+              "value": "string"
+            }
+          },
+          {
+            "name": "list",
+            "docs": "List of another type.",
+            "payload": {
+              "kind": "named",
+              "value": "TypeRef"
+            }
+          },
+          {
+            "name": "option",
+            "docs": "Optional version of another type.",
+            "payload": {
+              "kind": "named",
+              "value": "TypeRef"
+            }
+          }
+        ]
       }
     },
     {
-      "name": "SidebarTab",
-      "docs": "Stable sidebar tabs.",
+      "name": "FieldSchema",
+      "docs": "Record field schema.",
       "kind": {
-        "Enum": {
-          "variants": [
-            {
-              "name": "controls",
-              "docs": "Configuration controls."
+        "kind": "record",
+        "fields": [
+          {
+            "name": "name",
+            "docs": "Field name.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "inspect",
-              "docs": "Scene inspection."
+            "required": true
+          },
+          {
+            "name": "docs",
+            "docs": "Field documentation.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "perf",
-              "docs": "Performance projections."
-            }
-          ]
-        }
+            "required": true
+          },
+          {
+            "name": "ty",
+            "docs": "Field value type.",
+            "ty": {
+              "kind": "named",
+              "value": "TypeRef"
+            },
+            "required": true
+          },
+          {
+            "name": "required",
+            "docs": "Whether the field is always present.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          }
+        ]
       }
     },
     {
-      "name": "EditorMotion",
-      "docs": "Typed editor motions.",
+      "name": "EnumVariantSchema",
+      "docs": "String enum variant schema.",
       "kind": {
-        "Enum": {
-          "variants": [
-            {
-              "name": "left",
-              "docs": "Move left."
+        "kind": "record",
+        "fields": [
+          {
+            "name": "name",
+            "docs": "Variant name.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "right",
-              "docs": "Move right."
+            "required": true
+          },
+          {
+            "name": "docs",
+            "docs": "Variant documentation.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "up",
-              "docs": "Move up."
-            },
-            {
-              "name": "down",
-              "docs": "Move down."
-            },
-            {
-              "name": "line-start",
-              "docs": "Move to line start."
-            },
-            {
-              "name": "line-end",
-              "docs": "Move to line end."
-            }
-          ]
-        }
+            "required": true
+          }
+        ]
       }
     },
     {
-      "name": "EditorModeCommand",
-      "docs": "Typed mode transitions.",
+      "name": "TypeSchema",
+      "docs": "Shape of a named type.",
       "kind": {
-        "Enum": {
-          "variants": [
-            {
-              "name": "enter-insert-before",
-              "docs": "Enter insert mode before the selection."
-            },
-            {
-              "name": "enter-insert-after",
-              "docs": "Enter insert mode after the selection."
-            },
-            {
-              "name": "exit-insert",
-              "docs": "Return to normal mode."
+        "kind": "tagged-union",
+        "tag": "kind",
+        "content": "value",
+        "variants": [
+          {
+            "name": "enum",
+            "docs": "String enum type.",
+            "payload": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "EnumVariantSchema"
+              }
             }
-          ]
-        }
+          },
+          {
+            "name": "tagged-union",
+            "docs": "Tagged union type.",
+            "payload": {
+              "kind": "named",
+              "value": "TaggedUnionSchema"
+            }
+          },
+          {
+            "name": "record",
+            "docs": "Record type.",
+            "payload": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "FieldSchema"
+              }
+            }
+          }
+        ]
       }
     },
     {
-      "name": "EditorHistoryCommand",
-      "docs": "Typed undo/redo operations.",
+      "name": "NamedTypeSchema",
+      "docs": "Named schema type.",
       "kind": {
-        "Enum": {
-          "variants": [
-            {
-              "name": "undo",
-              "docs": "Undo the most recent edit."
+        "kind": "record",
+        "fields": [
+          {
+            "name": "name",
+            "docs": "Type name.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "redo",
-              "docs": "Redo the most recent undone edit."
-            }
-          ]
-        }
+            "required": true
+          },
+          {
+            "name": "docs",
+            "docs": "Type documentation.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "kind",
+            "docs": "Type shape.",
+            "ty": {
+              "kind": "named",
+              "value": "TypeSchema"
+            },
+            "required": true
+          }
+        ]
       }
     },
     {
-      "name": "EditorMode",
-      "docs": "Stable editor modes.",
+      "name": "OperationKind",
+      "docs": "Operation category.",
       "kind": {
-        "Enum": {
-          "variants": [
-            {
-              "name": "normal",
-              "docs": "Normal mode."
-            },
-            {
-              "name": "insert",
-              "docs": "Insert mode."
-            }
-          ]
-        }
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "exec",
+            "docs": "Mutating operation."
+          },
+          {
+            "name": "query",
+            "docs": "Read-only operation."
+          },
+          {
+            "name": "helper",
+            "docs": "Plugin-side helper operation."
+          }
+        ]
       }
     },
     {
-      "name": "GlorpCommand",
-      "docs": "Top-level command namespaces.",
+      "name": "OperationSpec",
+      "docs": "One protocol operation.",
       "kind": {
-        "Enum": {
-          "variants": [
-            {
-              "name": "txn",
-              "docs": "Atomic transaction."
+        "kind": "record",
+        "fields": [
+          {
+            "name": "id",
+            "docs": "Operation identifier.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "config",
-              "docs": "Config mutation."
+            "required": true
+          },
+          {
+            "name": "kind",
+            "docs": "Operation category.",
+            "ty": {
+              "kind": "named",
+              "value": "OperationKind"
             },
-            {
-              "name": "document",
-              "docs": "Document mutation."
+            "required": true
+          },
+          {
+            "name": "docs",
+            "docs": "Operation documentation.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "editor",
-              "docs": "Editor command."
+            "required": true
+          },
+          {
+            "name": "input",
+            "docs": "Operation input type.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "TypeRef"
+              }
             },
-            {
-              "name": "ui",
-              "docs": "UI command."
+            "required": true
+          },
+          {
+            "name": "output",
+            "docs": "Operation output type.",
+            "ty": {
+              "kind": "named",
+              "value": "TypeRef"
             },
-            {
-              "name": "scene",
-              "docs": "Scene command."
-            }
-          ]
-        }
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "EventSchema",
+      "docs": "One event contract.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "id",
+            "docs": "Event identifier.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "docs",
+            "docs": "Event documentation.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "payload",
+            "docs": "Event payload type.",
+            "ty": {
+              "kind": "named",
+              "value": "TypeRef"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpSchema",
+      "docs": "Protocol reflection schema.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "version",
+            "docs": "Schema version.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "types",
+            "docs": "Named protocol types.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "NamedTypeSchema"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "operations",
+            "docs": "Protocol operations.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "OperationSpec"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "events",
+            "docs": "Protocol events.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "EventSchema"
+              }
+            },
+            "required": true
+          }
+        ]
       }
     },
     {
       "name": "ConfigAssignment",
       "docs": "One path-based config assignment.",
       "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "path",
-              "docs": "Config path.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": true
+        "kind": "record",
+        "fields": [
+          {
+            "name": "path",
+            "docs": "Config path.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
-            {
-              "name": "value",
-              "docs": "Config value.",
-              "ty": {
-                "Builtin": "Any"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "ConfigPatch",
-      "docs": "Nested config patch input.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "patch",
-              "docs": "Nested config patch record.",
-              "ty": {
-                "Builtin": "Any"
-              },
-              "required": true
-            }
-          ]
-        }
+            "required": true
+          },
+          {
+            "name": "value",
+            "docs": "Config value.",
+            "ty": {
+              "kind": "builtin",
+              "value": "any"
+            },
+            "required": true
+          }
+        ]
       }
     },
     {
       "name": "ConfigPathInput",
       "docs": "One config path input.",
       "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "path",
-              "docs": "Config path.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": true
-            }
-          ]
-        }
+        "kind": "record",
+        "fields": [
+          {
+            "name": "path",
+            "docs": "Config path.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigPatchInput",
+      "docs": "Nested config patch input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "patch",
+            "docs": "Nested config patch record.",
+            "ty": {
+              "kind": "builtin",
+              "value": "any"
+            },
+            "required": true
+          }
+        ]
       }
     },
     {
       "name": "TextInput",
       "docs": "One text input.",
       "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "text",
-              "docs": "Text input.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": true
-            }
-          ]
-        }
+        "kind": "record",
+        "fields": [
+          {
+            "name": "text",
+            "docs": "Text input.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "EditorMotion",
+      "docs": "Typed editor motions.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "left",
+            "docs": "Move left."
+          },
+          {
+            "name": "right",
+            "docs": "Move right."
+          },
+          {
+            "name": "up",
+            "docs": "Move up."
+          },
+          {
+            "name": "down",
+            "docs": "Move down."
+          },
+          {
+            "name": "line-start",
+            "docs": "Move to line start."
+          },
+          {
+            "name": "line-end",
+            "docs": "Move to line end."
+          }
+        ]
       }
     },
     {
       "name": "EditorMotionInput",
       "docs": "One editor motion input.",
       "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "motion",
-              "docs": "Editor motion name.",
-              "ty": {
-                "Named": "EditorMotion"
-              },
-              "required": true
-            }
-          ]
-        }
+        "kind": "record",
+        "fields": [
+          {
+            "name": "motion",
+            "docs": "Editor motion name.",
+            "ty": {
+              "kind": "named",
+              "value": "EditorMotion"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "EditorModeCommand",
+      "docs": "Typed mode transitions.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "enter-insert-before",
+            "docs": "Enter insert mode before the selection."
+          },
+          {
+            "name": "enter-insert-after",
+            "docs": "Enter insert mode after the selection."
+          },
+          {
+            "name": "exit-insert",
+            "docs": "Return to normal mode."
+          }
+        ]
       }
     },
     {
       "name": "EditorModeInput",
       "docs": "One editor mode input.",
       "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "mode",
-              "docs": "Editor mode command.",
-              "ty": {
-                "Named": "EditorModeCommand"
-              },
-              "required": true
-            }
-          ]
-        }
+        "kind": "record",
+        "fields": [
+          {
+            "name": "mode",
+            "docs": "Editor mode command.",
+            "ty": {
+              "kind": "named",
+              "value": "EditorModeCommand"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "EditorHistoryCommand",
+      "docs": "Typed undo/redo operations.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "undo",
+            "docs": "Undo the most recent edit."
+          },
+          {
+            "name": "redo",
+            "docs": "Redo the most recent undone edit."
+          }
+        ]
       }
     },
     {
       "name": "EditorHistoryInput",
       "docs": "One editor history input.",
       "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "action",
-              "docs": "Editor history action.",
-              "ty": {
-                "Named": "EditorHistoryCommand"
-              },
-              "required": true
-            }
-          ]
-        }
+        "kind": "record",
+        "fields": [
+          {
+            "name": "action",
+            "docs": "Editor history action.",
+            "ty": {
+              "kind": "named",
+              "value": "EditorHistoryCommand"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "EditorPointerBeginInput",
+      "docs": "Pointer press input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "x",
+            "docs": "Pointer x position.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "y",
+            "docs": "Pointer y position.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "select_word",
+            "docs": "Whether to select a word.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "EditorPointerDragInput",
+      "docs": "Pointer drag input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "x",
+            "docs": "Pointer x position.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "y",
+            "docs": "Pointer y position.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "SidebarTab",
+      "docs": "Stable sidebar tabs.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "controls",
+            "docs": "Configuration controls."
+          },
+          {
+            "name": "inspect",
+            "docs": "Scene inspection."
+          },
+          {
+            "name": "perf",
+            "docs": "Performance projections."
+          }
+        ]
       }
     },
     {
       "name": "SidebarTabInput",
       "docs": "One sidebar tab input.",
       "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "tab",
-              "docs": "Sidebar tab.",
-              "ty": {
-                "Named": "SidebarTab"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "ScrollTarget",
-      "docs": "Viewport scroll target.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "x",
-              "docs": "Horizontal scroll offset.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
+        "kind": "record",
+        "fields": [
+          {
+            "name": "tab",
+            "docs": "Sidebar tab.",
+            "ty": {
+              "kind": "named",
+              "value": "SidebarTab"
             },
-            {
-              "name": "y",
-              "docs": "Vertical scroll offset.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "PaneRatioInput",
-      "docs": "Sidebar/canvas ratio input.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "ratio",
-              "docs": "Sidebar/canvas ratio.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "InspectDetailsInput",
-      "docs": "Inspect-details query input.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "target",
-              "docs": "Optional canvas target run:<n> or cluster:<n>.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": false
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "StreamTokenInput",
-      "docs": "Subscription token input.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "token",
-              "docs": "Subscription token.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "GlorpCommandList",
-      "docs": "List of typed public commands.",
-      "kind": {
-        "List": {
-          "item": {
-            "Builtin": "Any"
+            "required": true
           }
-        }
-      }
-    },
-    {
-      "name": "GlorpTxn",
-      "docs": "Multiple typed public commands applied atomically.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "commands",
-              "docs": "Ordered typed commands.",
-              "ty": {
-                "Named": "GlorpCommandList"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "GlorpCapabilities",
-      "docs": "Stable runtime capability flags.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "transactions",
-              "docs": "Whether transactions are supported.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "subscriptions",
-              "docs": "Whether subscriptions are supported.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "transports",
-              "docs": "Supported transport names.",
-              "ty": {
-                "Named": "StringList"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "GlorpOutcome",
-      "docs": "Revisioned outcome for a successful command.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "delta",
-              "docs": "Change flags.",
-              "ty": {
-                "Named": "GlorpDelta"
-              },
-              "required": true
-            },
-            {
-              "name": "revisions",
-              "docs": "Post-command revisions.",
-              "ty": {
-                "Named": "GlorpRevisions"
-              },
-              "required": true
-            },
-            {
-              "name": "changed_config_paths",
-              "docs": "Config paths changed by the command.",
-              "ty": {
-                "Named": "StringList"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "GlorpDelta",
-      "docs": "Boolean change flags.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "text_changed",
-              "docs": "Document text changed.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "view_changed",
-              "docs": "Editor view changed.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "selection_changed",
-              "docs": "Selection changed.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "mode_changed",
-              "docs": "Mode changed.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "config_changed",
-              "docs": "Config changed.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "ui_changed",
-              "docs": "UI state changed.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "scene_changed",
-              "docs": "Scene state changed.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "GlorpRevisions",
-      "docs": "Runtime revisions.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "editor",
-              "docs": "Editor revision.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "scene",
-              "docs": "Scene revision if materialized.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": false
-            },
-            {
-              "name": "config",
-              "docs": "Config revision.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "GlorpConfig",
-      "docs": "Stable runtime config.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "editor",
-              "docs": "Editor config namespace.",
-              "ty": {
-                "Named": "EditorConfig"
-              },
-              "required": true
-            },
-            {
-              "name": "inspect",
-              "docs": "Inspect config namespace.",
-              "ty": {
-                "Named": "InspectConfig"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "EditorConfig",
-      "docs": "Editor configuration namespace.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "preset",
-              "docs": "Sample preset.",
-              "ty": {
-                "Named": "SamplePreset"
-              },
-              "required": false
-            },
-            {
-              "name": "font",
-              "docs": "Font choice.",
-              "ty": {
-                "Named": "FontChoice"
-              },
-              "required": true
-            },
-            {
-              "name": "shaping",
-              "docs": "Shaping choice.",
-              "ty": {
-                "Named": "ShapingChoice"
-              },
-              "required": true
-            },
-            {
-              "name": "wrapping",
-              "docs": "Wrapping choice.",
-              "ty": {
-                "Named": "WrapChoice"
-              },
-              "required": true
-            },
-            {
-              "name": "font_size",
-              "docs": "Font size.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "line_height",
-              "docs": "Line height.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "InspectConfig",
-      "docs": "Inspect configuration namespace.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "show_baselines",
-              "docs": "Show baselines.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "show_hitboxes",
-              "docs": "Show hitboxes.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "GlorpSnapshot",
-      "docs": "Read-only runtime snapshot.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "revisions",
-              "docs": "Runtime revisions.",
-              "ty": {
-                "Named": "GlorpRevisions"
-              },
-              "required": true
-            },
-            {
-              "name": "config",
-              "docs": "Effective config.",
-              "ty": {
-                "Named": "GlorpConfig"
-              },
-              "required": true
-            },
-            {
-              "name": "editor",
-              "docs": "Editor state view.",
-              "ty": {
-                "Named": "EditorStateView"
-              },
-              "required": true
-            },
-            {
-              "name": "scene",
-              "docs": "Scene state view.",
-              "ty": {
-                "Named": "SceneStateView"
-              },
-              "required": false
-            },
-            {
-              "name": "inspect",
-              "docs": "Inspect state view.",
-              "ty": {
-                "Named": "InspectStateView"
-              },
-              "required": true
-            },
-            {
-              "name": "perf",
-              "docs": "Performance state view.",
-              "ty": {
-                "Named": "PerfStateView"
-              },
-              "required": true
-            },
-            {
-              "name": "ui",
-              "docs": "UI state view.",
-              "ty": {
-                "Named": "UiStateView"
-              },
-              "required": true
-            },
-            {
-              "name": "document_text",
-              "docs": "Document text when requested.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": false
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "EditorStateView",
-      "docs": "Stable editor state view.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "mode",
-              "docs": "Editor mode.",
-              "ty": {
-                "Named": "EditorMode"
-              },
-              "required": true
-            },
-            {
-              "name": "selection",
-              "docs": "Current selection range.",
-              "ty": {
-                "Named": "TextRange"
-              },
-              "required": false
-            },
-            {
-              "name": "selection_head",
-              "docs": "Selection head byte offset.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": false
-            },
-            {
-              "name": "pointer_anchor",
-              "docs": "Pointer anchor byte offset.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": false
-            },
-            {
-              "name": "text_bytes",
-              "docs": "Document size in bytes.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "text_lines",
-              "docs": "Document line count.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "undo_depth",
-              "docs": "Undo depth.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "redo_depth",
-              "docs": "Redo depth.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "viewport",
-              "docs": "Viewport-facing editor metrics.",
-              "ty": {
-                "Named": "EditorViewportView"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "EditorViewportView",
-      "docs": "Viewport-facing editor metrics.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "wrapping",
-              "docs": "Current wrapping mode.",
-              "ty": {
-                "Named": "WrapChoice"
-              },
-              "required": true
-            },
-            {
-              "name": "measured_width",
-              "docs": "Measured content width.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "measured_height",
-              "docs": "Measured content height.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "viewport_target",
-              "docs": "Current viewport reveal target.",
-              "ty": {
-                "Named": "LayoutRectView"
-              },
-              "required": false
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "SceneStateView",
-      "docs": "Stable scene state view.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "revision",
-              "docs": "Scene revision.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "measured_width",
-              "docs": "Measured width.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "measured_height",
-              "docs": "Measured height.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "run_count",
-              "docs": "Layout run count.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "cluster_count",
-              "docs": "Layout cluster count.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "InspectStateView",
-      "docs": "Stable inspect state view.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "hovered_target",
-              "docs": "Hovered inspect target.",
-              "ty": {
-                "Named": "CanvasTarget"
-              },
-              "required": false
-            },
-            {
-              "name": "selected_target",
-              "docs": "Selected inspect target.",
-              "ty": {
-                "Named": "CanvasTarget"
-              },
-              "required": false
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "PerfStateView",
-      "docs": "Stable runtime perf counters.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "scene_builds",
-              "docs": "Scene build count.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "scene_build_millis",
-              "docs": "Accumulated scene build millis.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "SelectionStateView",
-      "docs": "Focused selection read model.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "mode",
-              "docs": "Editor mode.",
-              "ty": {
-                "Named": "EditorMode"
-              },
-              "required": true
-            },
-            {
-              "name": "range",
-              "docs": "Current selection range.",
-              "ty": {
-                "Named": "TextRange"
-              },
-              "required": false
-            },
-            {
-              "name": "selected_text",
-              "docs": "Selected text if any.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": false
-            },
-            {
-              "name": "selection_head",
-              "docs": "Selection head byte offset.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": false
-            },
-            {
-              "name": "pointer_anchor",
-              "docs": "Pointer anchor byte offset.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": false
-            },
-            {
-              "name": "viewport_target",
-              "docs": "Current viewport reveal target.",
-              "ty": {
-                "Named": "LayoutRectView"
-              },
-              "required": false
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "InspectDetailsView",
-      "docs": "Rich inspect read model.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "hovered_target",
-              "docs": "Hovered inspect target.",
-              "ty": {
-                "Named": "CanvasTarget"
-              },
-              "required": false
-            },
-            {
-              "name": "selected_target",
-              "docs": "Selected inspect target.",
-              "ty": {
-                "Named": "CanvasTarget"
-              },
-              "required": false
-            },
-            {
-              "name": "active_target",
-              "docs": "Active inspect target.",
-              "ty": {
-                "Named": "CanvasTarget"
-              },
-              "required": false
-            },
-            {
-              "name": "warnings",
-              "docs": "Scene warnings.",
-              "ty": {
-                "Named": "StringList"
-              },
-              "required": true
-            },
-            {
-              "name": "interaction_details",
-              "docs": "Human-readable target details.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": true
-            },
-            {
-              "name": "scene",
-              "docs": "Inspect scene summary.",
-              "ty": {
-                "Named": "InspectSceneView"
-              },
-              "required": false
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "InspectSceneView",
-      "docs": "Inspect-side scene summary.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "revision",
-              "docs": "Scene revision.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "run_count",
-              "docs": "Layout run count.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "cluster_count",
-              "docs": "Layout cluster count.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "PerfDashboardView",
-      "docs": "Rich runtime perf dashboard.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "overview",
-              "docs": "Perf overview.",
-              "ty": {
-                "Named": "PerfOverviewView"
-              },
-              "required": true
-            },
-            {
-              "name": "metrics",
-              "docs": "Perf metric summaries.",
-              "ty": {
-                "Named": "PerfMetricSummaryList"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "PerfOverviewView",
-      "docs": "Perf overview summary.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "editor_mode",
-              "docs": "Editor mode.",
-              "ty": {
-                "Named": "EditorMode"
-              },
-              "required": true
-            },
-            {
-              "name": "editor_bytes",
-              "docs": "Document size in bytes.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "text_lines",
-              "docs": "Document line count.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "layout_width",
-              "docs": "Current layout width.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "scene_ready",
-              "docs": "Whether scene data is materialized.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "scene_revision",
-              "docs": "Current scene revision.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": false
-            },
-            {
-              "name": "scene_width",
-              "docs": "Scene width.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "scene_height",
-              "docs": "Scene height.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "run_count",
-              "docs": "Layout run count.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "cluster_count",
-              "docs": "Layout cluster count.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "warning_count",
-              "docs": "Scene warning count.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "PerfMetricSummaryView",
-      "docs": "Perf metric summary row.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "label",
-              "docs": "Metric label.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": true
-            },
-            {
-              "name": "total_samples",
-              "docs": "Total samples.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "total_millis",
-              "docs": "Total millis.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "last_millis",
-              "docs": "Most recent millis.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "avg_millis",
-              "docs": "Average millis.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "TextRange",
-      "docs": "Byte range in the document.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "start",
-              "docs": "Start byte offset.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "end",
-              "docs": "End byte offset.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "LayoutRectView",
-      "docs": "Rectangle in layout coordinates.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "x",
-              "docs": "Left position.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "y",
-              "docs": "Top position.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "width",
-              "docs": "Rectangle width.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            },
-            {
-              "name": "height",
-              "docs": "Rectangle height.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "GlorpEventStreamView",
-      "docs": "Subscription handle for event polling.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "token",
-              "docs": "Subscription token.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            },
-            {
-              "name": "subscription",
-              "docs": "Subscription name.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "OkView",
-      "docs": "Boolean acknowledgement.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "ok",
-              "docs": "Acknowledgement flag.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "TokenAckView",
-      "docs": "Acknowledgement with a token payload.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "ok",
-              "docs": "Acknowledgement flag.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
-            },
-            {
-              "name": "token",
-              "docs": "Subscription token.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "GlorpSessionView",
-      "docs": "Resolved live session endpoint.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "socket",
-              "docs": "Socket path.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": true
-            },
-            {
-              "name": "repo_root",
-              "docs": "Resolved repo root.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": false
-            },
-            {
-              "name": "capabilities",
-              "docs": "Runtime capabilities.",
-              "ty": {
-                "Named": "GlorpCapabilities"
-              },
-              "required": true
-            }
-          ]
-        }
+        ]
       }
     },
     {
       "name": "CanvasTarget",
       "docs": "Canvas inspect target.",
       "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "run",
-              "docs": "Run index when targeting a run.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": false
-            },
-            {
-              "name": "cluster",
-              "docs": "Cluster index when targeting a cluster.",
-              "ty": {
-                "Builtin": "Int"
-              },
-              "required": false
+        "kind": "tagged-union",
+        "tag": "kind",
+        "content": "value",
+        "variants": [
+          {
+            "name": "run",
+            "docs": "Run index target.",
+            "payload": {
+              "kind": "builtin",
+              "value": "int"
             }
-          ]
-        }
+          },
+          {
+            "name": "cluster",
+            "docs": "Cluster index target.",
+            "payload": {
+              "kind": "builtin",
+              "value": "int"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "InspectTargetInput",
+      "docs": "Inspect target input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "target",
+            "docs": "Optional inspect target.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "CanvasTarget"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "CanvasFocusInput",
+      "docs": "Canvas focus change input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "focused",
+            "docs": "Whether the canvas owns focus.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "ScrollTarget",
+      "docs": "Viewport scroll target.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "x",
+            "docs": "Horizontal scroll offset.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "y",
+            "docs": "Vertical scroll offset.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "ViewportMetricsInput",
+      "docs": "Viewport metrics update.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "layout_width",
+            "docs": "Measured layout width.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "viewport_width",
+            "docs": "Measured viewport width.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "viewport_height",
+            "docs": "Measured viewport height.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "PaneRatioInput",
+      "docs": "Sidebar/canvas ratio input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "ratio",
+            "docs": "Sidebar/canvas ratio.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpExec",
+      "docs": "Typed exec operations.",
+      "kind": {
+        "kind": "tagged-union",
+        "tag": "op",
+        "content": "input",
+        "variants": [
+          {
+            "name": "txn",
+            "docs": "Apply multiple exec operations atomically.",
+            "payload": {
+              "kind": "named",
+              "value": "GlorpTxn"
+            }
+          },
+          {
+            "name": "config-set",
+            "docs": "Set one config field.",
+            "payload": {
+              "kind": "named",
+              "value": "ConfigAssignment"
+            }
+          },
+          {
+            "name": "config-reset",
+            "docs": "Reset one config field to its default.",
+            "payload": {
+              "kind": "named",
+              "value": "ConfigPathInput"
+            }
+          },
+          {
+            "name": "config-patch",
+            "docs": "Patch config with a record.",
+            "payload": {
+              "kind": "named",
+              "value": "ConfigPatchInput"
+            }
+          },
+          {
+            "name": "config-reload",
+            "docs": "Reload the durable config file.",
+            "payload": null
+          },
+          {
+            "name": "config-persist",
+            "docs": "Persist the effective config file.",
+            "payload": null
+          },
+          {
+            "name": "document-replace",
+            "docs": "Replace the document text.",
+            "payload": {
+              "kind": "named",
+              "value": "TextInput"
+            }
+          },
+          {
+            "name": "editor-motion",
+            "docs": "Apply a typed editor motion.",
+            "payload": {
+              "kind": "named",
+              "value": "EditorMotionInput"
+            }
+          },
+          {
+            "name": "editor-mode",
+            "docs": "Apply a typed editor mode change.",
+            "payload": {
+              "kind": "named",
+              "value": "EditorModeInput"
+            }
+          },
+          {
+            "name": "editor-insert",
+            "docs": "Insert text at the current selection.",
+            "payload": {
+              "kind": "named",
+              "value": "TextInput"
+            }
+          },
+          {
+            "name": "editor-backspace",
+            "docs": "Delete backward.",
+            "payload": null
+          },
+          {
+            "name": "editor-delete-forward",
+            "docs": "Delete forward.",
+            "payload": null
+          },
+          {
+            "name": "editor-delete-selection",
+            "docs": "Delete the current selection.",
+            "payload": null
+          },
+          {
+            "name": "editor-history",
+            "docs": "Apply editor history navigation.",
+            "payload": {
+              "kind": "named",
+              "value": "EditorHistoryInput"
+            }
+          },
+          {
+            "name": "editor-pointer-begin",
+            "docs": "Begin a pointer interaction.",
+            "payload": {
+              "kind": "named",
+              "value": "EditorPointerBeginInput"
+            }
+          },
+          {
+            "name": "editor-pointer-drag",
+            "docs": "Extend a pointer interaction.",
+            "payload": {
+              "kind": "named",
+              "value": "EditorPointerDragInput"
+            }
+          },
+          {
+            "name": "editor-pointer-end",
+            "docs": "End a pointer interaction.",
+            "payload": null
+          },
+          {
+            "name": "ui-sidebar-select",
+            "docs": "Select a sidebar tab.",
+            "payload": {
+              "kind": "named",
+              "value": "SidebarTabInput"
+            }
+          },
+          {
+            "name": "ui-inspect-target-hover",
+            "docs": "Set the hovered inspect target.",
+            "payload": {
+              "kind": "named",
+              "value": "InspectTargetInput"
+            }
+          },
+          {
+            "name": "ui-inspect-target-select",
+            "docs": "Set the selected inspect target.",
+            "payload": {
+              "kind": "named",
+              "value": "InspectTargetInput"
+            }
+          },
+          {
+            "name": "ui-canvas-focus-set",
+            "docs": "Set canvas focus state.",
+            "payload": {
+              "kind": "named",
+              "value": "CanvasFocusInput"
+            }
+          },
+          {
+            "name": "ui-viewport-scroll-to",
+            "docs": "Set viewport scroll position.",
+            "payload": {
+              "kind": "named",
+              "value": "ScrollTarget"
+            }
+          },
+          {
+            "name": "ui-viewport-metrics-set",
+            "docs": "Update viewport metrics.",
+            "payload": {
+              "kind": "named",
+              "value": "ViewportMetricsInput"
+            }
+          },
+          {
+            "name": "ui-pane-ratio-set",
+            "docs": "Set the sidebar/canvas split ratio.",
+            "payload": {
+              "kind": "named",
+              "value": "PaneRatioInput"
+            }
+          },
+          {
+            "name": "scene-ensure",
+            "docs": "Materialize scene state.",
+            "payload": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpTxn",
+      "docs": "Multiple exec operations applied atomically.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "execs",
+            "docs": "Ordered exec operations.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "GlorpExec"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpDelta",
+      "docs": "Boolean change flags.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "text_changed",
+            "docs": "Document text changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "view_changed",
+            "docs": "Editor view changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "selection_changed",
+            "docs": "Selection changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "mode_changed",
+            "docs": "Mode changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "config_changed",
+            "docs": "Config changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "ui_changed",
+            "docs": "UI state changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "scene_changed",
+            "docs": "Scene state changed.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpRevisions",
+      "docs": "Runtime revisions.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "editor",
+            "docs": "Editor revision.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "scene",
+            "docs": "Scene revision if materialized.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "builtin",
+                "value": "int"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "config",
+            "docs": "Config revision.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpWarning",
+      "docs": "Runtime warning payload.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "code",
+            "docs": "Warning code.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "message",
+            "docs": "Warning message.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpOutcome",
+      "docs": "Revisioned outcome for a successful command.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "delta",
+            "docs": "Change flags.",
+            "ty": {
+              "kind": "named",
+              "value": "GlorpDelta"
+            },
+            "required": true
+          },
+          {
+            "name": "revisions",
+            "docs": "Post-command revisions.",
+            "ty": {
+              "kind": "named",
+              "value": "GlorpRevisions"
+            },
+            "required": true
+          },
+          {
+            "name": "changed_config_paths",
+            "docs": "Config paths changed by the command.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "builtin",
+                "value": "string"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "warnings",
+            "docs": "Warnings emitted while handling the operation.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "GlorpWarning"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "SamplePreset",
+      "docs": "Built-in sample document presets.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "tall",
+            "docs": "A tall multi-script sample."
+          },
+          {
+            "name": "mixed",
+            "docs": "A short mixed-script sample."
+          },
+          {
+            "name": "rust",
+            "docs": "A Rust source sample."
+          },
+          {
+            "name": "ligatures",
+            "docs": "A ligature-heavy sample."
+          },
+          {
+            "name": "arabic",
+            "docs": "An Arabic sample."
+          },
+          {
+            "name": "cjk",
+            "docs": "A CJK sample."
+          },
+          {
+            "name": "emoji",
+            "docs": "An emoji-heavy sample."
+          },
+          {
+            "name": "custom",
+            "docs": "No built-in sample."
+          }
+        ]
+      }
+    },
+    {
+      "name": "FontChoice",
+      "docs": "Stable editor font families.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "jetbrains-mono",
+            "docs": "JetBrains Mono."
+          },
+          {
+            "name": "monospace",
+            "docs": "The platform monospace family."
+          },
+          {
+            "name": "noto-sans-cjk",
+            "docs": "Noto Sans CJK."
+          },
+          {
+            "name": "sans-serif",
+            "docs": "The platform sans-serif family."
+          }
+        ]
+      }
+    },
+    {
+      "name": "ShapingChoice",
+      "docs": "Stable shaping choices.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "auto",
+            "docs": "Choose shaping based on content."
+          },
+          {
+            "name": "basic",
+            "docs": "Use basic shaping."
+          },
+          {
+            "name": "advanced",
+            "docs": "Use advanced shaping."
+          }
+        ]
+      }
+    },
+    {
+      "name": "WrapChoice",
+      "docs": "Stable editor wrapping choices.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "none",
+            "docs": "Do not wrap lines."
+          },
+          {
+            "name": "word",
+            "docs": "Wrap at word boundaries."
+          },
+          {
+            "name": "glyph",
+            "docs": "Wrap at glyph boundaries."
+          },
+          {
+            "name": "word-or-glyph",
+            "docs": "Prefer word boundaries, fall back to glyph boundaries."
+          }
+        ]
+      }
+    },
+    {
+      "name": "EditorConfig",
+      "docs": "Editor configuration namespace.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "preset",
+            "docs": "Sample preset.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "SamplePreset"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "font",
+            "docs": "Font choice.",
+            "ty": {
+              "kind": "named",
+              "value": "FontChoice"
+            },
+            "required": true
+          },
+          {
+            "name": "shaping",
+            "docs": "Shaping choice.",
+            "ty": {
+              "kind": "named",
+              "value": "ShapingChoice"
+            },
+            "required": true
+          },
+          {
+            "name": "wrapping",
+            "docs": "Wrapping choice.",
+            "ty": {
+              "kind": "named",
+              "value": "WrapChoice"
+            },
+            "required": true
+          },
+          {
+            "name": "font_size",
+            "docs": "Font size.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "line_height",
+            "docs": "Line height.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "InspectConfig",
+      "docs": "Inspect configuration namespace.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "show_baselines",
+            "docs": "Show baselines.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "show_hitboxes",
+            "docs": "Show hitboxes.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpConfig",
+      "docs": "Stable runtime config.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "editor",
+            "docs": "Editor config namespace.",
+            "ty": {
+              "kind": "named",
+              "value": "EditorConfig"
+            },
+            "required": true
+          },
+          {
+            "name": "inspect",
+            "docs": "Inspect config namespace.",
+            "ty": {
+              "kind": "named",
+              "value": "InspectConfig"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "SceneLevel",
+      "docs": "Scene materialization policies.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "omit",
+            "docs": "Do not include scene state."
+          },
+          {
+            "name": "if-ready",
+            "docs": "Include scene state when already materialized."
+          },
+          {
+            "name": "materialize",
+            "docs": "Materialize scene state before returning."
+          }
+        ]
+      }
+    },
+    {
+      "name": "SnapshotQuery",
+      "docs": "Snapshot query input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "scene",
+            "docs": "Scene materialization policy.",
+            "ty": {
+              "kind": "named",
+              "value": "SceneLevel"
+            },
+            "required": true
+          },
+          {
+            "name": "include_document_text",
+            "docs": "Whether to include document text.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "EditorMode",
+      "docs": "Stable editor modes.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "normal",
+            "docs": "Normal mode."
+          },
+          {
+            "name": "insert",
+            "docs": "Insert mode."
+          }
+        ]
+      }
+    },
+    {
+      "name": "TextRange",
+      "docs": "Byte range in the document.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "start",
+            "docs": "Start byte offset.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "end",
+            "docs": "End byte offset.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "LayoutRectView",
+      "docs": "Rectangle in layout coordinates.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "x",
+            "docs": "Left position.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "y",
+            "docs": "Top position.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "width",
+            "docs": "Rectangle width.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "height",
+            "docs": "Rectangle height.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "EditorViewportView",
+      "docs": "Viewport-facing editor metrics.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "wrapping",
+            "docs": "Current wrapping mode.",
+            "ty": {
+              "kind": "named",
+              "value": "WrapChoice"
+            },
+            "required": true
+          },
+          {
+            "name": "measured_width",
+            "docs": "Measured content width.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "measured_height",
+            "docs": "Measured content height.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "viewport_target",
+            "docs": "Current viewport reveal target.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "LayoutRectView"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "EditorStateView",
+      "docs": "Stable editor state view.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "mode",
+            "docs": "Editor mode.",
+            "ty": {
+              "kind": "named",
+              "value": "EditorMode"
+            },
+            "required": true
+          },
+          {
+            "name": "selection",
+            "docs": "Current selection range.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "TextRange"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "selection_head",
+            "docs": "Selection head byte offset.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "builtin",
+                "value": "int"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "pointer_anchor",
+            "docs": "Pointer anchor byte offset.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "builtin",
+                "value": "int"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "text_bytes",
+            "docs": "Document size in bytes.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "text_lines",
+            "docs": "Document line count.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "undo_depth",
+            "docs": "Undo depth.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "redo_depth",
+            "docs": "Redo depth.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "viewport",
+            "docs": "Viewport-facing editor metrics.",
+            "ty": {
+              "kind": "named",
+              "value": "EditorViewportView"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "SceneStateView",
+      "docs": "Stable scene state view.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "revision",
+            "docs": "Scene revision.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "measured_width",
+            "docs": "Measured width.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "measured_height",
+            "docs": "Measured height.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "run_count",
+            "docs": "Layout run count.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "cluster_count",
+            "docs": "Layout cluster count.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "InspectStateView",
+      "docs": "Stable inspect state view.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "hovered_target",
+            "docs": "Hovered inspect target.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "CanvasTarget"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "selected_target",
+            "docs": "Selected inspect target.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "CanvasTarget"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "PerfStateView",
+      "docs": "Stable runtime perf counters.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "scene_builds",
+            "docs": "Scene build count.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "scene_build_millis",
+            "docs": "Accumulated scene build millis.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          }
+        ]
       }
     },
     {
       "name": "UiStateView",
       "docs": "Stable UI state view.",
       "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "active_tab",
-              "docs": "Active sidebar tab.",
-              "ty": {
-                "Named": "SidebarTab"
-              },
-              "required": true
+        "kind": "record",
+        "fields": [
+          {
+            "name": "active_tab",
+            "docs": "Active sidebar tab.",
+            "ty": {
+              "kind": "named",
+              "value": "SidebarTab"
             },
-            {
-              "name": "canvas_focused",
-              "docs": "Whether the canvas owns focus.",
-              "ty": {
-                "Builtin": "Bool"
-              },
-              "required": true
+            "required": true
+          },
+          {
+            "name": "canvas_focused",
+            "docs": "Whether the canvas owns focus.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
             },
-            {
-              "name": "canvas_scroll_x",
-              "docs": "Horizontal scroll offset.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
+            "required": true
+          },
+          {
+            "name": "canvas_scroll_x",
+            "docs": "Horizontal scroll offset.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
             },
-            {
-              "name": "canvas_scroll_y",
-              "docs": "Vertical scroll offset.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
+            "required": true
+          },
+          {
+            "name": "canvas_scroll_y",
+            "docs": "Vertical scroll offset.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
             },
-            {
-              "name": "layout_width",
-              "docs": "Current layout width.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
+            "required": true
+          },
+          {
+            "name": "layout_width",
+            "docs": "Current layout width.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
             },
-            {
-              "name": "viewport_width",
-              "docs": "Viewport width.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
+            "required": true
+          },
+          {
+            "name": "viewport_width",
+            "docs": "Viewport width.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
             },
-            {
-              "name": "viewport_height",
-              "docs": "Viewport height.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
+            "required": true
+          },
+          {
+            "name": "viewport_height",
+            "docs": "Viewport height.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
             },
-            {
-              "name": "pane_ratio",
-              "docs": "Sidebar/canvas ratio.",
-              "ty": {
-                "Builtin": "Float"
-              },
-              "required": true
-            }
-          ]
-        }
+            "required": true
+          },
+          {
+            "name": "pane_ratio",
+            "docs": "Sidebar/canvas ratio.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpSnapshot",
+      "docs": "Read-only runtime snapshot.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "revisions",
+            "docs": "Runtime revisions.",
+            "ty": {
+              "kind": "named",
+              "value": "GlorpRevisions"
+            },
+            "required": true
+          },
+          {
+            "name": "config",
+            "docs": "Effective config.",
+            "ty": {
+              "kind": "named",
+              "value": "GlorpConfig"
+            },
+            "required": true
+          },
+          {
+            "name": "editor",
+            "docs": "Editor state view.",
+            "ty": {
+              "kind": "named",
+              "value": "EditorStateView"
+            },
+            "required": true
+          },
+          {
+            "name": "scene",
+            "docs": "Scene state view.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "SceneStateView"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "inspect",
+            "docs": "Inspect state view.",
+            "ty": {
+              "kind": "named",
+              "value": "InspectStateView"
+            },
+            "required": true
+          },
+          {
+            "name": "perf",
+            "docs": "Performance state view.",
+            "ty": {
+              "kind": "named",
+              "value": "PerfStateView"
+            },
+            "required": true
+          },
+          {
+            "name": "ui",
+            "docs": "UI state view.",
+            "ty": {
+              "kind": "named",
+              "value": "UiStateView"
+            },
+            "required": true
+          },
+          {
+            "name": "document_text",
+            "docs": "Document text when requested.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "builtin",
+                "value": "string"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "SelectionStateView",
+      "docs": "Focused selection read model.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "mode",
+            "docs": "Editor mode.",
+            "ty": {
+              "kind": "named",
+              "value": "EditorMode"
+            },
+            "required": true
+          },
+          {
+            "name": "range",
+            "docs": "Current selection range.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "TextRange"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "selected_text",
+            "docs": "Selected text if any.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "builtin",
+                "value": "string"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "selection_head",
+            "docs": "Selection head byte offset.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "builtin",
+                "value": "int"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "pointer_anchor",
+            "docs": "Pointer anchor byte offset.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "builtin",
+                "value": "int"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "viewport_target",
+            "docs": "Current viewport reveal target.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "LayoutRectView"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "InspectDetailsQuery",
+      "docs": "Inspect-details query input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "target",
+            "docs": "Optional active inspect target.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "CanvasTarget"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "InspectSceneView",
+      "docs": "Inspect-side scene summary.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "revision",
+            "docs": "Scene revision.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "run_count",
+            "docs": "Layout run count.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "cluster_count",
+            "docs": "Layout cluster count.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "InspectDetailsView",
+      "docs": "Rich inspect read model.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "hovered_target",
+            "docs": "Hovered inspect target.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "CanvasTarget"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "selected_target",
+            "docs": "Selected inspect target.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "CanvasTarget"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "active_target",
+            "docs": "Active inspect target.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "CanvasTarget"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "warnings",
+            "docs": "Scene warnings.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "builtin",
+                "value": "string"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "interaction_details",
+            "docs": "Human-readable target details.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "scene",
+            "docs": "Inspect scene summary.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "InspectSceneView"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "PerfOverviewView",
+      "docs": "Perf overview summary.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "editor_mode",
+            "docs": "Editor mode.",
+            "ty": {
+              "kind": "named",
+              "value": "EditorMode"
+            },
+            "required": true
+          },
+          {
+            "name": "editor_bytes",
+            "docs": "Document size in bytes.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "text_lines",
+            "docs": "Document line count.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "layout_width",
+            "docs": "Current layout width.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "scene_ready",
+            "docs": "Whether scene data is materialized.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "scene_revision",
+            "docs": "Current scene revision.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "builtin",
+                "value": "int"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "scene_width",
+            "docs": "Scene width.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "scene_height",
+            "docs": "Scene height.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "run_count",
+            "docs": "Layout run count.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "cluster_count",
+            "docs": "Layout cluster count.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "warning_count",
+            "docs": "Scene warning count.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "PerfMetricSummaryView",
+      "docs": "Perf metric summary row.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "label",
+            "docs": "Metric label.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "total_samples",
+            "docs": "Total samples.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "total_millis",
+            "docs": "Total millis.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "last_millis",
+            "docs": "Most recent millis.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          },
+          {
+            "name": "avg_millis",
+            "docs": "Average millis.",
+            "ty": {
+              "kind": "builtin",
+              "value": "float"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "PerfDashboardView",
+      "docs": "Rich runtime perf dashboard.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "overview",
+            "docs": "Perf overview.",
+            "ty": {
+              "kind": "named",
+              "value": "PerfOverviewView"
+            },
+            "required": true
+          },
+          {
+            "name": "metrics",
+            "docs": "Perf metric summaries.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "named",
+                "value": "PerfMetricSummaryView"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpCapabilities",
+      "docs": "Stable runtime capability flags.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "transactions",
+            "docs": "Whether transactions are supported.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "subscriptions",
+            "docs": "Whether subscriptions are supported.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "transports",
+            "docs": "Supported transport names.",
+            "ty": {
+              "kind": "list",
+              "value": {
+                "kind": "builtin",
+                "value": "string"
+              }
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpSessionView",
+      "docs": "Resolved live session endpoint.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "socket",
+            "docs": "Socket path.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "repo_root",
+            "docs": "Resolved repo root.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "builtin",
+                "value": "string"
+              }
+            },
+            "required": true
+          },
+          {
+            "name": "capabilities",
+            "docs": "Runtime capabilities.",
+            "ty": {
+              "kind": "named",
+              "value": "GlorpCapabilities"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "OkView",
+      "docs": "Boolean acknowledgement.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "ok",
+            "docs": "Acknowledgement flag.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpEventStreamView",
+      "docs": "Subscription handle for event polling.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "token",
+            "docs": "Subscription token.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "subscription",
+            "docs": "Subscription name.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "StreamTokenInput",
+      "docs": "Subscription token input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "token",
+            "docs": "Subscription token.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          }
+        ]
       }
     },
     {
       "name": "GlorpNotice",
       "docs": "Notice payload.",
       "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "message",
-              "docs": "Notice message.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": true
+        "kind": "record",
+        "fields": [
+          {
+            "name": "code",
+            "docs": "Notice code.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "message",
+            "docs": "Notice message.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpEvent",
+      "docs": "Runtime event union.",
+      "kind": {
+        "kind": "tagged-union",
+        "tag": "kind",
+        "content": "payload",
+        "variants": [
+          {
+            "name": "changed",
+            "docs": "Revisioned state change event.",
+            "payload": {
+              "kind": "named",
+              "value": "GlorpOutcome"
             }
-          ]
-        }
+          },
+          {
+            "name": "notice",
+            "docs": "Runtime notice event.",
+            "payload": {
+              "kind": "named",
+              "value": "GlorpNotice"
+            }
+          }
+        ]
       }
     },
     {
-      "name": "StringList",
-      "docs": "List of strings.",
+      "name": "TokenAckView",
+      "docs": "Acknowledgement with a token payload.",
       "kind": {
-        "List": {
-          "item": {
-            "Builtin": "String"
+        "kind": "record",
+        "fields": [
+          {
+            "name": "ok",
+            "docs": "Acknowledgement flag.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "token",
+            "docs": "Subscription token.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
           }
-        }
-      }
-    },
-    {
-      "name": "PerfMetricSummaryList",
-      "docs": "List of perf metric summaries.",
-      "kind": {
-        "List": {
-          "item": {
-            "Named": "PerfMetricSummaryView"
-          }
-        }
+        ]
       }
     }
   ],
-  "config": [
+  "operations": [
     {
-      "path": "editor.preset",
-      "docs": "Optional sample preset.",
-      "ty": {
-        "Named": "SamplePreset"
+      "id": "txn",
+      "kind": "exec",
+      "docs": "Apply multiple exec operations atomically.",
+      "input": {
+        "kind": "named",
+        "value": "GlorpTxn"
       },
-      "default": "tall",
-      "mutable": true
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
     },
     {
-      "path": "editor.font",
-      "docs": "Editor font choice.",
-      "ty": {
-        "Named": "FontChoice"
-      },
-      "default": "jetbrains-mono",
-      "mutable": true
-    },
-    {
-      "path": "editor.shaping",
-      "docs": "Editor shaping mode.",
-      "ty": {
-        "Named": "ShapingChoice"
-      },
-      "default": "advanced",
-      "mutable": true
-    },
-    {
-      "path": "editor.wrapping",
-      "docs": "Editor wrapping mode.",
-      "ty": {
-        "Named": "WrapChoice"
-      },
-      "default": "word",
-      "mutable": true
-    },
-    {
-      "path": "editor.font_size",
-      "docs": "Editor font size in logical pixels.",
-      "ty": {
-        "Builtin": "Float"
-      },
-      "default": 24.0,
-      "mutable": true
-    },
-    {
-      "path": "editor.line_height",
-      "docs": "Editor line height in logical pixels.",
-      "ty": {
-        "Builtin": "Float"
-      },
-      "default": 32.0,
-      "mutable": true
-    },
-    {
-      "path": "inspect.show_baselines",
-      "docs": "Show line baselines in inspect mode.",
-      "ty": {
-        "Builtin": "Bool"
-      },
-      "default": false,
-      "mutable": true
-    },
-    {
-      "path": "inspect.show_hitboxes",
-      "docs": "Show glyph hitboxes in inspect mode.",
-      "ty": {
-        "Builtin": "Bool"
-      },
-      "default": false,
-      "mutable": true
-    }
-  ],
-  "commands": [
-    {
-      "path": "glorp config set",
+      "id": "config-set",
+      "kind": "exec",
       "docs": "Set one config field.",
       "input": {
-        "Named": "ConfigAssignment"
+        "kind": "named",
+        "value": "ConfigAssignment"
       },
       "output": {
-        "Named": "GlorpOutcome"
+        "kind": "named",
+        "value": "GlorpOutcome"
       }
     },
     {
-      "path": "glorp config reset",
+      "id": "config-reset",
+      "kind": "exec",
       "docs": "Reset one config field to its default.",
       "input": {
-        "Named": "ConfigPathInput"
+        "kind": "named",
+        "value": "ConfigPathInput"
       },
       "output": {
-        "Named": "GlorpOutcome"
+        "kind": "named",
+        "value": "GlorpOutcome"
       }
     },
     {
-      "path": "glorp config patch",
+      "id": "config-patch",
+      "kind": "exec",
       "docs": "Patch config with a record.",
       "input": {
-        "Named": "ConfigPatch"
+        "kind": "named",
+        "value": "ConfigPatchInput"
       },
       "output": {
-        "Named": "GlorpOutcome"
+        "kind": "named",
+        "value": "GlorpOutcome"
       }
     },
     {
-      "path": "glorp config reload",
+      "id": "config-reload",
+      "kind": "exec",
       "docs": "Reload the durable config file.",
-      "input": {
-        "Builtin": "Null"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp config persist",
-      "docs": "Persist the effective config to the durable config file.",
-      "input": {
-        "Builtin": "Null"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp doc replace",
-      "docs": "Replace the document text.",
-      "input": {
-        "Named": "TextInput"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp editor motion",
-      "docs": "Apply a typed motion command.",
-      "input": {
-        "Named": "EditorMotionInput"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp editor mode",
-      "docs": "Apply a typed mode command.",
-      "input": {
-        "Named": "EditorModeInput"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp editor edit insert",
-      "docs": "Insert text.",
-      "input": {
-        "Named": "TextInput"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp editor edit backspace",
-      "docs": "Delete backward.",
-      "input": {
-        "Builtin": "Null"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp editor edit delete-forward",
-      "docs": "Delete forward.",
-      "input": {
-        "Builtin": "Null"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp editor edit delete-selection",
-      "docs": "Delete the current selection.",
-      "input": {
-        "Builtin": "Null"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp editor history",
-      "docs": "Apply history navigation.",
-      "input": {
-        "Named": "EditorHistoryInput"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp ui sidebar select",
-      "docs": "Select a sidebar tab.",
-      "input": {
-        "Named": "SidebarTabInput"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp ui viewport scroll-to",
-      "docs": "Set runtime viewport scroll position.",
-      "input": {
-        "Named": "ScrollTarget"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp ui pane-ratio-set",
-      "docs": "Set the sidebar/canvas split ratio.",
-      "input": {
-        "Named": "PaneRatioInput"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp scene ensure",
-      "docs": "Materialize scene state.",
-      "input": {
-        "Builtin": "Null"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
-      "path": "glorp txn",
-      "docs": "Apply a transaction atomically.",
-      "input": {
-        "Named": "GlorpTxn"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    }
-  ],
-  "queries": [
-    {
-      "path": "glorp schema",
-      "docs": "Return the runtime reflection schema.",
       "input": null,
       "output": {
-        "Named": "GlorpSchema"
+        "kind": "named",
+        "value": "GlorpOutcome"
       }
     },
     {
-      "path": "glorp get config",
+      "id": "config-persist",
+      "kind": "exec",
+      "docs": "Persist the effective config file.",
+      "input": null,
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "document-replace",
+      "kind": "exec",
+      "docs": "Replace the document text.",
+      "input": {
+        "kind": "named",
+        "value": "TextInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "editor-motion",
+      "kind": "exec",
+      "docs": "Apply a typed editor motion.",
+      "input": {
+        "kind": "named",
+        "value": "EditorMotionInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "editor-mode",
+      "kind": "exec",
+      "docs": "Apply a typed editor mode change.",
+      "input": {
+        "kind": "named",
+        "value": "EditorModeInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "editor-insert",
+      "kind": "exec",
+      "docs": "Insert text at the current selection.",
+      "input": {
+        "kind": "named",
+        "value": "TextInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "editor-backspace",
+      "kind": "exec",
+      "docs": "Delete backward.",
+      "input": null,
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "editor-delete-forward",
+      "kind": "exec",
+      "docs": "Delete forward.",
+      "input": null,
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "editor-delete-selection",
+      "kind": "exec",
+      "docs": "Delete the current selection.",
+      "input": null,
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "editor-history",
+      "kind": "exec",
+      "docs": "Apply editor history navigation.",
+      "input": {
+        "kind": "named",
+        "value": "EditorHistoryInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "editor-pointer-begin",
+      "kind": "exec",
+      "docs": "Begin a pointer interaction.",
+      "input": {
+        "kind": "named",
+        "value": "EditorPointerBeginInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "editor-pointer-drag",
+      "kind": "exec",
+      "docs": "Extend a pointer interaction.",
+      "input": {
+        "kind": "named",
+        "value": "EditorPointerDragInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "editor-pointer-end",
+      "kind": "exec",
+      "docs": "End a pointer interaction.",
+      "input": null,
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "ui-sidebar-select",
+      "kind": "exec",
+      "docs": "Select a sidebar tab.",
+      "input": {
+        "kind": "named",
+        "value": "SidebarTabInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "ui-inspect-target-hover",
+      "kind": "exec",
+      "docs": "Set the hovered inspect target.",
+      "input": {
+        "kind": "named",
+        "value": "InspectTargetInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "ui-inspect-target-select",
+      "kind": "exec",
+      "docs": "Set the selected inspect target.",
+      "input": {
+        "kind": "named",
+        "value": "InspectTargetInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "ui-canvas-focus-set",
+      "kind": "exec",
+      "docs": "Set canvas focus state.",
+      "input": {
+        "kind": "named",
+        "value": "CanvasFocusInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "ui-viewport-scroll-to",
+      "kind": "exec",
+      "docs": "Set viewport scroll position.",
+      "input": {
+        "kind": "named",
+        "value": "ScrollTarget"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "ui-viewport-metrics-set",
+      "kind": "exec",
+      "docs": "Update viewport metrics.",
+      "input": {
+        "kind": "named",
+        "value": "ViewportMetricsInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "ui-pane-ratio-set",
+      "kind": "exec",
+      "docs": "Set the sidebar/canvas split ratio.",
+      "input": {
+        "kind": "named",
+        "value": "PaneRatioInput"
+      },
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "scene-ensure",
+      "kind": "exec",
+      "docs": "Materialize scene state.",
+      "input": null,
+      "output": {
+        "kind": "named",
+        "value": "GlorpOutcome"
+      }
+    },
+    {
+      "id": "schema",
+      "kind": "query",
+      "docs": "Return the protocol reflection schema.",
+      "input": null,
+      "output": {
+        "kind": "named",
+        "value": "GlorpSchema"
+      }
+    },
+    {
+      "id": "config",
+      "kind": "query",
       "docs": "Return the effective runtime config.",
       "input": null,
       "output": {
-        "Named": "GlorpConfig"
+        "kind": "named",
+        "value": "GlorpConfig"
       }
     },
     {
-      "path": "glorp get state",
-      "docs": "Return a snapshot of runtime state.",
-      "input": null,
+      "id": "snapshot",
+      "kind": "query",
+      "docs": "Return a runtime snapshot.",
+      "input": {
+        "kind": "named",
+        "value": "SnapshotQuery"
+      },
       "output": {
-        "Named": "GlorpSnapshot"
+        "kind": "named",
+        "value": "GlorpSnapshot"
       }
     },
     {
-      "path": "glorp get document-text",
+      "id": "document-text",
+      "kind": "query",
       "docs": "Return the current document text.",
       "input": null,
       "output": {
-        "Builtin": "String"
+        "kind": "builtin",
+        "value": "string"
       }
     },
     {
-      "path": "glorp get selection",
+      "id": "selection",
+      "kind": "query",
       "docs": "Return the current selection read model.",
       "input": null,
       "output": {
-        "Named": "SelectionStateView"
+        "kind": "named",
+        "value": "SelectionStateView"
       }
     },
     {
-      "path": "glorp get inspect-details",
+      "id": "inspect-details",
+      "kind": "query",
       "docs": "Return the current inspect read model.",
       "input": {
-        "Named": "InspectDetailsInput"
+        "kind": "named",
+        "value": "InspectDetailsQuery"
       },
       "output": {
-        "Named": "InspectDetailsView"
+        "kind": "named",
+        "value": "InspectDetailsView"
       }
     },
     {
-      "path": "glorp get perf",
+      "id": "perf",
+      "kind": "query",
       "docs": "Return the runtime perf dashboard.",
       "input": null,
       "output": {
-        "Named": "PerfDashboardView"
+        "kind": "named",
+        "value": "PerfDashboardView"
       }
     },
     {
-      "path": "glorp get ui",
+      "id": "ui",
+      "kind": "query",
       "docs": "Return the current UI state.",
       "input": null,
       "output": {
-        "Named": "UiStateView"
+        "kind": "named",
+        "value": "UiStateView"
       }
     },
     {
-      "path": "glorp get capabilities",
+      "id": "capabilities",
+      "kind": "query",
       "docs": "Return stable runtime capability flags.",
       "input": null,
       "output": {
-        "Named": "GlorpCapabilities"
+        "kind": "named",
+        "value": "GlorpCapabilities"
       }
-    }
-  ],
-  "helpers": [
+    },
     {
-      "path": "glorp session attach",
+      "id": "session-attach",
+      "kind": "helper",
       "docs": "Resolve and validate a live Glorp session.",
-      "kind": "session-attach",
       "input": null,
       "output": {
-        "Named": "GlorpSessionView"
+        "kind": "named",
+        "value": "GlorpSessionView"
       }
     },
     {
-      "path": "glorp session shutdown",
+      "id": "session-shutdown",
+      "kind": "helper",
       "docs": "Stop the live shared runtime for the resolved session.",
-      "kind": "session-shutdown",
       "input": null,
       "output": {
-        "Named": "OkView"
+        "kind": "named",
+        "value": "OkView"
       }
     },
     {
-      "path": "glorp config validate",
+      "id": "config-validate",
+      "kind": "helper",
       "docs": "Validate a config value without mutating runtime state.",
-      "kind": "config-validate",
       "input": {
-        "Named": "ConfigAssignment"
+        "kind": "named",
+        "value": "ConfigAssignment"
       },
       "output": {
-        "Named": "OkView"
+        "kind": "named",
+        "value": "OkView"
       }
     },
     {
-      "path": "glorp events subscribe",
+      "id": "events-subscribe",
+      "kind": "helper",
       "docs": "Subscribe to runtime change events.",
-      "kind": "events-subscribe",
       "input": null,
       "output": {
-        "Named": "GlorpEventStreamView"
+        "kind": "named",
+        "value": "GlorpEventStreamView"
       }
     },
     {
-      "path": "glorp events next",
+      "id": "events-next",
+      "kind": "helper",
       "docs": "Poll the next event for a subscription token.",
-      "kind": "events-next",
       "input": {
-        "Named": "StreamTokenInput"
+        "kind": "named",
+        "value": "StreamTokenInput"
       },
       "output": {
-        "Builtin": "Any"
+        "kind": "option",
+        "value": {
+          "kind": "named",
+          "value": "GlorpEvent"
+        }
       }
     },
     {
-      "path": "glorp events unsubscribe",
+      "id": "events-unsubscribe",
+      "kind": "helper",
       "docs": "Release a subscription token.",
-      "kind": "events-unsubscribe",
       "input": {
-        "Named": "StreamTokenInput"
+        "kind": "named",
+        "value": "StreamTokenInput"
       },
       "output": {
-        "Named": "TokenAckView"
+        "kind": "named",
+        "value": "TokenAckView"
       }
     }
   ],
   "events": [
     {
-      "path": "glorp changed",
+      "id": "changed",
       "docs": "Revisioned state change event.",
       "payload": {
-        "Named": "GlorpOutcome"
+        "kind": "named",
+        "value": "GlorpOutcome"
       }
     },
     {
-      "path": "glorp notice",
+      "id": "notice",
       "docs": "Runtime notices.",
       "payload": {
-        "Named": "GlorpNotice"
+        "kind": "named",
+        "value": "GlorpNotice"
       }
     }
   ]

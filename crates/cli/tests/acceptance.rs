@@ -84,10 +84,10 @@ fn eval_to_value(plugin_test: &mut PluginTest, nu_source: &str) -> Value {
 
 fn snapshot(host: &mut impl GlorpHost, scene: SceneLevel) -> GlorpSnapshot {
 	match host
-		.query(GlorpQuery::Snapshot {
+		.query(GlorpQuery::Snapshot(SnapshotQuery {
 			scene,
 			include_document_text: true,
-		})
+		}))
 		.expect("snapshot query should succeed")
 	{
 		GlorpQueryResult::Snapshot(snapshot) => snapshot,
@@ -109,28 +109,64 @@ fn assert_f32_eq(actual: f32, expected: f32) {
 	assert!((actual - expected).abs() <= f32::EPSILON);
 }
 
+fn txn(execs: Vec<GlorpExec>) -> GlorpExec {
+	GlorpExec::Txn(GlorpTxn { execs })
+}
+
+fn config_set(path: &str, value: GlorpValue) -> GlorpExec {
+	GlorpExec::ConfigSet(ConfigAssignment {
+		path: path.to_owned(),
+		value,
+	})
+}
+
+fn config_persist() -> GlorpExec {
+	GlorpExec::ConfigPersist
+}
+
+fn document_replace(text: &str) -> GlorpExec {
+	GlorpExec::DocumentReplace(TextInput { text: text.to_owned() })
+}
+
+fn editor_mode(mode: EditorModeCommand) -> GlorpExec {
+	GlorpExec::EditorMode(EditorModeInput { mode })
+}
+
+fn editor_motion(motion: EditorMotion) -> GlorpExec {
+	GlorpExec::EditorMotion(EditorMotionInput { motion })
+}
+
+fn editor_insert(text: &str) -> GlorpExec {
+	GlorpExec::EditorInsert(TextInput { text: text.to_owned() })
+}
+
+fn editor_history(action: EditorHistoryCommand) -> GlorpExec {
+	GlorpExec::EditorHistory(EditorHistoryInput { action })
+}
+
+fn scene_ensure() -> GlorpExec {
+	GlorpExec::SceneEnsure
+}
+
+fn ui_sidebar_select(tab: SidebarTab) -> GlorpExec {
+	GlorpExec::UiSidebarSelect(SidebarTabInput { tab })
+}
+
+fn ui_inspect_target_select(target: Option<CanvasTarget>) -> GlorpExec {
+	GlorpExec::UiInspectTargetSelect(InspectTargetInput { target })
+}
+
 fn run_standard_transcript(host: &mut impl GlorpHost) -> GlorpSnapshot {
-	host.execute(GlorpCommand::Config(ConfigCommand::Set {
-		path: "editor.wrapping".to_owned(),
-		value: GlorpValue::String("word".to_owned()),
-	}))
-	.expect("config set should succeed");
-	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
-		text: "hello".to_owned(),
-	}))
-	.expect("document replace should succeed");
-	host.execute(GlorpCommand::Editor(EditorCommand::Mode(
-		EditorModeCommand::EnterInsertAfter,
-	)))
-	.expect("enter insert should succeed");
-	host.execute(GlorpCommand::Editor(EditorCommand::Motion(EditorMotion::LineEnd)))
+	host.execute(config_set("editor.wrapping", GlorpValue::String("word".to_owned())))
+		.expect("config set should succeed");
+	host.execute(document_replace("hello"))
+		.expect("document replace should succeed");
+	host.execute(editor_mode(EditorModeCommand::EnterInsertAfter))
+		.expect("enter insert should succeed");
+	host.execute(editor_motion(EditorMotion::LineEnd))
 		.expect("line-end should succeed");
-	host.execute(GlorpCommand::Editor(EditorCommand::Edit(EditorEditCommand::Insert {
-		text: " world".to_owned(),
-	})))
-	.expect("insert should succeed");
-	host.execute(GlorpCommand::Scene(SceneCommand::Ensure))
-		.expect("scene ensure should succeed");
+	host.execute(editor_insert(" world")).expect("insert should succeed");
+	host.execute(scene_ensure()).expect("scene ensure should succeed");
 	snapshot(host, SceneLevel::Materialize)
 }
 
@@ -158,36 +194,41 @@ fn schema_export_smoke_test() {
 		other => panic!("unexpected schema response: {other:?}"),
 	};
 
-	assert!(schema.version > 0);
-	assert!(schema.commands.iter().any(|command| command.path == "glorp config set"));
+	assert_eq!(schema.version, 3);
 	assert!(
 		schema
-			.commands
+			.operations
 			.iter()
-			.any(|command| command.path == "glorp editor motion")
+			.any(|operation| { operation.kind == OperationKind::Exec && operation.id == "config-set" })
 	);
 	assert!(
 		schema
-			.commands
+			.operations
 			.iter()
-			.any(|command| command.path == "glorp scene ensure")
-	);
-	assert!(schema.config.iter().any(|field| field.path == "editor.font"));
-	assert!(schema.config.iter().any(|field| field.path == "editor.wrapping"));
-	assert!(schema.config.iter().any(|field| field.path == "inspect.show_hitboxes"));
-	assert!(schema.config.iter().all(|field| !field.docs.is_empty()));
-	assert!(
-		schema
-			.helpers
-			.iter()
-			.any(|helper| helper.path == "glorp session attach")
+			.any(|operation| { operation.kind == OperationKind::Exec && operation.id == "editor-motion" })
 	);
 	assert!(
 		schema
-			.helpers
+			.operations
 			.iter()
-			.any(|helper| helper.path == "glorp events subscribe")
+			.any(|operation| { operation.kind == OperationKind::Exec && operation.id == "scene-ensure" })
 	);
+	assert!(
+		schema
+			.operations
+			.iter()
+			.any(|operation| { operation.kind == OperationKind::Helper && operation.id == "session-attach" })
+	);
+	assert!(
+		schema
+			.operations
+			.iter()
+			.any(|operation| { operation.kind == OperationKind::Helper && operation.id == "events-subscribe" })
+	);
+	assert!(schema.types.iter().any(|ty| ty.name == "GlorpConfig"));
+	assert!(schema.types.iter().any(|ty| ty.name == "WrapChoice"));
+	assert!(schema.types.iter().any(|ty| ty.name == "InspectConfig"));
+	assert!(schema.types.iter().all(|ty| !ty.docs.is_empty()));
 	assert!(harness.paths.schema_path.exists());
 }
 
@@ -199,18 +240,18 @@ fn nu_plugin_roundtrip_smoke_test() {
 	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
 	let before = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp get config --socket "{}""#, harness.socket_path.display()),
+		&format!(r#"glorp query config --socket "{}""#, harness.socket_path.display()),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp config set editor.wrapping glyph --socket "{}""#,
+			r#"glorp exec config-set {{path: "editor.wrapping", value: "glyph"}} --socket "{}""#,
 			harness.socket_path.display()
 		),
 	);
 	let after = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp get config --socket "{}""#, harness.socket_path.display()),
+		&format!(r#"glorp query config --socket "{}""#, harness.socket_path.display()),
 	);
 
 	assert_ne!(before, after);
@@ -233,10 +274,10 @@ fn invalid_config_rejection_e2e() {
 	let config_before = snapshot(&mut host, SceneLevel::IfReady).revisions.config;
 
 	let error = host
-		.execute(GlorpCommand::Config(ConfigCommand::Set {
-			path: "editor.wrapping".to_owned(),
-			value: GlorpValue::String("definitely-not-valid".to_owned()),
-		}))
+		.execute(config_set(
+			"editor.wrapping",
+			GlorpValue::String("definitely-not-valid".to_owned()),
+		))
 		.expect_err("invalid config should fail");
 
 	match error {
@@ -263,19 +304,11 @@ fn transaction_atomicity_e2e() {
 	let before = snapshot(&mut host, SceneLevel::IfReady);
 
 	let error = host
-		.execute(GlorpCommand::Txn(GlorpTxn {
-			commands: vec![
-				GlorpCommand::Config(ConfigCommand::Set {
-					path: "editor.wrapping".into(),
-					value: GlorpValue::String("glyph".into()),
-				}),
-				GlorpCommand::Document(DocumentCommand::Replace { text: "changed".into() }),
-				GlorpCommand::Config(ConfigCommand::Set {
-					path: "editor.wrapping".into(),
-					value: GlorpValue::String("invalid-value".into()),
-				}),
-			],
-		}))
+		.execute(txn(vec![
+			config_set("editor.wrapping", GlorpValue::String("glyph".into())),
+			document_replace("changed"),
+			config_set("editor.wrapping", GlorpValue::String("invalid-value".into())),
+		]))
 		.expect_err("transaction should fail");
 	assert!(matches!(error, GlorpError::Validation { .. }));
 
@@ -290,11 +323,7 @@ fn transaction_atomicity_e2e() {
 fn nested_transaction_rejection_e2e() {
 	let mut host = Harness::new().runtime();
 	let error = host
-		.execute(GlorpCommand::Txn(GlorpTxn {
-			commands: vec![GlorpCommand::Txn(GlorpTxn {
-				commands: vec![GlorpCommand::Scene(SceneCommand::Ensure)],
-			})],
-		}))
+		.execute(txn(vec![txn(vec![scene_ensure()])]))
 		.expect_err("nested transaction should fail");
 
 	match error {
@@ -336,9 +365,7 @@ fn gui_launcher_socket_contract_e2e() {
 		GuiRuntimeSession::connect_or_start(options.clone()).expect("launcher should start runtime");
 	assert!(launched.owns_server());
 	launched_client
-		.execute(GlorpCommand::Document(DocumentCommand::Replace {
-			text: "launched".to_owned(),
-		}))
+		.execute(document_replace("launched"))
 		.expect("launched client should write");
 	assert_eq!(document_text(&mut launched_client), "launched");
 	launched.shutdown().expect("launcher shutdown should succeed");
@@ -348,9 +375,7 @@ fn gui_launcher_socket_contract_e2e() {
 		GuiRuntimeSession::connect_or_start(options).expect("launcher should attach to existing runtime");
 	assert!(!attached.owns_server());
 	attached_client
-		.execute(GlorpCommand::Document(DocumentCommand::Replace {
-			text: "attached".to_owned(),
-		}))
+		.execute(document_replace("attached"))
 		.expect("attached client should write");
 	assert_eq!(document_text(&mut harness.ipc_client()), "attached");
 }
@@ -358,26 +383,18 @@ fn gui_launcher_socket_contract_e2e() {
 #[test]
 fn editor_command_to_document_text_e2e() {
 	let mut host = Harness::new().runtime();
-	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
-		text: "abc".to_owned(),
-	}))
-	.expect("replace should succeed");
-	host.execute(GlorpCommand::Editor(EditorCommand::Mode(
-		EditorModeCommand::EnterInsertAfter,
-	)))
-	.expect("enter insert should succeed");
-	host.execute(GlorpCommand::Editor(EditorCommand::Motion(EditorMotion::LineEnd)))
+	host.execute(document_replace("abc")).expect("replace should succeed");
+	host.execute(editor_mode(EditorModeCommand::EnterInsertAfter))
+		.expect("enter insert should succeed");
+	host.execute(editor_motion(EditorMotion::LineEnd))
 		.expect("move to line end should succeed");
-	host.execute(GlorpCommand::Editor(EditorCommand::Edit(EditorEditCommand::Insert {
-		text: "!".to_owned(),
-	})))
-	.expect("insert should succeed");
+	host.execute(editor_insert("!")).expect("insert should succeed");
 
 	assert_eq!(document_text(&mut host), "abc!");
 	let snapshot = snapshot(&mut host, SceneLevel::IfReady);
 	assert!(snapshot.editor.undo_depth > 0);
 
-	host.execute(GlorpCommand::Editor(EditorCommand::History(EditorHistoryCommand::Undo)))
+	host.execute(editor_history(EditorHistoryCommand::Undo))
 		.expect("undo should succeed");
 	assert_eq!(document_text(&mut host), "abc");
 }
@@ -385,10 +402,8 @@ fn editor_command_to_document_text_e2e() {
 #[test]
 fn scene_materialization_proof_test() {
 	let mut host = Harness::new().runtime();
-	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
-		text: "fixture text\nwith two lines".to_owned(),
-	}))
-	.expect("replace should succeed");
+	host.execute(document_replace("fixture text\nwith two lines"))
+		.expect("replace should succeed");
 
 	let omitted = snapshot(&mut host, SceneLevel::Omit);
 	assert!(omitted.scene.is_none());
@@ -409,29 +424,22 @@ fn revision_monotonicity_test() {
 	let initial = snapshot(&mut host, SceneLevel::IfReady).revisions;
 
 	let config = host
-		.execute(GlorpCommand::Config(ConfigCommand::Set {
-			path: "inspect.show_hitboxes".to_owned(),
-			value: GlorpValue::Bool(true),
-		}))
+		.execute(config_set("inspect.show_hitboxes", GlorpValue::Bool(true)))
 		.expect("config update should succeed");
 	assert!(config.revisions.config > initial.config);
 	assert_eq!(config.revisions.editor, initial.editor);
 
 	let editor = host
-		.execute(GlorpCommand::Document(DocumentCommand::Replace {
-			text: "abc".to_owned(),
-		}))
+		.execute(document_replace("abc"))
 		.expect("document replace should succeed");
 	assert!(editor.revisions.editor > config.revisions.editor);
 	assert_eq!(editor.revisions.config, config.revisions.config);
 
-	let scene = host
-		.execute(GlorpCommand::Scene(SceneCommand::Ensure))
-		.expect("scene ensure should succeed");
+	let scene = host.execute(scene_ensure()).expect("scene ensure should succeed");
 	assert!(scene.revisions.scene.is_some());
 
 	let repeated = host
-		.execute(GlorpCommand::Scene(SceneCommand::Ensure))
+		.execute(scene_ensure())
 		.expect("scene ensure repeat should succeed");
 	assert_eq!(repeated.revisions, scene.revisions);
 }
@@ -448,41 +456,44 @@ fn ipc_client_parity_test() {
 	let _ = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp config set editor.wrapping word --socket "{}""#,
+			r#"glorp exec config-set {{path: "editor.wrapping", value: "word"}} --socket "{}""#,
 			harness.socket_path.display()
 		),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp doc replace "hello" --socket "{}""#,
+			r#"glorp exec document-replace {{text: "hello"}} --socket "{}""#,
 			harness.socket_path.display()
 		),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp editor mode enter-insert-after --socket "{}""#,
+			r#"glorp exec editor-mode {{mode: "enter-insert-after"}} --socket "{}""#,
 			harness.socket_path.display()
 		),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp editor motion line-end --socket "{}""#,
+			r#"glorp exec editor-motion {{motion: "line-end"}} --socket "{}""#,
 			harness.socket_path.display()
 		),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp editor edit insert " world" --socket "{}""#,
+			r#"glorp exec editor-insert {{text: " world"}} --socket "{}""#,
 			harness.socket_path.display()
 		),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp scene ensure --socket "{}""#, harness.socket_path.display()),
+		&format!(
+			r#"glorp exec scene-ensure --socket "{}""#,
+			harness.socket_path.display()
+		),
 	);
 	let plugin_snapshot = snapshot(&mut harness.ipc_client(), SceneLevel::Materialize);
 
@@ -502,14 +513,17 @@ fn plugin_auto_starts_shared_host_e2e() {
 	let _ = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp doc replace "shared-socket" --repo-root "{}""#,
+			r#"glorp exec document-replace {{text: "shared-socket"}} --repo-root "{}""#,
 			harness.root.display()
 		),
 	);
 	assert_eq!(document_text(&mut harness.ipc_client()), "shared-socket");
 	let _ = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp session shutdown --repo-root "{}""#, harness.root.display()),
+		&format!(
+			r#"glorp helper session-shutdown --repo-root "{}""#,
+			harness.root.display()
+		),
 	);
 }
 
@@ -518,13 +532,9 @@ fn persistence_smoke_test() {
 	let harness = Harness::new();
 	let paths = harness.paths.clone();
 	let mut host = harness.runtime();
-	host.execute(GlorpCommand::Config(ConfigCommand::Set {
-		path: "editor.wrapping".to_owned(),
-		value: GlorpValue::String("glyph".to_owned()),
-	}))
-	.expect("config set should succeed");
-	host.execute(GlorpCommand::Config(ConfigCommand::Persist))
-		.expect("persist should succeed");
+	host.execute(config_set("editor.wrapping", GlorpValue::String("glyph".to_owned())))
+		.expect("config set should succeed");
+	host.execute(config_persist()).expect("persist should succeed");
 	drop(host);
 
 	let mut fresh = RuntimeHost::new(RuntimeOptions { paths }).expect("fresh runtime should start");
@@ -542,23 +552,14 @@ fn event_stream_conformance_test() {
 		.subscribe(GlorpSubscription::Changes)
 		.expect("subscribe should succeed");
 
-	host.execute(GlorpCommand::Config(ConfigCommand::Set {
-		path: "inspect.show_hitboxes".to_owned(),
-		value: GlorpValue::Bool(true),
-	}))
-	.expect("config update should succeed");
-	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
-		text: "event stream".to_owned(),
-	}))
-	.expect("document replace should succeed");
-	host.execute(GlorpCommand::Scene(SceneCommand::Ensure))
-		.expect("scene ensure should succeed");
+	host.execute(config_set("inspect.show_hitboxes", GlorpValue::Bool(true)))
+		.expect("config update should succeed");
+	host.execute(document_replace("event stream"))
+		.expect("document replace should succeed");
+	host.execute(scene_ensure()).expect("scene ensure should succeed");
 	assert!(
-		host.execute(GlorpCommand::Config(ConfigCommand::Set {
-			path: "editor.wrapping".to_owned(),
-			value: GlorpValue::String("invalid".to_owned()),
-		}))
-		.is_err()
+		host.execute(config_set("editor.wrapping", GlorpValue::String("invalid".to_owned()),))
+			.is_err()
 	);
 
 	let first = match host.next_event(token).expect("event should be available") {
@@ -594,27 +595,27 @@ fn plugin_transcript_smoke_test() {
 
 	let _ = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp config set editor.wrapping word --repo-root "{repo_root}""#),
+		&format!(r#"glorp exec config-set {{path: "editor.wrapping", value: "word"}} --repo-root "{repo_root}""#),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp doc replace "hello" --repo-root "{repo_root}""#),
+		&format!(r#"glorp exec document-replace {{text: "hello"}} --repo-root "{repo_root}""#),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp editor mode enter-insert-after --repo-root "{repo_root}""#),
+		&format!(r#"glorp exec editor-mode {{mode: "enter-insert-after"}} --repo-root "{repo_root}""#),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp editor motion line-end --repo-root "{repo_root}""#),
+		&format!(r#"glorp exec editor-motion {{motion: "line-end"}} --repo-root "{repo_root}""#),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp editor edit insert " world" --repo-root "{repo_root}""#),
+		&format!(r#"glorp exec editor-insert {{text: " world"}} --repo-root "{repo_root}""#),
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp scene ensure --repo-root "{repo_root}""#),
+		&format!(r#"glorp exec scene-ensure --repo-root "{repo_root}""#),
 	);
 
 	let snapshot = snapshot(&mut harness.ipc_client(), SceneLevel::Materialize);
@@ -629,12 +630,12 @@ fn plugin_transcript_smoke_test() {
 
 	let _ = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp session shutdown --repo-root "{repo_root}""#),
+		&format!(r#"glorp helper session-shutdown --repo-root "{repo_root}""#),
 	);
 }
 
 #[test]
-fn typed_txn_builder_commands_e2e() {
+fn plugin_transaction_e2e() {
 	let harness = Harness::new();
 	unsafe {
 		std::env::set_var("GLORP_HOST_BIN", host_bin());
@@ -646,14 +647,16 @@ fn typed_txn_builder_commands_e2e() {
 		&mut plugin_test,
 		&format!(
 			r#"
-			glorp txn [
-			  (glorp cmd config set editor.wrapping glyph)
-			  (glorp cmd doc replace "hello")
-			  (glorp cmd editor mode enter-insert-after)
-			  (glorp cmd editor motion line-end)
-			  (glorp cmd editor edit insert " world")
-			  (glorp cmd scene ensure)
-			] --repo-root "{repo_root}"
+			glorp exec txn {{
+			  execs: [
+			    {{op: "config-set", input: {{path: "editor.wrapping", value: "glyph"}}}}
+			    {{op: "document-replace", input: {{text: "hello"}}}}
+			    {{op: "editor-mode", input: {{mode: "enter-insert-after"}}}}
+			    {{op: "editor-motion", input: {{motion: "line-end"}}}}
+			    {{op: "editor-insert", input: {{text: " world"}}}}
+			    {{op: "scene-ensure"}}
+			  ]
+			}} --repo-root "{repo_root}"
 			"#,
 		),
 	);
@@ -666,10 +669,8 @@ fn typed_txn_builder_commands_e2e() {
 #[test]
 fn selection_query_e2e() {
 	let mut host = Harness::new().runtime();
-	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
-		text: "alpha beta".to_owned(),
-	}))
-	.expect("replace should succeed");
+	host.execute(document_replace("alpha beta"))
+		.expect("replace should succeed");
 
 	let selection = match host
 		.query(GlorpQuery::Selection)
@@ -688,23 +689,16 @@ fn selection_query_e2e() {
 #[test]
 fn inspect_details_query_e2e() {
 	let mut host = Harness::new().runtime();
-	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
-		text: "inspect me".to_owned(),
-	}))
-	.expect("replace should succeed");
-	host.execute(GlorpCommand::Ui(UiCommand::SidebarSelect {
-		tab: SidebarTab::Inspect,
-	}))
-	.expect("sidebar select should succeed");
-	host.execute(GlorpCommand::Scene(SceneCommand::Ensure))
-		.expect("scene ensure should succeed");
-	host.execute(GlorpCommand::Ui(UiCommand::InspectTargetSelect {
-		target: Some(CanvasTarget::Cluster(0)),
-	}))
-	.expect("inspect target select should succeed");
+	host.execute(document_replace("inspect me"))
+		.expect("replace should succeed");
+	host.execute(ui_sidebar_select(SidebarTab::Inspect))
+		.expect("sidebar select should succeed");
+	host.execute(scene_ensure()).expect("scene ensure should succeed");
+	host.execute(ui_inspect_target_select(Some(CanvasTarget::Cluster(0))))
+		.expect("inspect target select should succeed");
 
 	let inspect = match host
-		.query(GlorpQuery::InspectDetails { target: None })
+		.query(GlorpQuery::InspectDetails(InspectDetailsQuery { target: None }))
 		.expect("inspect-details query should succeed")
 	{
 		GlorpQueryResult::InspectDetails(inspect) => inspect,
@@ -719,16 +713,14 @@ fn inspect_details_query_e2e() {
 #[test]
 fn perf_dashboard_query_e2e() {
 	let mut host = Harness::new().runtime();
-	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
-		text: "one\ntwo\nthree".to_owned(),
-	}))
-	.expect("replace should succeed");
+	host.execute(document_replace("one\ntwo\nthree"))
+		.expect("replace should succeed");
 
 	let perf = match host
-		.query(GlorpQuery::PerfDashboard)
+		.query(GlorpQuery::Perf)
 		.expect("perf dashboard query should succeed")
 	{
-		GlorpQueryResult::PerfDashboard(perf) => perf,
+		GlorpQueryResult::Perf(perf) => perf,
 		other => panic!("unexpected perf dashboard response: {other:?}"),
 	};
 
@@ -747,7 +739,10 @@ fn plugin_session_attach_and_event_polling_e2e() {
 
 	let session = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp session attach --repo-root "{}""#, harness.root.display()),
+		&format!(
+			r#"glorp helper session-attach --repo-root "{}""#,
+			harness.root.display()
+		),
 	);
 	let socket_value = session.get_data_by_key("socket").expect("socket field");
 	let socket = socket_value.coerce_str().expect("socket should be string");
@@ -755,7 +750,10 @@ fn plugin_session_attach_and_event_polling_e2e() {
 
 	let stream = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp events subscribe --repo-root "{}""#, harness.root.display()),
+		&format!(
+			r#"glorp helper events-subscribe --repo-root "{}""#,
+			harness.root.display()
+		),
 	);
 	let token = stream
 		.get_data_by_key("token")
@@ -767,24 +765,28 @@ fn plugin_session_attach_and_event_polling_e2e() {
 	let _ = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp doc replace "eventful" --repo-root "{}""#,
+			r#"glorp exec document-replace {{text: "eventful"}} --repo-root "{}""#,
 			harness.root.display()
 		),
 	);
 	let event = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp events next {} --repo-root "{}""#,
+			r#"glorp helper events-next {{token: {}}} --repo-root "{}""#,
 			token,
 			harness.root.display(),
 		),
 	);
-	assert!(event.get_data_by_key("Changed").is_some());
+	let kind = event
+		.get_data_by_key("kind")
+		.and_then(|value| value.coerce_str().ok().map(|value| value.into_owned()))
+		.expect("event kind should be string");
+	assert_eq!(kind, "changed");
 
 	let _ = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp events unsubscribe {} --repo-root "{}""#,
+			r#"glorp helper events-unsubscribe {{token: {}}} --repo-root "{}""#,
 			token,
 			harness.root.display(),
 		),

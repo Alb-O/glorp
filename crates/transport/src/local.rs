@@ -1,6 +1,6 @@
 use {
 	glorp_api::{
-		GlorpCommand, GlorpError, GlorpEvent, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
+		GlorpError, GlorpEvent, GlorpExec, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
 		GlorpSubscription,
 	},
 	glorp_runtime::RuntimeHost,
@@ -40,8 +40,8 @@ impl LocalClient {
 }
 
 impl GlorpHost for LocalClient {
-	fn execute(&mut self, command: GlorpCommand) -> Result<GlorpOutcome, GlorpError> {
-		self.with_host(|host| host.execute(command))
+	fn execute(&mut self, exec: GlorpExec) -> Result<GlorpOutcome, GlorpError> {
+		self.with_host(|host| host.execute(exec))
 	}
 
 	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {

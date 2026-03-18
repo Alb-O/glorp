@@ -1,14 +1,14 @@
 use {
 	crate::GuiMessage,
-	glorp_api::{GlorpCommand, UiCommand},
+	glorp_api::{GlorpExec, InspectTargetInput, PaneRatioInput, ScrollTarget, SidebarTabInput},
 };
 
 #[must_use]
-pub const fn to_command(message: GuiMessage) -> GlorpCommand {
-	GlorpCommand::Ui(match message {
-		GuiMessage::SidebarSelect(tab) => UiCommand::SidebarSelect { tab },
-		GuiMessage::InspectTargetSelect(target) => UiCommand::InspectTargetSelect { target },
-		GuiMessage::ViewportScrollTo { x, y } => UiCommand::ViewportScrollTo { x, y },
-		GuiMessage::PaneRatioSet(ratio) => UiCommand::PaneRatioSet { ratio },
-	})
+pub const fn to_command(message: GuiMessage) -> GlorpExec {
+	match message {
+		GuiMessage::SidebarSelect(tab) => GlorpExec::UiSidebarSelect(SidebarTabInput { tab }),
+		GuiMessage::InspectTargetSelect(target) => GlorpExec::UiInspectTargetSelect(InspectTargetInput { target }),
+		GuiMessage::ViewportScrollTo { x, y } => GlorpExec::UiViewportScrollTo(ScrollTarget { x, y }),
+		GuiMessage::PaneRatioSet(ratio) => GlorpExec::UiPaneRatioSet(PaneRatioInput { ratio }),
+	}
 }

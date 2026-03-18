@@ -264,7 +264,7 @@ ______________________________________________________________________
 
 There is one semantic path:
 
-> client intent → `GlorpCommand` / `GlorpQuery` → runtime execute/query → `GlorpOutcome` / `GlorpSnapshot` / `GlorpEvent`
+> client intent → `GlorpExec` / `GlorpQuery` / `GlorpHelper` → runtime execute/query/helper → `GlorpOutcome` / `GlorpQueryResult` / `GlorpHelperResult` / `GlorpEvent`
 
 Not:
 
@@ -284,7 +284,7 @@ ______________________________________________________________________
 
 ```rust
 pub trait GlorpHost {
-    fn execute(&mut self, command: GlorpCommand) -> Result<GlorpOutcome, GlorpError>;
+    fn execute(&mut self, exec: GlorpExec) -> Result<GlorpOutcome, GlorpError>;
     fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError>;
     fn subscribe(&mut self, request: GlorpSubscription) -> Result<GlorpStreamToken, GlorpError>;
     fn next_event(&mut self, token: GlorpStreamToken) -> Result<Option<GlorpEvent>, GlorpError>;
@@ -301,82 +301,40 @@ This freezes the system around a small set of concepts:
 
 ______________________________________________________________________
 
-## Public Command Model
+## Public Operation Model
 
 ```rust
-pub enum GlorpCommand {
+pub enum GlorpExec {
     Txn(GlorpTxn),
-    Config(ConfigCommand),
-    Document(DocumentCommand),
-    Editor(EditorCommand),
-    Ui(UiCommand),
-    Scene(SceneCommand),
+    ConfigSet(ConfigAssignment),
+    ConfigReset(ConfigPathInput),
+    ConfigPatch(ConfigPatchInput),
+    ConfigReload,
+    ConfigPersist,
+    DocumentReplace(TextInput),
+    EditorMotion(EditorMotionInput),
+    EditorMode(EditorModeInput),
+    EditorInsert(TextInput),
+    EditorBackspace,
+    EditorDeleteForward,
+    EditorDeleteSelection,
+    EditorHistory(EditorHistoryInput),
+    UiSidebarSelect(SidebarTabInput),
+    UiInspectTargetSelect(InspectTargetInput),
+    UiViewportScrollTo(ScrollTarget),
+    UiPaneRatioSet(PaneRatioInput),
+    SceneEnsure,
 }
 
 pub struct GlorpTxn {
-    pub commands: Vec<GlorpCommand>,
-}
-```
-
-### Config commands
-
-```rust
-pub enum ConfigCommand {
-    Set { path: ConfigPath, value: GlorpValue },
-    Patch { values: Vec<ConfigAssignment> },
-    Reset { path: ConfigPath },
-    Reload,
-    Persist,
-}
-```
-
-`Set`, `Patch`, and `Reset` mutate the effective runtime config only.
-`Persist` writes the current effective runtime config to the durable Nu backing file.
-`Reload` discards in-memory config mutations and reloads the durable backing file into runtime state.
-
-### Document commands
-
-```rust
-pub enum DocumentCommand {
-    Replace { text: String },
-}
-```
-
-### Editor commands
-
-```rust
-pub enum EditorCommand {
-    Motion(EditorMotion),
-    Mode(EditorModeCommand),
-    Edit(EditorEditCommand),
-    History(EditorHistoryCommand),
-    Pointer(EditorPointerCommand),
-}
-```
-
-### UI commands
-
-```rust
-pub enum UiCommand {
-    SidebarSelect { tab: SidebarTab },
-    InspectTargetSelect { target: Option<CanvasTarget> },
-    ViewportScrollTo { x: f32, y: f32 },
-    PaneRatioSet { ratio: f32 },
-}
-```
-
-### Scene commands
-
-```rust
-pub enum SceneCommand {
-    Ensure,
+    pub execs: Vec<GlorpExec>,
 }
 ```
 
 ### Design rule
 
 Config mutation stays **path-based** for introspection and agent usability.
-Editor/UI operations stay **strongly typed enums** rather than collapsing into untyped key/value soup.
+Editor/UI operations stay **strongly typed payload structs and enums** rather than collapsing into untyped key/value soup.
 
 That preserves discoverability without sacrificing semantic precision.
 Raw client-input events such as hover, focus, and resize remain private adapter concerns unless they are
@@ -390,12 +348,12 @@ ______________________________________________________________________
 pub enum GlorpQuery {
     Schema,
     Config,
-    Snapshot { scene: SceneLevel, include_document_text: bool },
+    Snapshot(SnapshotQuery),
     DocumentText,
     Selection,
-    InspectDetails { target: Option<CanvasTarget> },
-    PerfDashboard,
-    UiState,
+    InspectDetails(InspectDetailsQuery),
+    Perf,
+    Ui,
     Capabilities,
 }
 
@@ -406,8 +364,8 @@ pub enum GlorpQueryResult {
     DocumentText(String),
     Selection(SelectionStateView),
     InspectDetails(InspectDetailsView),
-    PerfDashboard(PerfDashboardView),
-    UiState(UiStateView),
+    Perf(PerfDashboardView),
+    Ui(UiStateView),
     Capabilities(GlorpCapabilities),
 }
 ```
@@ -701,21 +659,21 @@ The Nu surface should be generated from schema, but exposed through a hand-desig
 ### Core commands
 
 ```text
-glorp schema
-glorp get config
-glorp get state
-glorp get document-text
-glorp config set editor.wrapping word
-glorp config reset inspect.show-hitboxes
-glorp config patch {editor: {font_size: 18}}
-glorp editor motion line-end
-glorp editor mode enter-insert-after
-glorp editor edit insert "hello"
-glorp editor history undo
-glorp ui sidebar select inspect
-glorp ui viewport scroll-to 0 120
-glorp scene ensure
-glorp txn { ... }
+glorp query schema
+glorp query config
+glorp query snapshot {scene: "if-ready", include_document_text: true}
+glorp query document-text
+glorp exec config-set {path: "editor.wrapping", value: "word"}
+glorp exec config-reset {path: "inspect.show_hitboxes"}
+glorp exec config-patch {patch: {editor: {font_size: 18}}}
+glorp exec editor-motion {motion: "line-end"}
+glorp exec editor-mode {mode: "enter-insert-after"}
+glorp exec editor-insert {text: "hello"}
+glorp exec editor-history {action: "undo"}
+glorp exec ui-sidebar-select {tab: "inspect"}
+glorp exec ui-viewport-scroll-to {x: 0, y: 120}
+glorp exec scene-ensure
+glorp exec txn {execs: [...]}
 ```
 
 The public Nu namespace is intentionally semantic.
@@ -727,16 +685,17 @@ debug/client-input facilities outside the primary contract.
 A coding agent should be able to do things like:
 
 ```nu
-let field = (glorp schema config | where path == "editor.wrapping" | first)
-$field
-$field.default
-$field.ty
+let schema = (glorp query schema)
+let op = ($schema.operations | where id == "config-set" | first)
+let ty = ($schema.types | where name == "GlorpConfig" | first)
+$op
+$ty
 ```
 
 Or validate before mutation:
 
 ```nu
-glorp config validate editor.wrapping "word"
+glorp helper config-validate {path: "editor.wrapping", value: "word"}
 ```
 
 The key affordance is **typed discovery before writeback**.
@@ -886,16 +845,16 @@ Proves the runtime can actually surface a usable schema.
 
 - start runtime host
 - query `Schema`
-- assert schema version is nonzero
-- assert expected commands exist:
-  - `glorp config set`
-  - `glorp editor motion`
-  - `glorp scene ensure`
-- assert config fields include:
-  - `editor.font`
-  - `editor.wrapping`
-  - `inspect.show_hitboxes`
-- assert enum docs/defaults are non-empty where required
+- assert schema version matches the current protocol version
+- assert expected operations exist:
+  - `config-set`
+  - `editor-motion`
+  - `scene-ensure`
+- assert core named types exist:
+  - `GlorpConfig`
+  - `WrapChoice`
+  - `InspectConfig`
+- assert operation/type docs are non-empty where required
 
 ### 2. Nu plugin round-trip smoke test
 
@@ -905,9 +864,9 @@ In practice this is cleanest with Nushell's `nu_plugin_test_support` harness so 
 - boot runtime host
 - run:
   ```nu
-  glorp get config
-  glorp config set editor.wrapping glyph
-  glorp get config
+  glorp query config
+  glorp exec config-set {path: "editor.wrapping", value: "glyph"}
+  glorp query config
   ```
 - assert second config read reflects the change
 - assert the harness reports no evaluation error
@@ -919,7 +878,7 @@ Proves validation is real and not just best-effort parsing.
 
 - invoke:
   ```nu
-  glorp config set editor.wrapping definitely-not-valid
+  glorp exec config-set {path: "editor.wrapping", value: "definitely-not-valid"}
   ```
 - assert nonzero exit status
 - assert typed validation error names the path and allowed values
@@ -1045,12 +1004,12 @@ A compact but brutally honest whole-system test.
 Run a fixed transcript through the Nu/plugin surface:
 
 ```text
-glorp config set editor.wrapping word
-glorp doc replace "hello"
-glorp editor motion line-end
-glorp editor edit insert " world"
-glorp scene ensure
-glorp get state
+glorp exec config-set {path: "editor.wrapping", value: "word"}
+glorp exec document-replace {text: "hello"}
+glorp exec editor-motion {motion: "line-end"}
+glorp exec editor-insert {text: " world"}
+glorp exec scene-ensure
+glorp query snapshot {scene: "materialize", include_document_text: true}
 ```
 
 Assert against a golden JSON snapshot containing:

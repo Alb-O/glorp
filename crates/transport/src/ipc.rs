@@ -1,11 +1,10 @@
 use glorp_api::{
-	GlorpCommand, GlorpError, GlorpEvent, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
-	GlorpSubscription,
+	GlorpError, GlorpEvent, GlorpExec, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken, GlorpSubscription,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum TransportRequest {
-	Execute(GlorpCommand),
+	Execute(GlorpExec),
 	Query(GlorpQuery),
 	Subscribe(GlorpSubscription),
 	NextEvent(GlorpStreamToken),

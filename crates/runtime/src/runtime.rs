@@ -1,7 +1,7 @@
 use {
 	crate::{ConfigStore, ConfigStorePaths, events::SubscriptionSet, execute, project, state::RuntimeState},
 	glorp_api::{
-		GlorpCapabilities, GlorpCommand, GlorpError, GlorpEvent, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult,
+		GlorpCapabilities, GlorpError, GlorpEvent, GlorpExec, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult,
 		GlorpStreamToken, GlorpSubscription, SamplePreset,
 	},
 	std::path::PathBuf,
@@ -55,31 +55,26 @@ impl GlorpRuntime {
 }
 
 impl GlorpHost for GlorpRuntime {
-	fn execute(&mut self, command: GlorpCommand) -> Result<GlorpOutcome, GlorpError> {
-		execute::execute(self, command)
+	fn execute(&mut self, exec: GlorpExec) -> Result<GlorpOutcome, GlorpError> {
+		execute::execute(self, exec)
 	}
 
 	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
 		Ok(match query {
 			GlorpQuery::Schema => GlorpQueryResult::Schema(glorp_api::glorp_schema()),
 			GlorpQuery::Config => GlorpQueryResult::Config(self.state.config.clone()),
-			GlorpQuery::Snapshot {
-				scene,
-				include_document_text,
-			} => GlorpQueryResult::Snapshot(project::snapshot_from_state(
+			GlorpQuery::Snapshot(input) => GlorpQueryResult::Snapshot(project::snapshot_from_state(
 				&mut self.state,
-				scene,
-				include_document_text,
+				input.scene,
+				input.include_document_text,
 			)),
 			GlorpQuery::DocumentText => GlorpQueryResult::DocumentText(self.state.session.text().into()),
 			GlorpQuery::Selection => GlorpQueryResult::Selection(project::selection_view_from_state(&self.state)),
-			GlorpQuery::InspectDetails { target } => {
-				GlorpQueryResult::InspectDetails(project::inspect_details_view_from_state(&mut self.state, target))
-			}
-			GlorpQuery::PerfDashboard => {
-				GlorpQueryResult::PerfDashboard(project::perf_dashboard_view_from_state(&mut self.state))
-			}
-			GlorpQuery::UiState => GlorpQueryResult::UiState(project::ui_state_view(&self.state)),
+			GlorpQuery::InspectDetails(input) => GlorpQueryResult::InspectDetails(
+				project::inspect_details_view_from_state(&mut self.state, input.target),
+			),
+			GlorpQuery::Perf => GlorpQueryResult::Perf(project::perf_dashboard_view_from_state(&mut self.state)),
+			GlorpQuery::Ui => GlorpQueryResult::Ui(project::ui_state_view(&self.state)),
 			GlorpQuery::Capabilities => GlorpQueryResult::Capabilities(GlorpCapabilities {
 				transactions: true,
 				subscriptions: true,

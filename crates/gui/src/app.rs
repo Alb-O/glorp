@@ -1,6 +1,6 @@
 use {
 	crate::{GuiMessage, GuiPresentation, GuiTheme, update},
-	glorp_api::{GlorpError, GlorpHost, GlorpQuery, GlorpQueryResult, SceneLevel},
+	glorp_api::{GlorpError, GlorpHost, GlorpQuery, GlorpQueryResult, SceneLevel, SnapshotQuery},
 };
 
 pub struct GlorpGui<H> {
@@ -29,10 +29,10 @@ where
 	}
 
 	pub fn presentation(&mut self) -> Result<GuiPresentation, GlorpError> {
-		let GlorpQueryResult::Snapshot(snapshot) = self.host.query(GlorpQuery::Snapshot {
+		let GlorpQueryResult::Snapshot(snapshot) = self.host.query(GlorpQuery::Snapshot(SnapshotQuery {
 			scene: SceneLevel::IfReady,
 			include_document_text: false,
-		})?
+		}))?
 		else {
 			return Err(GlorpError::internal("unexpected snapshot response"));
 		};

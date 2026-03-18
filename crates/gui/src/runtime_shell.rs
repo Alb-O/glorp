@@ -12,8 +12,9 @@ use {
 		},
 	},
 	glorp_api::{
-		ConfigCommand, DocumentCommand, EditorCommand, EnumValue, GlorpCommand, GlorpError, GlorpHost, GlorpTxn,
-		GlorpValue, SceneCommand, SidebarTab, UiCommand, WrapChoice,
+		CanvasFocusInput, ConfigAssignment, EditorHistoryInput, EditorModeInput, EditorMotionInput, EnumValue,
+		GlorpError, GlorpExec, GlorpHost, GlorpTxn, GlorpValue, InspectTargetInput, PaneRatioInput, ScrollTarget,
+		SidebarTab, SidebarTabInput, TextInput, ViewportMetricsInput, WrapChoice,
 	},
 	glorp_editor::{
 		EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent,
@@ -77,7 +78,7 @@ impl RuntimeShell {
 	pub(crate) fn update(&mut self, message: Message) {
 		let result = match message {
 			Message::Controls(message) => self.handle_controls(message),
-			Message::Sidebar(message) => self.execute(GlorpCommand::Ui(UiCommand::SidebarSelect {
+			Message::Sidebar(message) => self.execute(GlorpExec::UiSidebarSelect(SidebarTabInput {
 				tab: message_tab(message),
 			})),
 			Message::Canvas(message) => self.handle_canvas(message),
@@ -85,7 +86,7 @@ impl RuntimeShell {
 			Message::Perf(PerfMessage::Tick(_)) => self.refresh_frame(),
 			Message::Viewport(ViewportMessage::CanvasResized(size)) => {
 				let viewport = scene_viewport_size(size);
-				self.execute(GlorpCommand::Ui(UiCommand::ViewportMetricsSet {
+				self.execute(GlorpExec::UiViewportMetricsSet(ViewportMetricsInput {
 					layout_width: viewport.width,
 					viewport_width: viewport.width,
 					viewport_height: viewport.height,
@@ -93,7 +94,7 @@ impl RuntimeShell {
 			}
 			Message::Shell(crate::types::ShellMessage::PaneResized(event)) => {
 				self.shell.resize(event.split, event.ratio);
-				self.execute(GlorpCommand::Ui(UiCommand::PaneRatioSet { ratio: event.ratio }))
+				self.execute(GlorpExec::UiPaneRatioSet(PaneRatioInput { ratio: event.ratio }))
 			}
 		};
 
@@ -242,18 +243,16 @@ impl RuntimeShell {
 
 	fn handle_controls(&mut self, message: ControlsMessage) -> Result<(), GlorpError> {
 		match message {
-			ControlsMessage::LoadPreset(preset) => self.execute(GlorpCommand::Txn(GlorpTxn {
-				commands: std::iter::once(config_set("editor.preset", enum_string_value(preset)))
+			ControlsMessage::LoadPreset(preset) => self.execute(GlorpExec::Txn(GlorpTxn {
+				execs: std::iter::once(config_set("editor.preset", enum_string_value(preset)))
 					.chain(
-						(preset != glorp_api::SamplePreset::Custom).then_some(GlorpCommand::Document(
-							DocumentCommand::Replace {
-								text: sample_preset_text(preset).to_owned(),
-							},
-						)),
+						(preset != glorp_api::SamplePreset::Custom).then_some(GlorpExec::DocumentReplace(TextInput {
+							text: sample_preset_text(preset).to_owned(),
+						})),
 					)
 					.chain(
 						(preset != glorp_api::SamplePreset::Custom)
-							.then_some(GlorpCommand::Ui(UiCommand::ViewportScrollTo { x: 0.0, y: 0.0 })),
+							.then_some(GlorpExec::UiViewportScrollTo(ScrollTarget { x: 0.0, y: 0.0 })),
 					)
 					.collect(),
 			})),
@@ -283,17 +282,19 @@ impl RuntimeShell {
 
 	fn handle_canvas(&mut self, message: CanvasEvent) -> Result<(), GlorpError> {
 		match message {
-			CanvasEvent::Hovered(target) => self.execute(GlorpCommand::Ui(UiCommand::InspectTargetHover {
+			CanvasEvent::Hovered(target) => self.execute(GlorpExec::UiInspectTargetHover(InspectTargetInput {
 				target: inspect_target(self.frame.ui.active_tab, target),
 			})),
-			CanvasEvent::FocusChanged(focused) => self.execute(GlorpCommand::Ui(UiCommand::CanvasFocusSet { focused })),
-			CanvasEvent::ScrollChanged(scroll) => self.execute(GlorpCommand::Ui(UiCommand::ViewportScrollTo {
+			CanvasEvent::FocusChanged(focused) => {
+				self.execute(GlorpExec::UiCanvasFocusSet(CanvasFocusInput { focused }))
+			}
+			CanvasEvent::ScrollChanged(scroll) => self.execute(GlorpExec::UiViewportScrollTo(ScrollTarget {
 				x: scroll.x,
 				y: scroll.y,
 			})),
 			CanvasEvent::PointerSelectionStarted { target, intent } => self.execute_many([
-				GlorpCommand::Ui(UiCommand::CanvasFocusSet { focused: true }),
-				GlorpCommand::Ui(UiCommand::InspectTargetSelect {
+				GlorpExec::UiCanvasFocusSet(CanvasFocusInput { focused: true }),
+				GlorpExec::UiInspectTargetSelect(InspectTargetInput {
 					target: inspect_target(self.frame.ui.active_tab, target),
 				}),
 				editor_intent_command(EditorIntent::Pointer(intent)),
@@ -301,18 +302,18 @@ impl RuntimeShell {
 		}
 	}
 
-	fn execute(&mut self, command: GlorpCommand) -> Result<(), GlorpError> {
+	fn execute(&mut self, exec: GlorpExec) -> Result<(), GlorpError> {
 		self.with_host(|host| {
-			host.execute(command)?;
+			host.execute(exec)?;
 			Ok(())
 		})?;
 		self.refresh_frame()
 	}
 
-	fn execute_many(&mut self, commands: impl IntoIterator<Item = GlorpCommand>) -> Result<(), GlorpError> {
+	fn execute_many(&mut self, execs: impl IntoIterator<Item = GlorpExec>) -> Result<(), GlorpError> {
 		self.with_host(|host| {
-			commands.into_iter().try_for_each(|command| {
-				host.execute(command)?;
+			execs.into_iter().try_for_each(|exec| {
+				host.execute(exec)?;
 				Ok(())
 			})
 		})?;
@@ -324,7 +325,7 @@ impl RuntimeShell {
 		let mut frame = self.with_host(|host| {
 			let mut frame = host.gui_frame();
 			if scene_required(&frame) && frame.snapshot.scene.is_none() {
-				host.execute(GlorpCommand::Scene(SceneCommand::Ensure))?;
+				host.execute(GlorpExec::SceneEnsure)?;
 				frame = host.gui_frame();
 			}
 			Ok(frame)
@@ -332,7 +333,7 @@ impl RuntimeShell {
 
 		if let Some(scroll) = reveal_scroll(&frame) {
 			frame = self.with_host(|host| {
-				host.execute(GlorpCommand::Ui(UiCommand::ViewportScrollTo {
+				host.execute(GlorpExec::UiViewportScrollTo(ScrollTarget {
 					x: scroll.x,
 					y: scroll.y,
 				}))?;
@@ -353,8 +354,8 @@ impl RuntimeShell {
 	}
 }
 
-fn config_set(path: &str, value: GlorpValue) -> GlorpCommand {
-	GlorpCommand::Config(ConfigCommand::Set {
+fn config_set(path: &str, value: GlorpValue) -> GlorpExec {
+	GlorpExec::ConfigSet(ConfigAssignment {
 		path: path.to_owned(),
 		value,
 	})
@@ -428,42 +429,52 @@ fn clamp_scroll(scroll: Vector, metrics: EditorViewportMetrics, layout_width: f3
 	Vector::new(scroll.x.clamp(0.0, max_x), scroll.y.clamp(0.0, max_y))
 }
 
-fn editor_intent_command(intent: EditorIntent) -> GlorpCommand {
+fn editor_intent_command(intent: EditorIntent) -> GlorpExec {
 	match intent {
-		EditorIntent::Pointer(pointer) => GlorpCommand::Editor(EditorCommand::Pointer(match pointer {
-			EditorPointerIntent::Begin { position, select_word } => glorp_api::EditorPointerCommand::Begin {
-				x: position.x,
-				y: position.y,
-				select_word,
+		EditorIntent::Pointer(pointer) => match pointer {
+			EditorPointerIntent::Begin { position, select_word } => {
+				glorp_api::GlorpExec::EditorPointerBegin(glorp_api::EditorPointerBeginInput {
+					x: position.x,
+					y: position.y,
+					select_word,
+				})
+			}
+			EditorPointerIntent::Drag(position) => {
+				glorp_api::GlorpExec::EditorPointerDrag(glorp_api::EditorPointerDragInput {
+					x: position.x,
+					y: position.y,
+				})
+			}
+			EditorPointerIntent::End => glorp_api::GlorpExec::EditorPointerEnd,
+		},
+		EditorIntent::Motion(motion) => GlorpExec::EditorMotion(EditorMotionInput {
+			motion: match motion {
+				EditorMotion::Left => glorp_api::EditorMotion::Left,
+				EditorMotion::Right => glorp_api::EditorMotion::Right,
+				EditorMotion::Up => glorp_api::EditorMotion::Up,
+				EditorMotion::Down => glorp_api::EditorMotion::Down,
+				EditorMotion::LineStart => glorp_api::EditorMotion::LineStart,
+				EditorMotion::LineEnd => glorp_api::EditorMotion::LineEnd,
 			},
-			EditorPointerIntent::Drag(position) => glorp_api::EditorPointerCommand::Drag {
-				x: position.x,
-				y: position.y,
+		}),
+		EditorIntent::Mode(mode) => GlorpExec::EditorMode(EditorModeInput {
+			mode: match mode {
+				EditorModeIntent::EnterInsertBefore => glorp_api::EditorModeCommand::EnterInsertBefore,
+				EditorModeIntent::EnterInsertAfter => glorp_api::EditorModeCommand::EnterInsertAfter,
+				EditorModeIntent::ExitInsert => glorp_api::EditorModeCommand::ExitInsert,
 			},
-			EditorPointerIntent::End => glorp_api::EditorPointerCommand::End,
-		})),
-		EditorIntent::Motion(motion) => GlorpCommand::Editor(EditorCommand::Motion(match motion {
-			EditorMotion::Left => glorp_api::EditorMotion::Left,
-			EditorMotion::Right => glorp_api::EditorMotion::Right,
-			EditorMotion::Up => glorp_api::EditorMotion::Up,
-			EditorMotion::Down => glorp_api::EditorMotion::Down,
-			EditorMotion::LineStart => glorp_api::EditorMotion::LineStart,
-			EditorMotion::LineEnd => glorp_api::EditorMotion::LineEnd,
-		})),
-		EditorIntent::Mode(mode) => GlorpCommand::Editor(EditorCommand::Mode(match mode {
-			EditorModeIntent::EnterInsertBefore => glorp_api::EditorModeCommand::EnterInsertBefore,
-			EditorModeIntent::EnterInsertAfter => glorp_api::EditorModeCommand::EnterInsertAfter,
-			EditorModeIntent::ExitInsert => glorp_api::EditorModeCommand::ExitInsert,
-		})),
-		EditorIntent::Edit(edit) => GlorpCommand::Editor(EditorCommand::Edit(match edit {
-			EditorEditIntent::Backspace => glorp_api::EditorEditCommand::Backspace,
-			EditorEditIntent::DeleteForward => glorp_api::EditorEditCommand::DeleteForward,
-			EditorEditIntent::DeleteSelection => glorp_api::EditorEditCommand::DeleteSelection,
-			EditorEditIntent::InsertText(text) => glorp_api::EditorEditCommand::Insert { text },
-		})),
-		EditorIntent::History(history) => GlorpCommand::Editor(EditorCommand::History(match history {
-			EditorHistoryIntent::Undo => glorp_api::EditorHistoryCommand::Undo,
-			EditorHistoryIntent::Redo => glorp_api::EditorHistoryCommand::Redo,
-		})),
+		}),
+		EditorIntent::Edit(edit) => match edit {
+			EditorEditIntent::Backspace => GlorpExec::EditorBackspace,
+			EditorEditIntent::DeleteForward => GlorpExec::EditorDeleteForward,
+			EditorEditIntent::DeleteSelection => GlorpExec::EditorDeleteSelection,
+			EditorEditIntent::InsertText(text) => GlorpExec::EditorInsert(TextInput { text }),
+		},
+		EditorIntent::History(history) => GlorpExec::EditorHistory(EditorHistoryInput {
+			action: match history {
+				EditorHistoryIntent::Undo => glorp_api::EditorHistoryCommand::Undo,
+				EditorHistoryIntent::Redo => glorp_api::EditorHistoryCommand::Redo,
+			},
+		}),
 	}
 }

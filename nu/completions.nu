@@ -1,4 +1,3 @@
-export def "nu-complete glorp motion" [] { ["left" "right" "up" "down" "line-start" "line-end"] }
-export def "nu-complete glorp mode" [] { ["enter-insert-before" "enter-insert-after" "exit-insert"] }
-export def "nu-complete glorp history" [] { ["undo" "redo"] }
-export def "nu-complete glorp tab" [] { ["controls" "inspect" "perf"] }
+export def "nu-complete glorp exec-op" [] { ["txn" "config-set" "config-reset" "config-patch" "config-reload" "config-persist" "document-replace" "editor-motion" "editor-mode" "editor-insert" "editor-backspace" "editor-delete-forward" "editor-delete-selection" "editor-history" "editor-pointer-begin" "editor-pointer-drag" "editor-pointer-end" "ui-sidebar-select" "ui-inspect-target-hover" "ui-inspect-target-select" "ui-canvas-focus-set" "ui-viewport-scroll-to" "ui-viewport-metrics-set" "ui-pane-ratio-set" "scene-ensure"] }
+export def "nu-complete glorp query-op" [] { ["schema" "config" "snapshot" "document-text" "selection" "inspect-details" "perf" "ui" "capabilities"] }
+export def "nu-complete glorp helper-op" [] { ["session-attach" "session-shutdown" "config-validate" "events-subscribe" "events-next" "events-unsubscribe"] }

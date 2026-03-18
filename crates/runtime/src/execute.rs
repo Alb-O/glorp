@@ -4,9 +4,8 @@ use {
 		state::{SessionDelta, SessionRequest},
 	},
 	glorp_api::{
-		ConfigCommand, ConfigPath, DocumentCommand, EditorCommand, EditorEditCommand, EditorHistoryCommand,
-		EditorModeCommand, EditorMotion, EditorPointerCommand, GlorpCommand, GlorpConfig, GlorpDelta, GlorpError,
-		GlorpOutcome, GlorpRevisions, GlorpTxn, SceneCommand, UiCommand,
+		ConfigAssignment, ConfigPath, EditorHistoryCommand, EditorModeCommand, EditorMotion, GlorpConfig, GlorpDelta,
+		GlorpError, GlorpExec, GlorpOutcome, GlorpRevisions, GlorpTxn,
 	},
 	glorp_editor::{
 		EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion as EngineMotion,
@@ -14,14 +13,49 @@ use {
 	},
 };
 
-pub fn execute(runtime: &mut GlorpRuntime, command: GlorpCommand) -> Result<GlorpOutcome, GlorpError> {
-	match command {
-		GlorpCommand::Txn(txn) => execute_txn(runtime, txn),
-		GlorpCommand::Config(command) => execute_config(runtime, command),
-		GlorpCommand::Document(command) => Ok(execute_document(runtime, command)),
-		GlorpCommand::Editor(command) => Ok(execute_editor(runtime, command)),
-		GlorpCommand::Ui(command) => Ok(execute_ui(runtime, &command)),
-		GlorpCommand::Scene(command) => Ok(execute_scene(runtime, command)),
+pub fn execute(runtime: &mut GlorpRuntime, exec: GlorpExec) -> Result<GlorpOutcome, GlorpError> {
+	match exec {
+		GlorpExec::Txn(txn) => execute_txn(runtime, txn),
+		GlorpExec::ConfigSet(input) => execute_config_set(runtime, input),
+		GlorpExec::ConfigReset(input) => execute_config_reset(runtime, input),
+		GlorpExec::ConfigPatch(input) => execute_config_patch(runtime, input),
+		GlorpExec::ConfigReload => execute_config_reload(runtime),
+		GlorpExec::ConfigPersist => execute_config_persist(runtime),
+		GlorpExec::DocumentReplace(input) => Ok(publish_session(runtime, SessionRequest::ReplaceDocument(input.text))),
+		GlorpExec::EditorMotion(input) => Ok(execute_editor_motion(runtime, input.motion)),
+		GlorpExec::EditorMode(input) => Ok(execute_editor_mode(runtime, input.mode)),
+		GlorpExec::EditorInsert(input) => Ok(execute_editor_edit(runtime, EditorEditIntent::InsertText(input.text))),
+		GlorpExec::EditorBackspace => Ok(execute_editor_edit(runtime, EditorEditIntent::Backspace)),
+		GlorpExec::EditorDeleteForward => Ok(execute_editor_edit(runtime, EditorEditIntent::DeleteForward)),
+		GlorpExec::EditorDeleteSelection => Ok(execute_editor_edit(runtime, EditorEditIntent::DeleteSelection)),
+		GlorpExec::EditorHistory(input) => Ok(execute_editor_history(runtime, input.action)),
+		GlorpExec::EditorPointerBegin(input) => Ok(execute_editor_pointer(
+			runtime,
+			EditorPointerIntent::Begin {
+				position: iced::Point::new(input.x, input.y),
+				select_word: input.select_word,
+			},
+		)),
+		GlorpExec::EditorPointerDrag(input) => Ok(execute_editor_pointer(
+			runtime,
+			EditorPointerIntent::Drag(iced::Point::new(input.x, input.y)),
+		)),
+		GlorpExec::EditorPointerEnd => Ok(execute_editor_pointer(runtime, EditorPointerIntent::End)),
+		GlorpExec::UiSidebarSelect(input) => Ok(execute_ui(runtime, |state| state.active_tab = input.tab)),
+		GlorpExec::UiInspectTargetHover(input) => Ok(execute_ui(runtime, |state| state.hovered_target = input.target)),
+		GlorpExec::UiInspectTargetSelect(input) => {
+			Ok(execute_ui(runtime, |state| state.selected_target = input.target))
+		}
+		GlorpExec::UiCanvasFocusSet(input) => Ok(execute_ui(runtime, |state| state.canvas_focused = input.focused)),
+		GlorpExec::UiViewportScrollTo(input) => Ok(execute_ui(runtime, |state| {
+			state.canvas_scroll_x = input.x.max(0.0);
+			state.canvas_scroll_y = input.y.max(0.0);
+		})),
+		GlorpExec::UiViewportMetricsSet(input) => Ok(execute_viewport_metrics(runtime, input)),
+		GlorpExec::UiPaneRatioSet(input) => Ok(execute_ui(runtime, |state| {
+			state.pane_ratio = input.ratio.clamp(0.1, 0.9)
+		})),
+		GlorpExec::SceneEnsure => Ok(execute_scene_ensure(runtime)),
 	}
 }
 
@@ -29,13 +63,13 @@ fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome
 	let checkpoint = runtime.state.checkpoint();
 	let previous_events = runtime.subscriptions_state();
 
-	txn.commands
+	txn.execs
 		.into_iter()
-		.try_fold(GlorpOutcome::default(), |mut accumulated, command| {
-			if matches!(command, GlorpCommand::Txn(_)) {
+		.try_fold(GlorpOutcome::default(), |mut accumulated, exec| {
+			if matches!(exec, GlorpExec::Txn(_)) {
 				return Err(GlorpError::validation(None, "nested transactions are not supported"));
 			}
-			merge_outcome(&mut accumulated, execute(runtime, command)?);
+			merge_outcome(&mut accumulated, execute(runtime, exec)?);
 			Ok(accumulated)
 		})
 		.inspect_err(|_| {
@@ -44,33 +78,44 @@ fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome
 		})
 }
 
-fn execute_config(runtime: &mut GlorpRuntime, command: ConfigCommand) -> Result<GlorpOutcome, GlorpError> {
-	let changed_paths = match command {
-		ConfigCommand::Set { path, value } => {
-			runtime.state.config.set_path(&path, &value)?;
-			vec![path]
-		}
-		ConfigCommand::Patch { values } => runtime.state.config.patch(&values)?,
-		ConfigCommand::Reset { path } => {
-			runtime.state.config.reset_path(&path)?;
-			vec![path]
-		}
-		ConfigCommand::Reload => {
-			runtime.state.config = runtime.config_store.load()?;
-			GlorpConfig::schema_defaults()
-				.into_iter()
-				.map(|(path, _)| path)
-				.collect()
-		}
-		ConfigCommand::Persist => {
-			runtime.config_store.save(&runtime.state.config)?;
-			return Ok(GlorpOutcome {
-				revisions: runtime.state.revisions,
-				..GlorpOutcome::default()
-			});
-		}
-	};
+fn execute_config_set(runtime: &mut GlorpRuntime, input: ConfigAssignment) -> Result<GlorpOutcome, GlorpError> {
+	runtime.state.config.set_path(&input.path, &input.value)?;
+	publish_config(runtime, vec![input.path])
+}
 
+fn execute_config_reset(
+	runtime: &mut GlorpRuntime, input: glorp_api::ConfigPathInput,
+) -> Result<GlorpOutcome, GlorpError> {
+	runtime.state.config.reset_path(&input.path)?;
+	publish_config(runtime, vec![input.path])
+}
+
+fn execute_config_patch(
+	runtime: &mut GlorpRuntime, input: glorp_api::ConfigPatchInput,
+) -> Result<GlorpOutcome, GlorpError> {
+	let assignments = flatten_patch(&input.patch)?;
+	let changed_paths = runtime.state.config.patch(&assignments)?;
+	publish_config(runtime, changed_paths)
+}
+
+fn execute_config_reload(runtime: &mut GlorpRuntime) -> Result<GlorpOutcome, GlorpError> {
+	runtime.state.config = runtime.config_store.load()?;
+	let changed_paths = GlorpConfig::schema_defaults()
+		.into_iter()
+		.map(|(path, _)| path)
+		.collect();
+	publish_config(runtime, changed_paths)
+}
+
+fn execute_config_persist(runtime: &mut GlorpRuntime) -> Result<GlorpOutcome, GlorpError> {
+	runtime.config_store.save(&runtime.state.config)?;
+	Ok(GlorpOutcome {
+		revisions: runtime.state.revisions,
+		..GlorpOutcome::default()
+	})
+}
+
+fn publish_config(runtime: &mut GlorpRuntime, changed_paths: Vec<ConfigPath>) -> Result<GlorpOutcome, GlorpError> {
 	let mut outcome = run_session(runtime, SessionRequest::SyncConfig);
 	runtime.state.revisions.config += 1;
 	outcome.revisions = runtime.state.revisions;
@@ -80,75 +125,51 @@ fn execute_config(runtime: &mut GlorpRuntime, command: ConfigCommand) -> Result<
 	Ok(outcome)
 }
 
-fn execute_document(runtime: &mut GlorpRuntime, command: DocumentCommand) -> GlorpOutcome {
-	match command {
-		DocumentCommand::Replace { text } => publish_session(runtime, SessionRequest::ReplaceDocument(text)),
-	}
-}
-
-fn execute_editor(runtime: &mut GlorpRuntime, command: EditorCommand) -> GlorpOutcome {
-	let intent = match command {
-		EditorCommand::Motion(motion) => EditorIntent::Motion(match motion {
-			EditorMotion::Left => EngineMotion::Left,
-			EditorMotion::Right => EngineMotion::Right,
-			EditorMotion::Up => EngineMotion::Up,
-			EditorMotion::Down => EngineMotion::Down,
-			EditorMotion::LineStart => EngineMotion::LineStart,
-			EditorMotion::LineEnd => EngineMotion::LineEnd,
-		}),
-		EditorCommand::Mode(mode) => EditorIntent::Mode(match mode {
-			EditorModeCommand::EnterInsertBefore => EditorModeIntent::EnterInsertBefore,
-			EditorModeCommand::EnterInsertAfter => EditorModeIntent::EnterInsertAfter,
-			EditorModeCommand::ExitInsert => EditorModeIntent::ExitInsert,
-		}),
-		EditorCommand::Edit(edit) => EditorIntent::Edit(match edit {
-			EditorEditCommand::Backspace => EditorEditIntent::Backspace,
-			EditorEditCommand::DeleteForward => EditorEditIntent::DeleteForward,
-			EditorEditCommand::DeleteSelection => EditorEditIntent::DeleteSelection,
-			EditorEditCommand::Insert { text } => EditorEditIntent::InsertText(text),
-		}),
-		EditorCommand::History(history) => EditorIntent::History(match history {
-			EditorHistoryCommand::Undo => EditorHistoryIntent::Undo,
-			EditorHistoryCommand::Redo => EditorHistoryIntent::Redo,
-		}),
-		EditorCommand::Pointer(pointer) => EditorIntent::Pointer(match pointer {
-			EditorPointerCommand::Begin { x, y, select_word } => EditorPointerIntent::Begin {
-				position: iced::Point::new(x, y),
-				select_word,
-			},
-			EditorPointerCommand::Drag { x, y } => EditorPointerIntent::Drag(iced::Point::new(x, y)),
-			EditorPointerCommand::End => EditorPointerIntent::End,
-		}),
+fn execute_editor_motion(runtime: &mut GlorpRuntime, motion: EditorMotion) -> GlorpOutcome {
+	let motion = match motion {
+		EditorMotion::Left => EngineMotion::Left,
+		EditorMotion::Right => EngineMotion::Right,
+		EditorMotion::Up => EngineMotion::Up,
+		EditorMotion::Down => EngineMotion::Down,
+		EditorMotion::LineStart => EngineMotion::LineStart,
+		EditorMotion::LineEnd => EngineMotion::LineEnd,
 	};
-
-	publish_session(runtime, SessionRequest::ApplyEditorIntent(intent))
+	publish_session(runtime, SessionRequest::ApplyEditorIntent(EditorIntent::Motion(motion)))
 }
 
-fn execute_ui(runtime: &mut GlorpRuntime, command: &UiCommand) -> GlorpOutcome {
-	match command {
-		UiCommand::SidebarSelect { tab } => runtime.state.ui.active_tab = *tab,
-		UiCommand::InspectTargetHover { target } => runtime.state.ui.hovered_target = *target,
-		UiCommand::InspectTargetSelect { target } => runtime.state.ui.selected_target = *target,
-		UiCommand::CanvasFocusSet { focused } => runtime.state.ui.canvas_focused = *focused,
-		UiCommand::ViewportScrollTo { x, y } => {
-			runtime.state.ui.canvas_scroll_x = x.max(0.0);
-			runtime.state.ui.canvas_scroll_y = y.max(0.0);
-		}
-		UiCommand::ViewportMetricsSet {
-			layout_width,
-			viewport_width,
-			viewport_height,
-		} => {
-			runtime.state.ui.layout_width = layout_width.max(1.0);
-			runtime.state.ui.viewport_width = viewport_width.max(1.0);
-			runtime.state.ui.viewport_height = viewport_height.max(1.0);
-			let mut outcome = run_session(runtime, SessionRequest::SyncConfig);
-			outcome.delta.ui_changed = true;
-			return publish(runtime, outcome);
-		}
-		UiCommand::PaneRatioSet { ratio } => runtime.state.ui.pane_ratio = ratio.clamp(0.1, 0.9),
-	}
+fn execute_editor_mode(runtime: &mut GlorpRuntime, mode: EditorModeCommand) -> GlorpOutcome {
+	let mode = match mode {
+		EditorModeCommand::EnterInsertBefore => EditorModeIntent::EnterInsertBefore,
+		EditorModeCommand::EnterInsertAfter => EditorModeIntent::EnterInsertAfter,
+		EditorModeCommand::ExitInsert => EditorModeIntent::ExitInsert,
+	};
+	publish_session(runtime, SessionRequest::ApplyEditorIntent(EditorIntent::Mode(mode)))
+}
 
+fn execute_editor_edit(runtime: &mut GlorpRuntime, edit: EditorEditIntent) -> GlorpOutcome {
+	publish_session(runtime, SessionRequest::ApplyEditorIntent(EditorIntent::Edit(edit)))
+}
+
+fn execute_editor_history(runtime: &mut GlorpRuntime, action: EditorHistoryCommand) -> GlorpOutcome {
+	let action = match action {
+		EditorHistoryCommand::Undo => EditorHistoryIntent::Undo,
+		EditorHistoryCommand::Redo => EditorHistoryIntent::Redo,
+	};
+	publish_session(
+		runtime,
+		SessionRequest::ApplyEditorIntent(EditorIntent::History(action)),
+	)
+}
+
+fn execute_editor_pointer(runtime: &mut GlorpRuntime, pointer: EditorPointerIntent) -> GlorpOutcome {
+	publish_session(
+		runtime,
+		SessionRequest::ApplyEditorIntent(EditorIntent::Pointer(pointer)),
+	)
+}
+
+fn execute_ui(runtime: &mut GlorpRuntime, update: impl FnOnce(&mut crate::state::UiRuntimeState)) -> GlorpOutcome {
+	update(&mut runtime.state.ui);
 	publish(
 		runtime,
 		outcome(
@@ -162,16 +183,21 @@ fn execute_ui(runtime: &mut GlorpRuntime, command: &UiCommand) -> GlorpOutcome {
 	)
 }
 
-fn execute_scene(runtime: &mut GlorpRuntime, command: SceneCommand) -> GlorpOutcome {
-	match command {
-		SceneCommand::Ensure => {
-			let outcome = run_session(runtime, SessionRequest::EnsureScene);
-			if outcome.delta.scene_changed {
-				publish(runtime, outcome)
-			} else {
-				outcome
-			}
-		}
+fn execute_viewport_metrics(runtime: &mut GlorpRuntime, input: glorp_api::ViewportMetricsInput) -> GlorpOutcome {
+	runtime.state.ui.layout_width = input.layout_width.max(1.0);
+	runtime.state.ui.viewport_width = input.viewport_width.max(1.0);
+	runtime.state.ui.viewport_height = input.viewport_height.max(1.0);
+	let mut outcome = run_session(runtime, SessionRequest::SyncConfig);
+	outcome.delta.ui_changed = true;
+	publish(runtime, outcome)
+}
+
+fn execute_scene_ensure(runtime: &mut GlorpRuntime) -> GlorpOutcome {
+	let outcome = run_session(runtime, SessionRequest::EnsureScene);
+	if outcome.delta.scene_changed {
+		publish(runtime, outcome)
+	} else {
+		outcome
 	}
 }
 
@@ -222,5 +248,28 @@ const fn outcome(revisions: GlorpRevisions, delta: GlorpDelta, changed_config_pa
 		revisions,
 		changed_config_paths,
 		warnings: vec![],
+	}
+}
+
+fn flatten_patch(value: &glorp_api::GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {
+	flatten_patch_into("", value)
+}
+
+fn flatten_patch_into(path: &str, value: &glorp_api::GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {
+	match value {
+		glorp_api::GlorpValue::Record(fields) => {
+			fields.iter().try_fold(Vec::new(), |mut assignments, (name, value)| {
+				let path = match path {
+					"" => name.clone(),
+					_ => format!("{path}.{name}"),
+				};
+				assignments.extend(flatten_patch_into(&path, value)?);
+				Ok(assignments)
+			})
+		}
+		value => Ok(vec![ConfigAssignment {
+			path: path.to_owned(),
+			value: value.clone(),
+		}]),
 	}
 }

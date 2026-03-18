@@ -1,25 +1,27 @@
 # Scripting
 
-Two Nu-facing surfaces exist:
+Two Nu-facing artifacts exist:
 
-- ../nu/glorp.nu: generated Nu module that loads the plugin and exports aliases
-- `glorp_nu_plugin`: primary Nu command surface over the shared runtime, including `glorp cmd *` typed txn builders
+- `../nu/glorp.nu`: generated Nu module that loads the plugin and completions
+- `glorp_nu_plugin`: the runtime client behind `glorp exec`, `glorp query`, and `glorp helper`
 
 Example transcript:
 
 ```nu
 use ./nu/glorp.nu *
 
-let session = (glorp session attach)
+let session = (glorp helper session-attach)
 
-glorp txn [
-  (glorp cmd config set editor.wrapping glyph)
-  (glorp cmd doc replace "hello")
-  (glorp cmd editor mode enter-insert-after)
-  (glorp cmd editor motion line-end)
-  (glorp cmd editor edit insert " world")
-] --session $session
+glorp exec txn {
+  execs: [
+    {op: "config-set", input: {path: "editor.wrapping", value: "glyph"}}
+    {op: "document-replace", input: {text: "hello"}}
+    {op: "editor-mode", input: {mode: "enter-insert-after"}}
+    {op: "editor-motion", input: {motion: "line-end"}}
+    {op: "editor-insert", input: {text: " world"}}
+  ]
+} --session $session
 
-glorp get selection --session $session
-glorp get perf --session $session
+glorp query selection --session $session
+glorp query perf --session $session
 ```

@@ -1,25 +1,31 @@
 # API
 
-Glorp exposes one semantic contract:
+Glorp now exposes one flat protocol registry:
 
-`GlorpCommand` / `GlorpQuery` -> `GlorpOutcome` / `GlorpSnapshot` / `GlorpEvent`
+`GlorpExec` / `GlorpQuery` / `GlorpHelper` -> `GlorpOutcome` / `GlorpQueryResult` / `GlorpHelperResult` / `GlorpEvent`
 
-Transactions are typed:
+Transactions are typed exec batches:
 
-`GlorpTxn { commands: Vec<GlorpCommand> }`
+`GlorpTxn { execs: Vec<GlorpExec> }`
 
-Stable namespaces:
+The public surface is registry-driven:
 
-- `config.*`: path-based durable config writes
-- `document.*`: whole-document replacement
-- `editor.*`: typed motions, mode transitions, edits, history
-- `ui.*`: sidebar selection, inspect target selection, viewport scroll, pane ratio
-- `scene.*`: explicit scene materialization
-- `get selection` / `get inspect-details` / `get perf` / `get ui`: richer read-side projections for live automation
-- `session attach` and `events *`: client/session helpers for explicit live-session control over the shared socket
+- exec operations: `config-set`, `document-replace`, `editor-motion`, `scene-ensure`, and related UI/editor ops
+- query operations: `schema`, `config`, `snapshot`, `selection`, `inspect-details`, `perf`, `ui`, `capabilities`
+- helper operations: `session-attach`, `session-shutdown`, `config-validate`, `events-subscribe`, `events-next`, `events-unsubscribe`
 
-The Nu plugin exposes both executable commands such as `glorp config set`
-and typed builder commands such as `glorp cmd config set` for txn assembly.
-The CLI is a lower-level JSON bridge around typed `GlorpCommand` / `GlorpQuery` payloads.
+The Nu plugin exposes exactly three commands:
 
-See ../schema/glorp-schema.json for the reflection source used by the Nu plugin, generated Nu helpers, and agents.
+- `glorp exec <operation> [input]`
+- `glorp query <operation> [input]`
+- `glorp helper <operation> [input]`
+
+Examples:
+
+```nu
+glorp exec config-set {path: "editor.wrapping", value: "word"}
+glorp query snapshot {scene: "materialize", include_document_text: true}
+glorp helper session-attach
+```
+
+See `../schema/glorp-schema.json` for the generated reflection source used by the plugin and Nu completions.

@@ -1,6 +1,7 @@
 use crate::{ConfigPath, GlorpDelta, GlorpRevisions};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", content = "payload", rename_all = "kebab-case")]
 pub enum GlorpEvent {
 	Changed(GlorpOutcome),
 	Notice(GlorpNotice),

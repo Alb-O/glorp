@@ -4,24 +4,21 @@ use crate::{
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(tag = "op", content = "input", rename_all = "kebab-case")]
 pub enum GlorpQuery {
 	Schema,
 	Config,
-	Snapshot {
-		scene: SceneLevel,
-		include_document_text: bool,
-	},
+	Snapshot(SnapshotQuery),
 	DocumentText,
 	Selection,
-	InspectDetails {
-		target: Option<CanvasTarget>,
-	},
-	PerfDashboard,
-	UiState,
+	InspectDetails(InspectDetailsQuery),
+	Perf,
+	Ui,
 	Capabilities,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(tag = "kind", content = "output", rename_all = "kebab-case")]
 pub enum GlorpQueryResult {
 	Schema(crate::GlorpSchema),
 	Config(GlorpConfig),
@@ -29,12 +26,24 @@ pub enum GlorpQueryResult {
 	DocumentText(String),
 	Selection(SelectionStateView),
 	InspectDetails(InspectDetailsView),
-	PerfDashboard(PerfDashboardView),
-	UiState(UiStateView),
+	Perf(PerfDashboardView),
+	Ui(UiStateView),
 	Capabilities(GlorpCapabilities),
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct SnapshotQuery {
+	pub scene: SceneLevel,
+	pub include_document_text: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct InspectDetailsQuery {
+	pub target: Option<CanvasTarget>,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub enum SceneLevel {
 	Omit,
 	IfReady,
