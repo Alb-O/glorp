@@ -7,6 +7,7 @@ pub struct GlorpSchema {
 	pub config: Vec<ConfigFieldSchema>,
 	pub commands: Vec<CommandSchema>,
 	pub queries: Vec<QuerySchema>,
+	pub helpers: Vec<HelperSchema>,
 	pub events: Vec<EventSchema>,
 }
 
@@ -38,6 +39,16 @@ pub struct CommandSchema {
 pub struct QuerySchema {
 	pub path: String,
 	pub docs: String,
+	pub input: Option<TypeRef>,
+	pub output: TypeRef,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct HelperSchema {
+	pub path: String,
+	pub docs: String,
+	pub kind: HelperKind,
+	pub input: Option<TypeRef>,
 	pub output: TypeRef,
 }
 
@@ -46,6 +57,17 @@ pub struct EventSchema {
 	pub path: String,
 	pub docs: String,
 	pub payload: TypeRef,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum HelperKind {
+	ConfigValidate,
+	SessionAttach,
+	SessionShutdown,
+	EventsSubscribe,
+	EventsNext,
+	EventsUnsubscribe,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -61,6 +83,7 @@ pub enum BuiltinType {
 	Int,
 	Float,
 	String,
+	Any,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -196,16 +219,66 @@ pub fn glorp_schema() -> GlorpSchema {
 				"One path-based config assignment.",
 				vec![
 					field("path", "Config path.", built(BuiltinType::String), true),
-					field("value", "Config value.", built(BuiltinType::String), true),
+					field("value", "Config value.", built(BuiltinType::Any), true),
 				],
 			),
 			record_type(
 				"ConfigPatch",
-				"Multiple path-based config assignments.",
+				"Nested config patch input.",
 				vec![field(
-					"values",
-					"Config assignments.",
-					TypeRef::Named("ConfigAssignmentList".to_owned()),
+					"patch",
+					"Nested config patch record.",
+					built(BuiltinType::Any),
+					true,
+				)],
+			),
+			record_type(
+				"ConfigPathInput",
+				"One config path input.",
+				vec![field("path", "Config path.", built(BuiltinType::String), true)],
+			),
+			record_type(
+				"TextInput",
+				"One text input.",
+				vec![field("text", "Text input.", built(BuiltinType::String), true)],
+			),
+			record_type(
+				"EditorMotionInput",
+				"One editor motion input.",
+				vec![field(
+					"motion",
+					"Editor motion name.",
+					TypeRef::Named("EditorMotion".to_owned()),
+					true,
+				)],
+			),
+			record_type(
+				"EditorModeInput",
+				"One editor mode input.",
+				vec![field(
+					"mode",
+					"Editor mode command.",
+					TypeRef::Named("EditorModeCommand".to_owned()),
+					true,
+				)],
+			),
+			record_type(
+				"EditorHistoryInput",
+				"One editor history input.",
+				vec![field(
+					"action",
+					"Editor history action.",
+					TypeRef::Named("EditorHistoryCommand".to_owned()),
+					true,
+				)],
+			),
+			record_type(
+				"SidebarTabInput",
+				"One sidebar tab input.",
+				vec![field(
+					"tab",
+					"Sidebar tab.",
+					TypeRef::Named("SidebarTab".to_owned()),
 					true,
 				)],
 			),
@@ -216,6 +289,49 @@ pub fn glorp_schema() -> GlorpSchema {
 					field("x", "Horizontal scroll offset.", built(BuiltinType::Float), true),
 					field("y", "Vertical scroll offset.", built(BuiltinType::Float), true),
 				],
+			),
+			record_type(
+				"PaneRatioInput",
+				"Sidebar/canvas ratio input.",
+				vec![field("ratio", "Sidebar/canvas ratio.", built(BuiltinType::Float), true)],
+			),
+			record_type(
+				"InspectDetailsInput",
+				"Inspect-details query input.",
+				vec![field(
+					"target",
+					"Optional canvas target run:<n> or cluster:<n>.",
+					built(BuiltinType::String),
+					false,
+				)],
+			),
+			record_type(
+				"StreamTokenInput",
+				"Subscription token input.",
+				vec![field("token", "Subscription token.", built(BuiltinType::Int), true)],
+			),
+			record_type(
+				"GlorpInvocation",
+				"One public command invocation.",
+				vec![
+					field("path", "Command path.", built(BuiltinType::String), true),
+					field("input", "Optional command input.", built(BuiltinType::Any), false),
+				],
+			),
+			list_type(
+				"GlorpInvocationList",
+				"List of public command invocations.",
+				TypeRef::Named("GlorpInvocation".to_owned()),
+			),
+			record_type(
+				"GlorpTxn",
+				"Multiple public command invocations applied atomically.",
+				vec![field(
+					"commands",
+					"Ordered command invocations.",
+					TypeRef::Named("GlorpInvocationList".to_owned()),
+					true,
+				)],
 			),
 			record_type(
 				"GlorpCapabilities",
@@ -677,6 +793,19 @@ pub fn glorp_schema() -> GlorpSchema {
 				],
 			),
 			record_type(
+				"OkView",
+				"Boolean acknowledgement.",
+				vec![field("ok", "Acknowledgement flag.", built(BuiltinType::Bool), true)],
+			),
+			record_type(
+				"TokenAckView",
+				"Acknowledgement with a token payload.",
+				vec![
+					field("ok", "Acknowledgement flag.", built(BuiltinType::Bool), true),
+					field("token", "Subscription token.", built(BuiltinType::Int), true),
+				],
+			),
+			record_type(
 				"GlorpSessionView",
 				"Resolved live session endpoint.",
 				vec![
@@ -738,31 +867,11 @@ pub fn glorp_schema() -> GlorpSchema {
 				],
 			),
 			record_type(
-				"GlorpTxn",
-				"Atomic command batch.",
-				vec![field(
-					"commands",
-					"Commands to apply atomically.",
-					TypeRef::Named("CommandList".to_owned()),
-					true,
-				)],
-			),
-			record_type(
 				"GlorpNotice",
 				"Notice payload.",
 				vec![field("message", "Notice message.", built(BuiltinType::String), true)],
 			),
 			list_type("StringList", "List of strings.", built(BuiltinType::String)),
-			list_type(
-				"CommandList",
-				"List of commands.",
-				TypeRef::Named("GlorpCommand".to_owned()),
-			),
-			list_type(
-				"ConfigAssignmentList",
-				"List of config assignments.",
-				TypeRef::Named("ConfigAssignment".to_owned()),
-			),
 			list_type(
 				"PerfMetricSummaryList",
 				"List of perf metric summaries.",
@@ -819,135 +928,9 @@ pub fn glorp_schema() -> GlorpSchema {
 				false.into(),
 			),
 		],
-		commands: vec![
-			command(
-				"glorp config set",
-				"Set one config field.",
-				named("ConfigAssignment"),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp config patch",
-				"Patch multiple config fields.",
-				named("ConfigPatch"),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp config reset",
-				"Reset one config field to its default.",
-				built(BuiltinType::String),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp config reload",
-				"Reload durable config from disk.",
-				built(BuiltinType::Null),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp config persist",
-				"Persist the current config to disk.",
-				built(BuiltinType::Null),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp doc replace",
-				"Replace the entire document text.",
-				built(BuiltinType::String),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp editor motion",
-				"Apply a typed motion command.",
-				named("EditorMotion"),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp editor mode",
-				"Apply a typed mode command.",
-				named("EditorModeCommand"),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp editor edit",
-				"Apply a typed edit command.",
-				named("EditorEditCommand"),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp editor history",
-				"Apply history navigation.",
-				named("EditorHistoryCommand"),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp ui sidebar select",
-				"Select a sidebar tab.",
-				named("SidebarTab"),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp ui viewport scroll-to",
-				"Set runtime viewport scroll position.",
-				named("ScrollTarget"),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp scene ensure",
-				"Materialize scene state.",
-				built(BuiltinType::Null),
-				named("GlorpOutcome"),
-			),
-			command(
-				"glorp txn",
-				"Apply a transaction atomically.",
-				named("GlorpTxn"),
-				named("GlorpOutcome"),
-			),
-		],
-		queries: vec![
-			query(
-				"glorp schema",
-				"Return the runtime reflection schema.",
-				named("GlorpSchema"),
-			),
-			query(
-				"glorp get config",
-				"Return the effective runtime config.",
-				named("GlorpConfig"),
-			),
-			query(
-				"glorp get state",
-				"Return a snapshot of runtime state.",
-				named("GlorpSnapshot"),
-			),
-			query(
-				"glorp get document-text",
-				"Return the current document text.",
-				built(BuiltinType::String),
-			),
-			query(
-				"glorp get selection",
-				"Return the current selection read model.",
-				named("SelectionStateView"),
-			),
-			query(
-				"glorp get inspect-details",
-				"Return the current inspect read model.",
-				named("InspectDetailsView"),
-			),
-			query(
-				"glorp get perf",
-				"Return the runtime perf dashboard.",
-				named("PerfDashboardView"),
-			),
-			query("glorp get ui", "Return the current UI state.", named("UiStateView")),
-			query(
-				"glorp get capabilities",
-				"Return stable runtime capability flags.",
-				named("GlorpCapabilities"),
-			),
-		],
+		commands: crate::command_schemas(),
+		queries: crate::query_schemas(),
+		helpers: crate::helper_schemas(),
 		events: vec![
 			event("glorp changed", "Revisioned state change event.", named("GlorpOutcome")),
 			event("glorp notice", "Runtime notices.", named("GlorpNotice")),
@@ -962,23 +945,6 @@ fn config_field(path: &str, docs: &str, ty: TypeRef, default: GlorpValue) -> Con
 		ty,
 		default,
 		mutable: true,
-	}
-}
-
-fn command(path: &str, docs: &str, input: TypeRef, output: TypeRef) -> CommandSchema {
-	CommandSchema {
-		path: path.to_owned(),
-		docs: docs.to_owned(),
-		input,
-		output,
-	}
-}
-
-fn query(path: &str, docs: &str, output: TypeRef) -> QuerySchema {
-	QuerySchema {
-		path: path.to_owned(),
-		docs: docs.to_owned(),
-		output,
 	}
 }
 

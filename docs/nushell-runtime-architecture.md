@@ -190,7 +190,7 @@ It defines:
 - all public events
 - typed config
 - revisions/deltas/outcomes
-- the reflection schema used by Nushell, CLI, and agents
+- the reflection schema used by Nushell, generated Nu helpers, and agents
 
 ### `glorp_editor`
 
@@ -254,9 +254,9 @@ It does not define product semantics.
 Generated from schema.
 Not a hand-maintained parallel business-logic layer.
 
-### `glorp_cli`
+### `glorp_host`
 
-A non-GUI operator/agent entrypoint using the same contract as all other clients.
+A minimal non-GUI shared-runtime host and surface export tool.
 
 ______________________________________________________________________
 
@@ -274,7 +274,7 @@ The current reducer/store/session split collapses into:
 
 - public semantic contract in `glorp_api`
 - private execution engine in `glorp_runtime`
-- thin client adapters in `glorp_gui`, `glorp_cli`, and `glorp_nu_plugin`
+- thin client adapters in `glorp_gui` and `glorp_nu_plugin`, plus the minimal `glorp_host`
 
 The GUI may still have widget-local messages, but those are purely view plumbing.
 
@@ -818,8 +818,9 @@ The first-class external shape should be a stable local host protocol.
 
 - GUI uses loopback IPC on `glorp.sock`
 - Nu plugin uses IPC
-- CLI uses IPC and auto-attaches to the repo-local socket when it is live
-- agents use CLI or direct IPC
+- Nu/plugin uses IPC and auto-attaches to the repo-local socket when it is live
+- when no shared runtime is live, the Nu/plugin surface starts `glorp_host`
+- agents use Nu or direct IPC
 
 There is no separate “agent API.”
 Agents use the same schema, commands, and queries as everything else.
@@ -869,7 +870,7 @@ The finished system is:
 - one transport surface
 - one Nu-generated scripting/config surface
 - one thin GUI client
-- agents, CLI, and Nu all using the exact same contract
+- agents, the Nu plugin, and generated Nu helpers all using the exact same contract
 
 That is the shape that preserves internal flexibility while making Glorp deeply scriptable, introspectable, and agent-accessible.
 
@@ -1003,7 +1004,7 @@ Run the same sequence through:
 - direct in-process host
 - IPC client
 - Nu plugin
-- CLI
+- shared host auto-start via Nu/plugin
 
 For each path:
 
@@ -1041,7 +1042,7 @@ Prevents fake “subscription” implementations.
 
 A compact but brutally honest whole-system test.
 
-Run a fixed transcript through CLI or Nu:
+Run a fixed transcript through the Nu/plugin surface:
 
 ```text
 glorp config set editor.wrapping word
@@ -1071,7 +1072,7 @@ The architecture is in the intended final shape when all of the following are tr
 
 - the GUI can be deleted and reimplemented without changing product semantics
 - the Nu plugin is generated from schema and contains no parallel business logic
-- CLI, GUI, and agents all use the same transport and public API
+- the Nu plugin, GUI, host, and agents all use the same transport and public API
 - durable config is typed, schema-validated, and round-trippable through Nu
 - snapshots/events are revisioned and queryable without GUI participation
 - internal runtime fields can change without breaking public consumers unless the semantic contract changes

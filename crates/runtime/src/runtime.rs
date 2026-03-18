@@ -1,7 +1,5 @@
 use {
-	crate::{
-		ConfigStore, ConfigStorePaths, events::SubscriptionSet, execute, persistence, project, state::RuntimeState,
-	},
+	crate::{ConfigStore, ConfigStorePaths, events::SubscriptionSet, execute, project, state::RuntimeState},
 	glorp_api::{
 		GlorpCapabilities, GlorpCommand, GlorpError, GlorpEvent, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult,
 		GlorpStreamToken, GlorpSubscription, SamplePreset,
@@ -26,7 +24,6 @@ impl GlorpRuntime {
 		let config = config_store.load()?;
 		let preset = config.editor.preset;
 		let state = RuntimeState::new(config, sample_text(preset));
-		persistence::persist_schema(&config_store)?;
 		Ok(Self {
 			config_store,
 			state,

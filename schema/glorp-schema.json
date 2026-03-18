@@ -283,7 +283,7 @@
               "name": "value",
               "docs": "Config value.",
               "ty": {
-                "Builtin": "String"
+                "Builtin": "Any"
               },
               "required": true
             }
@@ -293,15 +293,123 @@
     },
     {
       "name": "ConfigPatch",
-      "docs": "Multiple path-based config assignments.",
+      "docs": "Nested config patch input.",
       "kind": {
         "Record": {
           "fields": [
             {
-              "name": "values",
-              "docs": "Config assignments.",
+              "name": "patch",
+              "docs": "Nested config patch record.",
               "ty": {
-                "Named": "ConfigAssignmentList"
+                "Builtin": "Any"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "ConfigPathInput",
+      "docs": "One config path input.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "path",
+              "docs": "Config path.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "TextInput",
+      "docs": "One text input.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "text",
+              "docs": "Text input.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EditorMotionInput",
+      "docs": "One editor motion input.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "motion",
+              "docs": "Editor motion name.",
+              "ty": {
+                "Named": "EditorMotion"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EditorModeInput",
+      "docs": "One editor mode input.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "mode",
+              "docs": "Editor mode command.",
+              "ty": {
+                "Named": "EditorModeCommand"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EditorHistoryInput",
+      "docs": "One editor history input.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "action",
+              "docs": "Editor history action.",
+              "ty": {
+                "Named": "EditorHistoryCommand"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "SidebarTabInput",
+      "docs": "One sidebar tab input.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "tab",
+              "docs": "Sidebar tab.",
+              "ty": {
+                "Named": "SidebarTab"
               },
               "required": true
             }
@@ -328,6 +436,115 @@
               "docs": "Vertical scroll offset.",
               "ty": {
                 "Builtin": "Float"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "PaneRatioInput",
+      "docs": "Sidebar/canvas ratio input.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "ratio",
+              "docs": "Sidebar/canvas ratio.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "InspectDetailsInput",
+      "docs": "Inspect-details query input.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "target",
+              "docs": "Optional canvas target run:<n> or cluster:<n>.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "StreamTokenInput",
+      "docs": "Subscription token input.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "token",
+              "docs": "Subscription token.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpInvocation",
+      "docs": "One public command invocation.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "path",
+              "docs": "Command path.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": true
+            },
+            {
+              "name": "input",
+              "docs": "Optional command input.",
+              "ty": {
+                "Builtin": "Any"
+              },
+              "required": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpInvocationList",
+      "docs": "List of public command invocations.",
+      "kind": {
+        "List": {
+          "item": {
+            "Named": "GlorpInvocation"
+          }
+        }
+      }
+    },
+    {
+      "name": "GlorpTxn",
+      "docs": "Multiple public command invocations applied atomically.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "commands",
+              "docs": "Ordered command invocations.",
+              "ty": {
+                "Named": "GlorpInvocationList"
               },
               "required": true
             }
@@ -1332,6 +1549,50 @@
       }
     },
     {
+      "name": "OkView",
+      "docs": "Boolean acknowledgement.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "ok",
+              "docs": "Acknowledgement flag.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "TokenAckView",
+      "docs": "Acknowledgement with a token payload.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "ok",
+              "docs": "Acknowledgement flag.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "token",
+              "docs": "Subscription token.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
       "name": "GlorpSessionView",
       "docs": "Resolved live session endpoint.",
       "kind": {
@@ -1466,24 +1727,6 @@
       }
     },
     {
-      "name": "GlorpTxn",
-      "docs": "Atomic command batch.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "commands",
-              "docs": "Commands to apply atomically.",
-              "ty": {
-                "Named": "CommandList"
-              },
-              "required": true
-            }
-          ]
-        }
-      }
-    },
-    {
       "name": "GlorpNotice",
       "docs": "Notice payload.",
       "kind": {
@@ -1508,28 +1751,6 @@
         "List": {
           "item": {
             "Builtin": "String"
-          }
-        }
-      }
-    },
-    {
-      "name": "CommandList",
-      "docs": "List of commands.",
-      "kind": {
-        "List": {
-          "item": {
-            "Named": "GlorpCommand"
-          }
-        }
-      }
-    },
-    {
-      "name": "ConfigAssignmentList",
-      "docs": "List of config assignments.",
-      "kind": {
-        "List": {
-          "item": {
-            "Named": "ConfigAssignment"
           }
         }
       }
@@ -1632,8 +1853,18 @@
       }
     },
     {
+      "path": "glorp config reset",
+      "docs": "Reset one config field to its default.",
+      "input": {
+        "Named": "ConfigPathInput"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
       "path": "glorp config patch",
-      "docs": "Patch multiple config fields.",
+      "docs": "Patch config with a record.",
       "input": {
         "Named": "ConfigPatch"
       },
@@ -1642,18 +1873,8 @@
       }
     },
     {
-      "path": "glorp config reset",
-      "docs": "Reset one config field to its default.",
-      "input": {
-        "Builtin": "String"
-      },
-      "output": {
-        "Named": "GlorpOutcome"
-      }
-    },
-    {
       "path": "glorp config reload",
-      "docs": "Reload durable config from disk.",
+      "docs": "Reload the durable config file.",
       "input": {
         "Builtin": "Null"
       },
@@ -1663,7 +1884,7 @@
     },
     {
       "path": "glorp config persist",
-      "docs": "Persist the current config to disk.",
+      "docs": "Persist the effective config to the durable config file.",
       "input": {
         "Builtin": "Null"
       },
@@ -1673,9 +1894,9 @@
     },
     {
       "path": "glorp doc replace",
-      "docs": "Replace the entire document text.",
+      "docs": "Replace the document text.",
       "input": {
-        "Builtin": "String"
+        "Named": "TextInput"
       },
       "output": {
         "Named": "GlorpOutcome"
@@ -1685,7 +1906,7 @@
       "path": "glorp editor motion",
       "docs": "Apply a typed motion command.",
       "input": {
-        "Named": "EditorMotion"
+        "Named": "EditorMotionInput"
       },
       "output": {
         "Named": "GlorpOutcome"
@@ -1695,17 +1916,47 @@
       "path": "glorp editor mode",
       "docs": "Apply a typed mode command.",
       "input": {
-        "Named": "EditorModeCommand"
+        "Named": "EditorModeInput"
       },
       "output": {
         "Named": "GlorpOutcome"
       }
     },
     {
-      "path": "glorp editor edit",
-      "docs": "Apply a typed edit command.",
+      "path": "glorp editor edit insert",
+      "docs": "Insert text.",
       "input": {
-        "Named": "EditorEditCommand"
+        "Named": "TextInput"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp editor edit backspace",
+      "docs": "Delete backward.",
+      "input": {
+        "Builtin": "Null"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp editor edit delete-forward",
+      "docs": "Delete forward.",
+      "input": {
+        "Builtin": "Null"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp editor edit delete-selection",
+      "docs": "Delete the current selection.",
+      "input": {
+        "Builtin": "Null"
       },
       "output": {
         "Named": "GlorpOutcome"
@@ -1715,7 +1966,7 @@
       "path": "glorp editor history",
       "docs": "Apply history navigation.",
       "input": {
-        "Named": "EditorHistoryCommand"
+        "Named": "EditorHistoryInput"
       },
       "output": {
         "Named": "GlorpOutcome"
@@ -1725,7 +1976,7 @@
       "path": "glorp ui sidebar select",
       "docs": "Select a sidebar tab.",
       "input": {
-        "Named": "SidebarTab"
+        "Named": "SidebarTabInput"
       },
       "output": {
         "Named": "GlorpOutcome"
@@ -1736,6 +1987,16 @@
       "docs": "Set runtime viewport scroll position.",
       "input": {
         "Named": "ScrollTarget"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp ui pane-ratio-set",
+      "docs": "Set the sidebar/canvas split ratio.",
+      "input": {
+        "Named": "PaneRatioInput"
       },
       "output": {
         "Named": "GlorpOutcome"
@@ -1766,6 +2027,7 @@
     {
       "path": "glorp schema",
       "docs": "Return the runtime reflection schema.",
+      "input": null,
       "output": {
         "Named": "GlorpSchema"
       }
@@ -1773,6 +2035,7 @@
     {
       "path": "glorp get config",
       "docs": "Return the effective runtime config.",
+      "input": null,
       "output": {
         "Named": "GlorpConfig"
       }
@@ -1780,6 +2043,7 @@
     {
       "path": "glorp get state",
       "docs": "Return a snapshot of runtime state.",
+      "input": null,
       "output": {
         "Named": "GlorpSnapshot"
       }
@@ -1787,6 +2051,7 @@
     {
       "path": "glorp get document-text",
       "docs": "Return the current document text.",
+      "input": null,
       "output": {
         "Builtin": "String"
       }
@@ -1794,6 +2059,7 @@
     {
       "path": "glorp get selection",
       "docs": "Return the current selection read model.",
+      "input": null,
       "output": {
         "Named": "SelectionStateView"
       }
@@ -1801,6 +2067,9 @@
     {
       "path": "glorp get inspect-details",
       "docs": "Return the current inspect read model.",
+      "input": {
+        "Named": "InspectDetailsInput"
+      },
       "output": {
         "Named": "InspectDetailsView"
       }
@@ -1808,6 +2077,7 @@
     {
       "path": "glorp get perf",
       "docs": "Return the runtime perf dashboard.",
+      "input": null,
       "output": {
         "Named": "PerfDashboardView"
       }
@@ -1815,6 +2085,7 @@
     {
       "path": "glorp get ui",
       "docs": "Return the current UI state.",
+      "input": null,
       "output": {
         "Named": "UiStateView"
       }
@@ -1822,8 +2093,71 @@
     {
       "path": "glorp get capabilities",
       "docs": "Return stable runtime capability flags.",
+      "input": null,
       "output": {
         "Named": "GlorpCapabilities"
+      }
+    }
+  ],
+  "helpers": [
+    {
+      "path": "glorp session attach",
+      "docs": "Resolve and validate a live Glorp session.",
+      "kind": "session-attach",
+      "input": null,
+      "output": {
+        "Named": "GlorpSessionView"
+      }
+    },
+    {
+      "path": "glorp session shutdown",
+      "docs": "Stop the live shared runtime for the resolved session.",
+      "kind": "session-shutdown",
+      "input": null,
+      "output": {
+        "Named": "OkView"
+      }
+    },
+    {
+      "path": "glorp config validate",
+      "docs": "Validate a config value without mutating runtime state.",
+      "kind": "config-validate",
+      "input": {
+        "Named": "ConfigAssignment"
+      },
+      "output": {
+        "Named": "OkView"
+      }
+    },
+    {
+      "path": "glorp events subscribe",
+      "docs": "Subscribe to runtime change events.",
+      "kind": "events-subscribe",
+      "input": null,
+      "output": {
+        "Named": "GlorpEventStreamView"
+      }
+    },
+    {
+      "path": "glorp events next",
+      "docs": "Poll the next event for a subscription token.",
+      "kind": "events-next",
+      "input": {
+        "Named": "StreamTokenInput"
+      },
+      "output": {
+        "Builtin": "Any"
+      }
+    },
+    {
+      "path": "glorp events unsubscribe",
+      "docs": "Release a subscription token.",
+      "kind": "events-unsubscribe",
+      "input": {
+        "Named": "StreamTokenInput"
+      },
+      "output": {
+        "Named": "TokenAckView"
       }
     }
   ],

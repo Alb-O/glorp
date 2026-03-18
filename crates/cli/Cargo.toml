@@ -1,5 +1,5 @@
 [package]
-name = "glorp_cli"
+name = "glorp_host"
 version.workspace = true
 edition.workspace = true
 

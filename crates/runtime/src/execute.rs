@@ -31,7 +31,8 @@ fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome
 
 	txn.commands
 		.into_iter()
-		.try_fold(GlorpOutcome::default(), |mut accumulated, command| {
+		.try_fold(GlorpOutcome::default(), |mut accumulated, invocation| {
+			let command = glorp_api::command_invocation(&invocation.path, invocation.input.as_ref())?;
 			merge_outcome(&mut accumulated, execute(runtime, command)?);
 			Ok(accumulated)
 		})

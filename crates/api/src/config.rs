@@ -162,6 +162,32 @@ impl_enum_value!(crate::WrapChoice {
 	"word-or-glyph" => crate::WrapChoice::WordOrGlyph,
 });
 
+impl_enum_value!(crate::EditorMotion {
+	"left" => crate::EditorMotion::Left,
+	"right" => crate::EditorMotion::Right,
+	"up" => crate::EditorMotion::Up,
+	"down" => crate::EditorMotion::Down,
+	"line-start" => crate::EditorMotion::LineStart,
+	"line-end" => crate::EditorMotion::LineEnd,
+});
+
+impl_enum_value!(crate::EditorModeCommand {
+	"enter-insert-before" => crate::EditorModeCommand::EnterInsertBefore,
+	"enter-insert-after" => crate::EditorModeCommand::EnterInsertAfter,
+	"exit-insert" => crate::EditorModeCommand::ExitInsert,
+});
+
+impl_enum_value!(crate::EditorHistoryCommand {
+	"undo" => crate::EditorHistoryCommand::Undo,
+	"redo" => crate::EditorHistoryCommand::Redo,
+});
+
+impl_enum_value!(crate::SidebarTab {
+	"controls" => crate::SidebarTab::Controls,
+	"inspect" => crate::SidebarTab::Inspect,
+	"perf" => crate::SidebarTab::Perf,
+});
+
 fn parse_string_enum<T>(path: &str, value: &GlorpValue) -> Result<T, GlorpError>
 where
 	T: EnumValue, {

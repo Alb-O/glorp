@@ -5,10 +5,13 @@ mod event;
 mod query;
 mod revision;
 mod schema;
+mod surface;
 mod txn;
 mod value;
 
-pub use self::{command::*, config::*, error::*, event::*, query::*, revision::*, schema::*, txn::*, value::*};
+pub use self::{
+	command::*, config::*, error::*, event::*, query::*, revision::*, schema::*, surface::*, txn::*, value::*,
+};
 
 pub type GlorpStreamToken = u64;
 

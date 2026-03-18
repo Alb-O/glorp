@@ -16,5 +16,6 @@ pub use self::{
 	config_store::{ConfigStore, ConfigStorePaths},
 	gui::GuiRuntimeFrame,
 	host::RuntimeHost,
+	persistence::export_surface_artifacts,
 	runtime::{RuntimeOptions, default_runtime_paths},
 };

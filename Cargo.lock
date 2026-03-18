@@ -1485,22 +1485,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "glorp_cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "glorp_api",
- "glorp_gui",
- "glorp_nu_plugin",
- "glorp_runtime",
- "glorp_transport",
- "nu-plugin-test-support",
- "nu-protocol",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "glorp_editor"
 version = "0.1.0"
 dependencies = [
@@ -1523,6 +1507,22 @@ dependencies = [
  "iced",
  "serde_json",
  "tracing",
+]
+
+[[package]]
+name = "glorp_host"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "glorp_api",
+ "glorp_gui",
+ "glorp_nu_plugin",
+ "glorp_runtime",
+ "glorp_transport",
+ "nu-plugin-test-support",
+ "nu-protocol",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

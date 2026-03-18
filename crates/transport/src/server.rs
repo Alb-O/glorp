@@ -30,6 +30,14 @@ impl IpcServerHandle {
 	pub fn shutdown(mut self) -> Result<(), GlorpError> {
 		self.stop.store(true, Ordering::SeqCst);
 		let _ = super::transport_request::<TransportResponse>(&self.socket_path, &TransportRequest::Shutdown);
+		self.join()
+	}
+
+	pub fn wait(mut self) -> Result<(), GlorpError> {
+		self.join()
+	}
+
+	fn join(&mut self) -> Result<(), GlorpError> {
 		if let Some(thread) = self.thread.take() {
 			thread
 				.join()
@@ -67,8 +75,9 @@ pub fn start_server_shared(
 			match listener.accept() {
 				Ok((stream, _)) => {
 					let host = Arc::clone(&host);
+					let stop = Arc::clone(&stop_thread);
 					thread::spawn(move || {
-						let _ = handle_connection(stream, &host);
+						let _ = handle_connection(stream, &host, &stop);
 					});
 				}
 				Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -87,10 +96,12 @@ pub fn start_server_shared(
 	})
 }
 
-fn handle_connection(stream: UnixStream, host: &Arc<Mutex<RuntimeHost>>) -> Result<(), GlorpError> {
+fn handle_connection(
+	stream: UnixStream, host: &Arc<Mutex<RuntimeHost>>, stop: &Arc<AtomicBool>,
+) -> Result<(), GlorpError> {
 	let mut stream = stream;
 	let request = read_request(&stream)?;
-	let response = dispatch_request(request, host)?;
+	let response = dispatch_request(request, host, stop)?;
 
 	let payload = serde_json::to_string(&response)
 		.map_err(|error| GlorpError::internal(format!("failed to encode response: {error}")))?;
@@ -107,7 +118,7 @@ fn read_request(stream: &UnixStream) -> Result<TransportRequest, GlorpError> {
 }
 
 fn dispatch_request(
-	request: TransportRequest, host: &Arc<Mutex<RuntimeHost>>,
+	request: TransportRequest, host: &Arc<Mutex<RuntimeHost>>, stop: &Arc<AtomicBool>,
 ) -> Result<TransportResponse, GlorpError> {
 	let mut host = host
 		.lock()
@@ -118,6 +129,9 @@ fn dispatch_request(
 		TransportRequest::Subscribe(request) => TransportResponse::Subscribe(host.subscribe(request)),
 		TransportRequest::NextEvent(token) => TransportResponse::NextEvent(host.next_event(token)),
 		TransportRequest::Unsubscribe(token) => TransportResponse::Unsubscribe(host.unsubscribe(token)),
-		TransportRequest::Shutdown => TransportResponse::Shutdown(Ok(())),
+		TransportRequest::Shutdown => {
+			stop.store(true, Ordering::SeqCst);
+			TransportResponse::Shutdown(Ok(()))
+		}
 	})
 }

@@ -66,6 +66,14 @@ impl GlorpValue {
 			_ => None,
 		}
 	}
+
+	#[must_use]
+	pub fn as_record(&self) -> Option<&BTreeMap<String, Self>> {
+		match self {
+			Self::Record(value) => Some(value),
+			_ => None,
+		}
+	}
 }
 
 impl From<bool> for GlorpValue {

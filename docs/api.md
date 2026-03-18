@@ -14,4 +14,4 @@ Stable namespaces:
 - `get selection` / `get inspect-details` / `get perf` / `get ui`: richer read-side projections for live automation
 - `session attach` and `events *`: client/session helpers for explicit live-session control over the shared socket
 
-See [`schema/glorp-schema.json`](/home/albert/polyrepo1/repos/glorp/schema/glorp-schema.json) for the reflection source used by CLI, Nu, and agents.
+See ../schema/glorp-schema.json for the reflection source used by the Nu plugin, generated Nu helpers, and agents.

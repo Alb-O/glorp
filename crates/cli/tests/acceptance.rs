@@ -2,15 +2,12 @@ use {
 	glorp_api::*,
 	glorp_gui::{GlorpGui, GuiLaunchOptions, GuiMessage, GuiRuntimeSession},
 	glorp_nu_plugin::GlorpPlugin,
-	glorp_runtime::{ConfigStorePaths, RuntimeHost, RuntimeOptions},
+	glorp_runtime::{ConfigStore, ConfigStorePaths, RuntimeHost, RuntimeOptions, export_surface_artifacts},
 	glorp_transport::{IpcClient, IpcServerHandle, default_socket_path, start_server},
 	nu_plugin_test_support::PluginTest,
 	nu_protocol::{Span, Value},
-	serde_json::Value as JsonValue,
 	std::{
-		env,
 		path::PathBuf,
-		process::Command,
 		time::{SystemTime, UNIX_EPOCH},
 	},
 };
@@ -62,6 +59,10 @@ impl Harness {
 	fn ipc_client(&self) -> IpcClient {
 		IpcClient::new(self.socket_path.clone())
 	}
+
+	fn export_surface(&self) {
+		export_surface_artifacts(&ConfigStore::new(self.paths.clone())).expect("surface export should succeed");
+	}
 }
 
 impl Drop for Harness {
@@ -108,29 +109,6 @@ fn assert_f32_eq(actual: f32, expected: f32) {
 	assert!((actual - expected).abs() <= f32::EPSILON);
 }
 
-fn repo_root() -> PathBuf {
-	PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-		.parent()
-		.expect("cli crate should have a parent")
-		.parent()
-		.expect("repo root should exist")
-		.to_path_buf()
-}
-
-fn nu_command() -> Command {
-	let mut command = Command::new("nu");
-	let cli_bin = PathBuf::from(env!("CARGO_BIN_EXE_glorp_cli"));
-	let cli_dir = cli_bin.parent().expect("glorp_cli binary should have a parent");
-	let existing_path = env::var("PATH").unwrap_or_default();
-	let path = if existing_path.is_empty() {
-		cli_dir.display().to_string()
-	} else {
-		format!("{}:{existing_path}", cli_dir.display())
-	};
-	command.env("PATH", path);
-	command
-}
-
 fn run_standard_transcript(host: &mut impl GlorpHost) -> GlorpSnapshot {
 	host.execute(GlorpCommand::Config(ConfigCommand::Set {
 		path: "editor.wrapping".to_owned(),
@@ -156,39 +134,30 @@ fn run_standard_transcript(host: &mut impl GlorpHost) -> GlorpSnapshot {
 	snapshot(host, SceneLevel::Materialize)
 }
 
-fn cli_json(harness: &Harness, args: &[&str]) -> JsonValue {
-	let output = Command::new(env!("CARGO_BIN_EXE_glorp_cli"))
-		.arg("--socket")
-		.arg(&harness.socket_path)
-		.args(args)
-		.output()
-		.expect("CLI should run");
-	assert!(
-		output.status.success(),
-		"CLI stderr: {}",
-		String::from_utf8_lossy(&output.stderr)
-	);
-	serde_json::from_slice(&output.stdout).expect("CLI output should be valid JSON")
+fn invocation(path: &str, input: GlorpValue) -> GlorpInvocation {
+	GlorpInvocation {
+		path: path.to_owned(),
+		input: Some(input),
+	}
 }
 
-fn cli_json_repo_root(harness: &Harness, args: &[&str]) -> JsonValue {
-	let output = Command::new(env!("CARGO_BIN_EXE_glorp_cli"))
-		.current_dir(&harness.root)
-		.env_remove("GLORP_SOCKET")
-		.args(args)
-		.output()
-		.expect("CLI should run");
-	assert!(
-		output.status.success(),
-		"CLI stderr: {}",
-		String::from_utf8_lossy(&output.stderr)
-	);
-	serde_json::from_slice(&output.stdout).expect("CLI output should be valid JSON")
+fn repo_root() -> PathBuf {
+	PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+		.parent()
+		.expect("host crate should have a parent")
+		.parent()
+		.expect("repo root should exist")
+		.to_path_buf()
+}
+
+fn host_bin() -> PathBuf {
+	PathBuf::from(env!("CARGO_BIN_EXE_glorp_host"))
 }
 
 #[test]
 fn schema_export_smoke_test() {
 	let harness = Harness::new();
+	harness.export_surface();
 	let mut host = harness.runtime();
 
 	let schema = match host.query(GlorpQuery::Schema).expect("schema query should succeed") {
@@ -214,6 +183,18 @@ fn schema_export_smoke_test() {
 	assert!(schema.config.iter().any(|field| field.path == "editor.wrapping"));
 	assert!(schema.config.iter().any(|field| field.path == "inspect.show_hitboxes"));
 	assert!(schema.config.iter().all(|field| !field.docs.is_empty()));
+	assert!(
+		schema
+			.helpers
+			.iter()
+			.any(|helper| helper.path == "glorp session attach")
+	);
+	assert!(
+		schema
+			.helpers
+			.iter()
+			.any(|helper| helper.path == "glorp events subscribe")
+	);
 	assert!(harness.paths.schema_path.exists());
 }
 
@@ -291,17 +272,27 @@ fn transaction_atomicity_e2e() {
 	let error = host
 		.execute(GlorpCommand::Txn(GlorpTxn {
 			commands: vec![
-				GlorpCommand::Config(ConfigCommand::Set {
-					path: "editor.wrapping".to_owned(),
-					value: GlorpValue::String("glyph".to_owned()),
-				}),
-				GlorpCommand::Document(DocumentCommand::Replace {
-					text: "changed".to_owned(),
-				}),
-				GlorpCommand::Config(ConfigCommand::Set {
-					path: "editor.wrapping".to_owned(),
-					value: GlorpValue::String("invalid-value".to_owned()),
-				}),
+				invocation(
+					"glorp config set",
+					GlorpValue::Record(std::collections::BTreeMap::from([
+						("path".into(), GlorpValue::String("editor.wrapping".into())),
+						("value".into(), GlorpValue::String("glyph".into())),
+					])),
+				),
+				invocation(
+					"glorp doc replace",
+					GlorpValue::Record(std::collections::BTreeMap::from([(
+						"text".into(),
+						GlorpValue::String("changed".into()),
+					)])),
+				),
+				invocation(
+					"glorp config set",
+					GlorpValue::Record(std::collections::BTreeMap::from([
+						("path".into(), GlorpValue::String("editor.wrapping".into())),
+						("value".into(), GlorpValue::String("invalid-value".into())),
+					])),
+				),
 			],
 		}))
 		.expect_err("transaction should fail");
@@ -497,36 +488,31 @@ fn ipc_client_parity_test() {
 	);
 	let plugin_snapshot = snapshot(&mut harness.ipc_client(), SceneLevel::Materialize);
 
-	let cli_harness = {
-		let mut harness = Harness::new();
-		harness.start_server();
-		let _ = cli_json(&harness, &["config", "set", "editor.wrapping", "word"]);
-		let _ = cli_json(&harness, &["doc", "replace", "hello"]);
-		let _ = cli_json(&harness, &["editor", "mode", "enter-insert-after"]);
-		let _ = cli_json(&harness, &["editor", "motion", "line-end"]);
-		let _ = cli_json(&harness, &["editor", "edit", "insert", " world"]);
-		let _ = cli_json(&harness, &["scene", "ensure"]);
-		harness
-	};
-	let cli_snapshot: GlorpSnapshot =
-		serde_json::from_value(cli_json(&cli_harness, &["get", "state"])).expect("CLI snapshot JSON should decode");
-
 	assert_eq!(ipc.document_text, direct.document_text);
 	assert_eq!(plugin_snapshot.document_text, direct.document_text);
-	assert_eq!(cli_snapshot.document_text, direct.document_text);
 	assert_eq!(ipc.config.editor.wrapping, direct.config.editor.wrapping);
 	assert_eq!(plugin_snapshot.config.editor.wrapping, direct.config.editor.wrapping);
-	assert_eq!(cli_snapshot.config.editor.wrapping, direct.config.editor.wrapping);
 }
 
 #[test]
-fn cli_autodetects_gui_socket_e2e() {
-	let mut harness = Harness::new();
-	harness.start_server();
-	let json = cli_json_repo_root(&harness, &["doc", "replace", "shared-socket"]);
-	let outcome: GlorpOutcome = serde_json::from_value(json).expect("CLI outcome should decode");
-	assert!(outcome.delta.text_changed);
+fn plugin_auto_starts_shared_host_e2e() {
+	let harness = Harness::new();
+	unsafe {
+		std::env::set_var("GLORP_HOST_BIN", host_bin());
+	}
+	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(
+			r#"glorp doc replace "shared-socket" --repo-root "{}""#,
+			harness.root.display()
+		),
+	);
 	assert_eq!(document_text(&mut harness.ipc_client()), "shared-socket");
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"glorp session shutdown --repo-root "{}""#, harness.root.display()),
+	);
 }
 
 #[test]
@@ -600,18 +586,40 @@ fn event_stream_conformance_test() {
 }
 
 #[test]
-fn golden_transcript_smoke_test() {
-	let mut harness = Harness::new();
-	harness.start_server();
+fn plugin_transcript_smoke_test() {
+	let harness = Harness::new();
+	unsafe {
+		std::env::set_var("GLORP_HOST_BIN", host_bin());
+	}
+	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
+	let repo_root = harness.root.display();
 
-	let _ = cli_json(&harness, &["config", "set", "editor.wrapping", "word"]);
-	let _ = cli_json(&harness, &["doc", "replace", "hello"]);
-	let _ = cli_json(&harness, &["editor", "mode", "enter-insert-after"]);
-	let _ = cli_json(&harness, &["editor", "motion", "line-end"]);
-	let _ = cli_json(&harness, &["editor", "edit", "insert", " world"]);
-	let _ = cli_json(&harness, &["scene", "ensure"]);
-	let snapshot: GlorpSnapshot =
-		serde_json::from_value(cli_json(&harness, &["get", "state"])).expect("snapshot JSON should decode");
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"glorp config set editor.wrapping word --repo-root "{repo_root}""#),
+	);
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"glorp doc replace "hello" --repo-root "{repo_root}""#),
+	);
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"glorp editor mode enter-insert-after --repo-root "{repo_root}""#),
+	);
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"glorp editor motion line-end --repo-root "{repo_root}""#),
+	);
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"glorp editor edit insert " world" --repo-root "{repo_root}""#),
+	);
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"glorp scene ensure --repo-root "{repo_root}""#),
+	);
+
+	let snapshot = snapshot(&mut harness.ipc_client(), SceneLevel::Materialize);
 
 	assert_eq!(snapshot.config.editor.wrapping, WrapChoice::Word);
 	assert_eq!(snapshot.document_text.as_deref(), Some("hello world"));
@@ -620,6 +628,11 @@ fn golden_transcript_smoke_test() {
 	assert!(snapshot.editor.undo_depth > 0);
 	assert_eq!(snapshot.ui.active_tab, SidebarTab::Controls);
 	assert_f32_eq(snapshot.ui.canvas_scroll_y, 0.0);
+
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"glorp session shutdown --repo-root "{repo_root}""#),
+	);
 }
 
 #[test]
@@ -699,61 +712,70 @@ fn perf_dashboard_query_e2e() {
 }
 
 #[test]
-fn cli_session_attach_and_event_polling_e2e() {
+fn plugin_session_attach_and_event_polling_e2e() {
 	let mut harness = Harness::new();
 	harness.start_server();
+	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
 
-	let session: GlorpSessionView = serde_json::from_value(cli_json_repo_root(&harness, &["session", "attach"]))
-		.expect("session attach JSON should decode");
-	assert_eq!(session.socket, harness.socket_path.display().to_string());
-	assert!(session.capabilities.subscriptions);
+	let session = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"glorp session attach --repo-root "{}""#, harness.root.display()),
+	);
+	let socket_value = session.get_data_by_key("socket").expect("socket field");
+	let socket = socket_value.coerce_str().expect("socket should be string");
+	assert_eq!(socket, harness.socket_path.display().to_string());
 
-	let stream: GlorpEventStreamView = serde_json::from_value(cli_json_repo_root(&harness, &["events", "subscribe"]))
-		.expect("event stream JSON should decode");
-	let _ = cli_json_repo_root(&harness, &["doc", "replace", "eventful"]);
-	let event: Option<GlorpEvent> = serde_json::from_value(cli_json_repo_root(
-		&harness,
-		&["events", "next", &stream.token.to_string()],
-	))
-	.expect("event JSON should decode");
+	let stream = eval_to_value(
+		&mut plugin_test,
+		&format!(r#"glorp events subscribe --repo-root "{}""#, harness.root.display()),
+	);
+	let token = stream
+		.get_data_by_key("token")
+		.and_then(|value| match value {
+			Value::Int { val, .. } => Some(val),
+			_ => None,
+		})
+		.expect("token should be int");
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(
+			r#"glorp doc replace "eventful" --repo-root "{}""#,
+			harness.root.display()
+		),
+	);
+	let event = eval_to_value(
+		&mut plugin_test,
+		&format!(
+			r#"glorp events next {} --repo-root "{}""#,
+			token,
+			harness.root.display(),
+		),
+	);
+	assert!(event.get_data_by_key("Changed").is_some());
 
-	match event {
-		Some(GlorpEvent::Changed(outcome)) => assert!(outcome.delta.text_changed),
-		other => panic!("unexpected event: {other:?}"),
-	}
-
-	let _ = cli_json_repo_root(&harness, &["events", "unsubscribe", &stream.token.to_string()]);
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(
+			r#"glorp events unsubscribe {} --repo-root "{}""#,
+			token,
+			harness.root.display(),
+		),
+	);
 }
 
 #[test]
-fn nu_module_session_and_txn_e2e() {
-	let mut harness = Harness::new();
-	harness.start_server();
-	let module_path = repo_root().join("nu/glorp.nu");
-
-	let output = nu_command()
-		.arg("-c")
-		.arg(format!(
-			r#"use "{}" *;
-let session = (glorp session attach --socket "{}");
-glorp txn [
-  (glorp cmd doc replace "hello")
-  (glorp cmd editor mode enter-insert-after)
-  (glorp cmd editor motion line-end)
-  (glorp cmd editor edit insert " world")
-] --session $session | ignore;
-glorp get document-text --session $session | to json -r"#,
-			module_path.display(),
-			harness.socket_path.display(),
-		))
-		.output()
-		.expect("nu should run");
-
-	assert!(
-		output.status.success(),
-		"nu stderr: {}",
-		String::from_utf8_lossy(&output.stderr)
+fn generated_surface_artifact_golden_test() {
+	let repo_root = repo_root();
+	assert_eq!(
+		std::fs::read_to_string(repo_root.join("schema/glorp-schema.json")).expect("schema file"),
+		serde_json::to_string_pretty(&glorp_api::glorp_schema()).expect("schema json"),
 	);
-	let document: String = serde_json::from_slice(&output.stdout).expect("nu output should decode");
-	assert_eq!(document, "hello world");
+	assert_eq!(
+		std::fs::read_to_string(repo_root.join("nu/glorp.nu")).expect("Nu module"),
+		glorp_api::render_nu_module(),
+	);
+	assert_eq!(
+		std::fs::read_to_string(repo_root.join("nu/completions.nu")).expect("Nu completions"),
+		glorp_api::render_nu_completions(),
+	);
 }

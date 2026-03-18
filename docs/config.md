@@ -1,6 +1,6 @@
 # Config
 
-Durable config lives in [`nu/default-config.nu`](/home/albert/polyrepo1/repos/glorp/nu/default-config.nu).
+Durable config lives in ../nu/default-config.nu.
 
 Rules:
 

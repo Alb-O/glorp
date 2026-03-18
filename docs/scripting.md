@@ -2,8 +2,8 @@
 
 Two Nu-facing surfaces exist:
 
-- [`nu/glorp.nu`](/home/albert/polyrepo1/repos/glorp/nu/glorp.nu): session-aware Nu helper module that shells through `glorp_cli`
-- `glorp_nu_plugin`: direct Nu plugin commands over IPC for lower overhead and plugin-native testing
+- ../nu/glorp.nu: generated Nu helper module with txn builders and aliases
+- `glorp_nu_plugin`: primary Nu command surface over the shared runtime
 
 Example transcript:
 
