@@ -47,11 +47,11 @@ pub fn snapshot_from_state(
 		ensure_scene_materialized(state);
 	}
 
-	let snapshot = state.session.snapshot().clone();
+	let snapshot = state.session.snapshot();
 	GlorpSnapshot {
 		revisions: state.revisions,
 		config: state.config.clone(),
-		editor: editor_view(&snapshot, state.session.text()),
+		editor: editor_view(snapshot, state.session.text()),
 		scene: match level {
 			SceneLevel::Omit => None,
 			SceneLevel::IfReady | SceneLevel::Materialize => snapshot.scene.as_ref().map(scene_state_view),
@@ -59,7 +59,7 @@ pub fn snapshot_from_state(
 		inspect: inspect_state(state.ui.hovered_target, state.ui.selected_target),
 		perf: perf_state_view(state),
 		ui: ui_state_view(state),
-		document_text: include_document_text.then(|| state.session.text().to_owned()),
+		document_text: include_document_text.then(|| state.session.text().into()),
 	}
 }
 
@@ -70,7 +70,7 @@ pub fn selection_view_from_state(state: &crate::state::RuntimeState) -> Selectio
 	SelectionStateView {
 		mode: state::mode(editor.editor.mode),
 		selected_text: selection
-			.and_then(|selection| text.get(selection.clone()))
+			.and_then(|selection| text.get(selection.start..selection.end))
 			.map(str::to_owned),
 		range: selection.map(state::text_range),
 		selection_head: state::selection_head(&editor.editor),
@@ -106,7 +106,7 @@ pub fn inspect_details_view_from_state(
 			.target_details(active_target)
 			.as_deref()
 			.unwrap_or("hover a run or cluster for details")
-			.to_owned(),
+			.into(),
 		scene: Some(inspect_scene_view(scene)),
 	}
 }
@@ -131,7 +131,7 @@ pub fn perf_dashboard_view_from_state(state: &mut crate::state::RuntimeState) ->
 			warning_count: scene.warning_count,
 		},
 		metrics: vec![PerfMetricSummaryView {
-			label: "scene.build".to_owned(),
+			label: "scene.build".into(),
 			total_samples: state.perf.scene_build.total_samples,
 			total_millis: state.perf.scene_build.total_millis,
 			last_millis: state.perf.scene_build.last_millis,

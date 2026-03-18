@@ -178,14 +178,14 @@ pub struct EditorEngine {
 }
 
 impl EditorOutcome {
-	fn from_apply_result(previous_view: &EditorViewState, next_view: &EditorViewState, result: ApplyResult) -> Self {
+	fn from_views(previous_view: &EditorViewState, next_view: &EditorViewState, text_edit: Option<TextEdit>) -> Self {
 		Self {
 			view_changed: previous_view != next_view,
 			selection_changed: previous_view.selection != next_view.selection
 				|| previous_view.selection_head != next_view.selection_head,
 			mode_changed: previous_view.mode != next_view.mode,
 			viewport_target: next_view.viewport_target,
-			text_edit: result.text_edit,
+			text_edit,
 		}
 	}
 
@@ -212,9 +212,10 @@ impl EditorViewState {
 impl EditorEngine {
 	pub fn new(font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) -> Self {
 		let text = text.into();
+		let layout = EditorLayout::new(font_system, &text, config);
 		let mut editor = Self {
-			core: EditorCore::new(text.clone()),
-			layout: EditorLayout::new(font_system, &text, config),
+			core: EditorCore::new(text),
+			layout,
 		};
 		editor.reset_normal_selection();
 		editor.refresh_view_state(None);
@@ -263,14 +264,6 @@ impl EditorEngine {
 				"editor apply"
 			);
 		}
-		EditorOutcome::from_apply_result(
-			&previous_view,
-			self.layout.view_state_ref(),
-			ApplyResult {
-				text_edit,
-				layout: None,
-				view_refreshed: false,
-			},
-		)
+		EditorOutcome::from_views(&previous_view, self.layout.view_state_ref(), text_edit)
 	}
 }

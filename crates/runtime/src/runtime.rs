@@ -47,11 +47,12 @@ impl GlorpRuntime {
 	}
 
 	pub fn gui_frame(&mut self) -> crate::GuiRuntimeFrame {
+		let snapshot = self.state.session.snapshot();
 		crate::GuiRuntimeFrame {
 			config: self.state.config.clone(),
 			ui: self.state.ui.clone(),
 			revisions: self.state.revisions,
-			snapshot: self.state.session.snapshot().clone(),
+			snapshot: snapshot.clone(),
 			document_text: self.state.session.text().into(),
 		}
 	}
@@ -88,7 +89,7 @@ impl GlorpHost for GlorpRuntime {
 			GlorpQuery::Capabilities => Ok(GlorpQueryResult::Capabilities(GlorpCapabilities {
 				transactions: true,
 				subscriptions: true,
-				transports: vec!["local".to_owned(), "ipc".to_owned()],
+				transports: vec!["local".into(), "ipc".into()],
 			})),
 		}
 	}

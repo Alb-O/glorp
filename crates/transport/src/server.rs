@@ -89,31 +89,35 @@ pub fn start_server_shared(
 
 fn handle_connection(stream: UnixStream, host: &Arc<Mutex<RuntimeHost>>) -> Result<(), GlorpError> {
 	let mut stream = stream;
-	let request = {
-		let mut line = String::new();
-		let mut reader = BufReader::new(&stream);
-		reader
-			.read_line(&mut line)
-			.map_err(|error| GlorpError::transport(format!("failed to read request: {error}")))?;
-		serde_json::from_str(&line)
-			.map_err(|error| GlorpError::internal(format!("failed to decode request: {error}")))?
-	};
-
-	let response = {
-		let mut host = host
-			.lock()
-			.map_err(|_| GlorpError::transport("runtime lock poisoned"))?;
-		match request {
-			TransportRequest::Execute(command) => TransportResponse::Execute(host.execute(command)),
-			TransportRequest::Query(query) => TransportResponse::Query(Box::new(host.query(query))),
-			TransportRequest::Subscribe(request) => TransportResponse::Subscribe(host.subscribe(request)),
-			TransportRequest::NextEvent(token) => TransportResponse::NextEvent(host.next_event(token)),
-			TransportRequest::Unsubscribe(token) => TransportResponse::Unsubscribe(host.unsubscribe(token)),
-			TransportRequest::Shutdown => TransportResponse::Shutdown(Ok(())),
-		}
-	};
+	let request = read_request(&stream)?;
+	let response = dispatch_request(request, host)?;
 
 	let payload = serde_json::to_string(&response)
 		.map_err(|error| GlorpError::internal(format!("failed to encode response: {error}")))?;
 	writeln!(stream, "{payload}").map_err(|error| GlorpError::transport(format!("failed to write response: {error}")))
+}
+
+fn read_request(stream: &UnixStream) -> Result<TransportRequest, GlorpError> {
+	let mut line = String::new();
+	let mut reader = BufReader::new(stream);
+	reader
+		.read_line(&mut line)
+		.map_err(|error| GlorpError::transport(format!("failed to read request: {error}")))?;
+	serde_json::from_str(&line).map_err(|error| GlorpError::internal(format!("failed to decode request: {error}")))
+}
+
+fn dispatch_request(
+	request: TransportRequest, host: &Arc<Mutex<RuntimeHost>>,
+) -> Result<TransportResponse, GlorpError> {
+	let mut host = host
+		.lock()
+		.map_err(|_| GlorpError::transport("runtime lock poisoned"))?;
+	Ok(match request {
+		TransportRequest::Execute(command) => TransportResponse::Execute(host.execute(command)),
+		TransportRequest::Query(query) => TransportResponse::Query(Box::new(host.query(query))),
+		TransportRequest::Subscribe(request) => TransportResponse::Subscribe(host.subscribe(request)),
+		TransportRequest::NextEvent(token) => TransportResponse::NextEvent(host.next_event(token)),
+		TransportRequest::Unsubscribe(token) => TransportResponse::Unsubscribe(host.unsubscribe(token)),
+		TransportRequest::Shutdown => TransportResponse::Shutdown(Ok(())),
+	})
 }

@@ -168,126 +168,27 @@ enum Host {
 impl Cli {
 	pub fn run(self) -> Result<(), GlorpError> {
 		let mut host = self.host()?;
+		self.run_with_host(&mut host)
+	}
 
+	fn run_with_host(self, host: &mut Host) -> Result<(), GlorpError> {
 		match self.command {
 			Command::Schema => output::print_query(&host.query(GlorpQuery::Schema)?)?,
-			Command::Get { target } => {
-				let query = match target {
-					GetTarget::Config => GlorpQuery::Config,
-					GetTarget::State => GlorpQuery::Snapshot {
-						scene: SceneLevel::Materialize,
-						include_document_text: true,
-					},
-					GetTarget::DocumentText => GlorpQuery::DocumentText,
-					GetTarget::Selection => GlorpQuery::Selection,
-					GetTarget::InspectDetails { target } => GlorpQuery::InspectDetails {
-						target: target.as_deref().map(parse_canvas_target).transpose()?,
-					},
-					GetTarget::Perf => GlorpQuery::PerfDashboard,
-					GetTarget::Ui => GlorpQuery::UiState,
-					GetTarget::Capabilities => GlorpQuery::Capabilities,
-				};
-				output::print_query(&host.query(query)?)?;
-			}
+			Command::Get { target } => output::print_query(&host.query(query_for_target(target)?)?)?,
 			Command::Session {
 				command: SessionSubcommand::Attach,
-			} => {
-				let session = self.attach_session()?;
-				output::print_json(&session)?;
-			}
-			Command::Config { command } => match command {
-				ConfigSubcommand::Set { path, value } => {
-					let value = parse_value(&value);
-					output::print_outcome(&host.execute(GlorpCommand::Config(ConfigCommand::Set { path, value }))?)?;
-				}
-				ConfigSubcommand::Reset { path } => {
-					output::print_outcome(&host.execute(GlorpCommand::Config(ConfigCommand::Reset { path }))?)?;
-				}
-				ConfigSubcommand::Patch { json } => {
-					let value: serde_json::Value = serde_json::from_str(&json)
-						.map_err(|error| GlorpError::validation(None, format!("invalid patch JSON: {error}")))?;
-					let assignments = flatten_patch(None, &GlorpValue::from(value))?;
-					output::print_outcome(
-						&host.execute(GlorpCommand::Config(ConfigCommand::Patch { values: assignments }))?,
-					)?;
-				}
-				ConfigSubcommand::Validate { path, value } => {
-					GlorpConfig::validate_path(&path, parse_value(&value))?;
-					output::print_json(&serde_json::json!({ "ok": true }))?;
-				}
-				ConfigSubcommand::Reload => {
-					output::print_outcome(&host.execute(GlorpCommand::Config(ConfigCommand::Reload))?)?;
-				}
-				ConfigSubcommand::Persist => {
-					output::print_outcome(&host.execute(GlorpCommand::Config(ConfigCommand::Persist))?)?;
-				}
-			},
-			Command::Doc { command } => match command {
-				DocumentSubcommand::Replace { text } => {
-					output::print_outcome(&host.execute(GlorpCommand::Document(DocumentCommand::Replace { text }))?)?;
-				}
-			},
-			Command::Editor { command } => {
-				let command = match command {
-					EditorSubcommand::Motion { motion } => {
-						GlorpCommand::Editor(EditorCommand::Motion(parse_motion(&motion)?))
-					}
-					EditorSubcommand::Mode { mode } => GlorpCommand::Editor(EditorCommand::Mode(parse_mode(&mode)?)),
-					EditorSubcommand::Edit { command } => GlorpCommand::Editor(EditorCommand::Edit(match command {
-						EditorEditSubcommand::Insert { text } => EditorEditCommand::Insert { text },
-						EditorEditSubcommand::Backspace => EditorEditCommand::Backspace,
-						EditorEditSubcommand::DeleteForward => EditorEditCommand::DeleteForward,
-						EditorEditSubcommand::DeleteSelection => EditorEditCommand::DeleteSelection,
-					})),
-					EditorSubcommand::History { action } => {
-						GlorpCommand::Editor(EditorCommand::History(parse_history(&action)?))
-					}
-				};
-				output::print_outcome(&host.execute(command)?)?;
-			}
-			Command::Ui { command } => {
-				let command = match command {
-					UiSubcommand::Sidebar { command } => match command {
-						UiSidebarSubcommand::Select { tab } => {
-							GlorpCommand::Ui(UiCommand::SidebarSelect { tab: parse_tab(&tab)? })
-						}
-					},
-					UiSubcommand::Viewport { command } => match command {
-						UiViewportSubcommand::ScrollTo { x, y } => {
-							GlorpCommand::Ui(UiCommand::ViewportScrollTo { x, y })
-						}
-					},
-					UiSubcommand::PaneRatioSet { ratio } => GlorpCommand::Ui(UiCommand::PaneRatioSet { ratio }),
-				};
-				output::print_outcome(&host.execute(command)?)?;
-			}
-			Command::Scene { command } => match command {
-				SceneSubcommand::Ensure => {
-					output::print_outcome(&host.execute(GlorpCommand::Scene(SceneCommand::Ensure))?)?;
-				}
-			},
-			Command::Events { command } => match command {
-				EventsSubcommand::Subscribe => {
-					let token = host.subscribe(GlorpSubscription::Changes)?;
-					output::print_json(&GlorpEventStreamView {
-						token,
-						subscription: "changes".to_owned(),
-					})?;
-				}
-				EventsSubcommand::Next { token } => output::print_json(&host.next_event(token)?)?,
-				EventsSubcommand::Unsubscribe { token } => {
-					host.unsubscribe(token)?;
-					output::print_json(&serde_json::json!({
-						"ok": true,
-						"token": token,
-					}))?;
-				}
-			},
-			Command::Txn { json } => {
-				let txn: GlorpTxn = serde_json::from_str(&json)
-					.map_err(|error| GlorpError::validation(None, format!("invalid txn JSON: {error}")))?;
-				output::print_outcome(&host.execute(GlorpCommand::Txn(txn))?)?;
-			}
+			} => output::print_json(&self.attach_session()?)?,
+			Command::Config { command } => run_config(host, command)?,
+			Command::Doc {
+				command: DocumentSubcommand::Replace { text },
+			} => output::print_outcome(&host.execute(GlorpCommand::Document(DocumentCommand::Replace { text }))?)?,
+			Command::Editor { command } => run_editor(host, command)?,
+			Command::Ui { command } => run_ui(host, command)?,
+			Command::Scene {
+				command: SceneSubcommand::Ensure,
+			} => output::print_outcome(&host.execute(GlorpCommand::Scene(SceneCommand::Ensure))?)?,
+			Command::Events { command } => run_events(host, command)?,
+			Command::Txn { json } => run_txn(host, &json)?,
 		}
 
 		Ok(())
@@ -357,6 +258,113 @@ fn autodetect_socket(repo_root: &Path) -> Option<PathBuf> {
 	socket_is_live(&socket).then_some(socket)
 }
 
+fn query_for_target(target: GetTarget) -> Result<GlorpQuery, GlorpError> {
+	Ok(match target {
+		GetTarget::Config => GlorpQuery::Config,
+		GetTarget::State => GlorpQuery::Snapshot {
+			scene: SceneLevel::Materialize,
+			include_document_text: true,
+		},
+		GetTarget::DocumentText => GlorpQuery::DocumentText,
+		GetTarget::Selection => GlorpQuery::Selection,
+		GetTarget::InspectDetails { target } => GlorpQuery::InspectDetails {
+			target: target.as_deref().map(parse_canvas_target).transpose()?,
+		},
+		GetTarget::Perf => GlorpQuery::PerfDashboard,
+		GetTarget::Ui => GlorpQuery::UiState,
+		GetTarget::Capabilities => GlorpQuery::Capabilities,
+	})
+}
+
+fn run_config(host: &mut Host, command: ConfigSubcommand) -> Result<(), GlorpError> {
+	match command {
+		ConfigSubcommand::Set { path, value } => {
+			let value = parse_value(&value);
+			output::print_outcome(&host.execute(GlorpCommand::Config(ConfigCommand::Set { path, value }))?)?;
+		}
+		ConfigSubcommand::Reset { path } => {
+			output::print_outcome(&host.execute(GlorpCommand::Config(ConfigCommand::Reset { path }))?)?;
+		}
+		ConfigSubcommand::Patch { json } => {
+			let value: serde_json::Value = serde_json::from_str(&json)
+				.map_err(|error| GlorpError::validation(None, format!("invalid patch JSON: {error}")))?;
+			let assignments = flatten_patch(&GlorpValue::from(value))?;
+			output::print_outcome(&host.execute(GlorpCommand::Config(ConfigCommand::Patch { values: assignments }))?)?;
+		}
+		ConfigSubcommand::Validate { path, value } => {
+			GlorpConfig::validate_path(&path, parse_value(&value))?;
+			output::print_json(&serde_json::json!({ "ok": true }))?;
+		}
+		ConfigSubcommand::Reload => {
+			output::print_outcome(&host.execute(GlorpCommand::Config(ConfigCommand::Reload))?)?;
+		}
+		ConfigSubcommand::Persist => {
+			output::print_outcome(&host.execute(GlorpCommand::Config(ConfigCommand::Persist))?)?;
+		}
+	}
+
+	Ok(())
+}
+
+fn run_editor(host: &mut Host, command: EditorSubcommand) -> Result<(), GlorpError> {
+	let command = match command {
+		EditorSubcommand::Motion { motion } => GlorpCommand::Editor(EditorCommand::Motion(parse_motion(&motion)?)),
+		EditorSubcommand::Mode { mode } => GlorpCommand::Editor(EditorCommand::Mode(parse_mode(&mode)?)),
+		EditorSubcommand::Edit { command } => GlorpCommand::Editor(EditorCommand::Edit(match command {
+			EditorEditSubcommand::Insert { text } => EditorEditCommand::Insert { text },
+			EditorEditSubcommand::Backspace => EditorEditCommand::Backspace,
+			EditorEditSubcommand::DeleteForward => EditorEditCommand::DeleteForward,
+			EditorEditSubcommand::DeleteSelection => EditorEditCommand::DeleteSelection,
+		})),
+		EditorSubcommand::History { action } => GlorpCommand::Editor(EditorCommand::History(parse_history(&action)?)),
+	};
+	output::print_outcome(&host.execute(command)?)?;
+	Ok(())
+}
+
+fn run_ui(host: &mut Host, command: UiSubcommand) -> Result<(), GlorpError> {
+	let command = match command {
+		UiSubcommand::Sidebar {
+			command: UiSidebarSubcommand::Select { tab },
+		} => GlorpCommand::Ui(UiCommand::SidebarSelect { tab: parse_tab(&tab)? }),
+		UiSubcommand::Viewport {
+			command: UiViewportSubcommand::ScrollTo { x, y },
+		} => GlorpCommand::Ui(UiCommand::ViewportScrollTo { x, y }),
+		UiSubcommand::PaneRatioSet { ratio } => GlorpCommand::Ui(UiCommand::PaneRatioSet { ratio }),
+	};
+	output::print_outcome(&host.execute(command)?)?;
+	Ok(())
+}
+
+fn run_events(host: &mut Host, command: EventsSubcommand) -> Result<(), GlorpError> {
+	match command {
+		EventsSubcommand::Subscribe => {
+			let token = host.subscribe(GlorpSubscription::Changes)?;
+			output::print_json(&GlorpEventStreamView {
+				token,
+				subscription: "changes".into(),
+			})?;
+		}
+		EventsSubcommand::Next { token } => output::print_json(&host.next_event(token)?)?,
+		EventsSubcommand::Unsubscribe { token } => {
+			host.unsubscribe(token)?;
+			output::print_json(&serde_json::json!({
+				"ok": true,
+				"token": token,
+			}))?;
+		}
+	}
+
+	Ok(())
+}
+
+fn run_txn(host: &mut Host, json: &str) -> Result<(), GlorpError> {
+	let txn: GlorpTxn = serde_json::from_str(json)
+		.map_err(|error| GlorpError::validation(None, format!("invalid txn JSON: {error}")))?;
+	output::print_outcome(&host.execute(GlorpCommand::Txn(txn))?)?;
+	Ok(())
+}
+
 fn query_capabilities(host: &mut impl GlorpHost, socket: &Path) -> Result<GlorpCapabilities, GlorpError> {
 	let GlorpQueryResult::Capabilities(capabilities) = host.query(GlorpQuery::Capabilities)? else {
 		return Err(GlorpError::transport(format!(
@@ -403,23 +411,30 @@ fn parse_value(input: &str) -> GlorpValue {
 	serde_json::from_str::<serde_json::Value>(input).map_or_else(|_| GlorpValue::String(input.into()), GlorpValue::from)
 }
 
-fn flatten_patch(prefix: Option<&str>, value: &GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {
+fn flatten_patch(value: &GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {
 	let mut assignments = Vec::new();
-	flatten_patch_into(&mut assignments, prefix, value)?;
+	let mut path = String::new();
+	flatten_patch_into(&mut assignments, &mut path, value)?;
 	Ok(assignments)
 }
 
 fn flatten_patch_into(
-	assignments: &mut Vec<ConfigAssignment>, prefix: Option<&str>, value: &GlorpValue,
+	assignments: &mut Vec<ConfigAssignment>, path: &mut String, value: &GlorpValue,
 ) -> Result<(), GlorpError> {
 	match value {
 		GlorpValue::Record(fields) => fields.iter().try_for_each(|(key, value)| {
-			let path = prefix.map_or_else(|| key.clone(), |prefix| format!("{prefix}.{key}"));
-			flatten_patch_into(assignments, Some(&path), value)
+			let len = path.len();
+			if !path.is_empty() {
+				path.push('.');
+			}
+			path.push_str(key);
+			let result = flatten_patch_into(assignments, path, value);
+			path.truncate(len);
+			result
 		}),
 		other => {
 			assignments.push(ConfigAssignment {
-				path: prefix.unwrap_or_default().to_owned(),
+				path: path.clone(),
 				value: other.clone(),
 			});
 			Ok(())

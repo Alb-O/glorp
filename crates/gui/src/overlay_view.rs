@@ -355,17 +355,7 @@ fn draw_selection_underlay(
 		.iter()
 		.filter(|primitive| primitive.layer == OverlayLayer::UnderText)
 		.filter(|primitive| matches!(primitive.kind, OverlayRectKind::EditorSelection))
-		.map(|primitive| {
-			// Selection fill/outline is rendered as one merged shape so adjacent
-			// rects do not double-stroke shared edges.
-			let rect = rect_bounds(bounds, origin, primitive.rect, primitive.space);
-			LayoutRect {
-				x: rect.x,
-				y: rect.y,
-				width: rect.width.max(1.0),
-				height: rect.height.max(1.0),
-			}
-		})
+		.map(|primitive| selection_screen_rect(bounds, origin, primitive))
 		.collect::<Vec<_>>();
 
 	draw_selection_group(renderer, &rectangles, selection_palette());
@@ -473,15 +463,15 @@ fn rectangle_outline(rect: LayoutRect) -> [OutlineSegment; 4] {
 
 fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 	if rectangles.is_empty() {
-		return vec![];
+		return Vec::new();
 	}
 
 	let xs = unique_sorted_edges(rectangles.iter().flat_map(|rect| [rect.x, rect.x + rect.width]));
 	let ys = unique_sorted_edges(rectangles.iter().flat_map(|rect| [rect.y, rect.y + rect.height]));
 	let (Some(columns), Some(rows)) = (xs.len().checked_sub(1), ys.len().checked_sub(1)) else {
-		return vec![];
+		return Vec::new();
 	};
-	let mut occupied = vec![false; rows * columns];
+	let mut occupied_cells = vec![false; rows * columns];
 
 	for row in 0..rows {
 		for column in 0..columns {
@@ -489,23 +479,23 @@ fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 			let x1 = xs[column + 1];
 			let y0 = ys[row];
 			let y1 = ys[row + 1];
-			occupied[row * columns + column] = rectangles
+			occupied_cells[row * columns + column] = rectangles
 				.iter()
 				.any(|rect| x0 >= rect.x && x1 <= rect.x + rect.width && y0 >= rect.y && y1 <= rect.y + rect.height);
 		}
 	}
-	let occupied = |row: usize, column: usize| occupied[row * columns + column];
+	let is_occupied = |row: usize, column: usize| occupied_cells[row * columns + column];
 
 	let mut horizontal = Vec::new();
 	let mut vertical = Vec::new();
 
 	for row in 0..rows {
 		for column in 0..columns {
-			if !occupied(row, column) {
+			if !is_occupied(row, column) {
 				continue;
 			}
 
-			if row == 0 || !occupied(row - 1, column) {
+			if row == 0 || !is_occupied(row - 1, column) {
 				horizontal.push(HorizontalSegment {
 					y: ys[row],
 					x0: xs[column],
@@ -513,7 +503,7 @@ fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 				});
 			}
 
-			if row + 1 == rows || !occupied(row + 1, column) {
+			if row + 1 == rows || !is_occupied(row + 1, column) {
 				horizontal.push(HorizontalSegment {
 					y: ys[row + 1],
 					x0: xs[column],
@@ -521,7 +511,7 @@ fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 				});
 			}
 
-			if column == 0 || !occupied(row, column - 1) {
+			if column == 0 || !is_occupied(row, column - 1) {
 				vertical.push(VerticalSegment {
 					x: xs[column],
 					y0: ys[row],
@@ -529,7 +519,7 @@ fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 				});
 			}
 
-			if column + 1 == columns || !occupied(row, column + 1) {
+			if column + 1 == columns || !is_occupied(row, column + 1) {
 				vertical.push(VerticalSegment {
 					x: xs[column + 1],
 					y0: ys[row],
@@ -554,6 +544,18 @@ fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 				}),
 		)
 		.collect()
+}
+
+fn selection_screen_rect(bounds: Rectangle, origin: Point, primitive: &OverlayPrimitive) -> LayoutRect {
+	// Selection fill/outline is rendered as one merged shape so adjacent
+	// rects do not double-stroke shared edges.
+	let rect = rect_bounds(bounds, origin, primitive.rect, primitive.space);
+	LayoutRect {
+		x: rect.x,
+		y: rect.y,
+		width: rect.width.max(1.0),
+		height: rect.height.max(1.0),
+	}
 }
 
 fn unique_sorted_edges(edges: impl IntoIterator<Item = f32>) -> Vec<f32> {

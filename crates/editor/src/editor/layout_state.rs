@@ -226,7 +226,7 @@ impl EditorLayout {
 
 pub fn edit_changes_line_structure(text: &str, edit: &TextEdit) -> bool {
 	// This editor's hard-line model treats only `\n` as a structural line break.
-	text.get(edit.range.clone())
+	text.get(edit.range.start..edit.range.end)
 		.is_some_and(|removed| removed.contains('\n'))
 		|| edit.inserted.contains('\n')
 }

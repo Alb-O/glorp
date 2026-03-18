@@ -72,8 +72,7 @@ impl ConfigStore {
 
 fn config_from_json(value: serde_json::Value) -> Result<GlorpConfig, GlorpError> {
 	let mut config = GlorpConfig::default();
-	let glorp = GlorpValue::from(value);
-	let GlorpValue::Record(root) = glorp else {
+	let GlorpValue::Record(root) = GlorpValue::from(value) else {
 		return Err(GlorpError::validation(None, "config.nu must evaluate to a record"));
 	};
 
@@ -94,13 +93,7 @@ fn config_from_json(value: serde_json::Value) -> Result<GlorpConfig, GlorpError>
 pub fn render_config(config: &GlorpConfig) -> String {
 	format!(
 		"export const config = {{\n  editor: {{\n    preset: {}\n    font: \"{}\"\n    shaping: \"{}\"\n    wrapping: \"{}\"\n    font_size: {}\n    line_height: {}\n  }}\n\n  inspect: {{\n    show_baselines: {}\n    show_hitboxes: {}\n  }}\n}}\n",
-		config.editor.preset.map_or_else(
-			|| "null".to_owned(),
-			|preset| format!(
-				"\"{}\"",
-				<glorp_api::SamplePreset as glorp_api::EnumValue>::as_ref(preset)
-			),
-		),
+		render_optional_preset(config.editor.preset),
 		<glorp_api::FontChoice as glorp_api::EnumValue>::as_ref(config.editor.font),
 		<glorp_api::ShapingChoice as glorp_api::EnumValue>::as_ref(config.editor.shaping),
 		<glorp_api::WrapChoice as glorp_api::EnumValue>::as_ref(config.editor.wrapping),
@@ -108,5 +101,17 @@ pub fn render_config(config: &GlorpConfig) -> String {
 		config.editor.line_height,
 		config.inspect.show_baselines,
 		config.inspect.show_hitboxes,
+	)
+}
+
+fn render_optional_preset(preset: Option<glorp_api::SamplePreset>) -> String {
+	preset.map_or_else(
+		|| "null".into(),
+		|preset| {
+			format!(
+				"\"{}\"",
+				<glorp_api::SamplePreset as glorp_api::EnumValue>::as_ref(preset)
+			)
+		},
 	)
 }

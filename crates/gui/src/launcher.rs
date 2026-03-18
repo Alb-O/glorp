@@ -68,22 +68,22 @@ impl GuiRuntimeSession {
 	}
 
 	pub fn connect_or_start(options: GuiLaunchOptions) -> Result<(Self, GuiRuntimeClient), GlorpError> {
-		if socket_is_live(&options.socket_path) {
-			let mut client = IpcClient::new(options.socket_path.clone());
-			ensure_runtime_capabilities(&mut client, "unexpected capabilities response from shared GUI runtime")?;
-
-			Ok((
-				Self {
-					socket_path: options.socket_path,
-					host: None,
-					server: None,
-				},
-				GuiRuntimeClient::Ipc(client),
-			))
-		} else {
+		if !socket_is_live(&options.socket_path) {
 			let (session, client) = Self::start_owned(options)?;
-			Ok((session, GuiRuntimeClient::Local(client)))
+			return Ok((session, GuiRuntimeClient::Local(client)));
 		}
+
+		let mut client = IpcClient::new(options.socket_path.clone());
+		ensure_runtime_capabilities(&mut client, "unexpected capabilities response from shared GUI runtime")?;
+
+		Ok((
+			Self {
+				socket_path: options.socket_path,
+				host: None,
+				server: None,
+			},
+			GuiRuntimeClient::Ipc(client),
+		))
 	}
 
 	#[must_use]
@@ -106,10 +106,7 @@ impl GuiRuntimeSession {
 	}
 
 	pub fn shutdown(&mut self) -> Result<(), GlorpError> {
-		if let Some(server) = self.server.take() {
-			server.shutdown()?;
-		}
-		Ok(())
+		self.server.take().map_or(Ok(()), IpcServerHandle::shutdown)
 	}
 }
 

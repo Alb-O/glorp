@@ -64,7 +64,7 @@ impl EditorEngine {
 
 	fn word_range(&self, fallback: std::ops::Range<usize>) -> std::ops::Range<usize> {
 		let text = self.text();
-		let Some(slice) = text.get(fallback.clone()) else {
+		let Some(slice) = text.get(fallback.start..fallback.end) else {
 			return fallback;
 		};
 		if !slice.chars().any(is_word_char) {

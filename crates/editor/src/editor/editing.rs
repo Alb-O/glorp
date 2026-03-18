@@ -1,8 +1,11 @@
 use {
 	super::{ApplyResult, EditorEngine, EditorMode, EditorSelection, TextEdit},
-	crate::editor::{
-		layout_state::edit_changes_line_structure,
-		text::{clamp_char_boundary, next_char_boundary, previous_char_boundary},
+	crate::{
+		editor::{
+			layout_state::edit_changes_line_structure,
+			text::{clamp_char_boundary, next_char_boundary, previous_char_boundary},
+		},
+		scene::DocumentLayout,
 	},
 	cosmic_text::FontSystem,
 };
@@ -37,13 +40,7 @@ impl EditorEngine {
 		self.set_mode(EditorMode::Normal);
 		self.clear_pointer_anchor();
 		let next_layout = self.document_layout();
-		self.set_selection(
-			next_layout
-				.cluster_at_or_after(selection_start)
-				.or_else(|| next_layout.cluster_before(selection_start))
-				.and_then(|index| next_layout.cluster(index))
-				.map(|cluster| EditorSelection::new(cluster.byte_range.clone(), cluster.byte_range.start)),
-		);
+		self.set_selection(selection_near(&next_layout, selection_start));
 		self.set_preferred_x(None);
 		self.record_history(text_edit.clone(), inverse, before);
 
@@ -165,4 +162,12 @@ impl EditorEngine {
 			self.replay_history(font_system, text_edit, &snapshot)
 		})
 	}
+}
+
+fn selection_near(layout: &DocumentLayout, byte: usize) -> Option<EditorSelection> {
+	layout
+		.cluster_at_or_after(byte)
+		.or_else(|| layout.cluster_before(byte))
+		.and_then(|index| layout.cluster(index))
+		.map(|cluster| EditorSelection::new(cluster.byte_range.clone(), cluster.byte_range.start))
 }

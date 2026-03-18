@@ -35,19 +35,20 @@ impl DocumentState {
 	}
 
 	pub fn apply_edit(&mut self, edit: &TextEdit) -> TextEdit {
-		let range = edit.range.clone();
+		let start = edit.range.start;
+		let end = edit.range.end;
 		let removed = self
 			.text
-			.get(range.clone())
+			.get(start..end)
 			.expect("text edit range should stay on char boundaries")
 			.to_string();
 
-		self.text.replace_range(range, &edit.inserted);
+		self.text.replace_range(start..end, &edit.inserted);
 
 		// History wants the inverse edit in post-apply coordinates so undo can
 		// replay it directly against the updated document.
 		TextEdit {
-			range: edit.range.start..(edit.range.start + edit.inserted.len()),
+			range: start..(start + edit.inserted.len()),
 			inserted: removed,
 		}
 	}

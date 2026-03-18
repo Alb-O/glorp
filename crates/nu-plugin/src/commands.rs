@@ -258,7 +258,7 @@ impl_simple_command!(
 	|call, span, _input| {
 		let mut client = client_from_call(call)?;
 		let patch: Value = call.req(0)?;
-		let assignments = flatten_record(None, glorp_value(patch)?)?;
+		let assignments = flatten_record(glorp_value(patch)?)?;
 		let outcome = client
 			.execute(GlorpCommand::Config(ConfigCommand::Patch { values: assignments }))
 			.map_err(to_labeled_error)?;
@@ -572,26 +572,30 @@ fn glorp_value(value: Value) -> Result<GlorpValue, LabeledError> {
 	}
 }
 
-fn flatten_record(prefix: Option<&str>, value: GlorpValue) -> Result<Vec<ConfigAssignment>, LabeledError> {
+fn flatten_record(value: GlorpValue) -> Result<Vec<ConfigAssignment>, LabeledError> {
 	let mut assignments = Vec::new();
-	flatten_record_into(&mut assignments, prefix, value)?;
+	let mut path = String::new();
+	flatten_record_into(&mut assignments, &mut path, value)?;
 	Ok(assignments)
 }
 
 fn flatten_record_into(
-	assignments: &mut Vec<ConfigAssignment>, prefix: Option<&str>, value: GlorpValue,
+	assignments: &mut Vec<ConfigAssignment>, path: &mut String, value: GlorpValue,
 ) -> Result<(), LabeledError> {
 	match value {
 		GlorpValue::Record(fields) => fields.into_iter().try_for_each(|(key, value)| {
-			let path = match prefix {
-				Some(prefix) => format!("{prefix}.{key}"),
-				None => key,
-			};
-			flatten_record_into(assignments, Some(&path), value)
+			let len = path.len();
+			if !path.is_empty() {
+				path.push('.');
+			}
+			path.push_str(&key);
+			let result = flatten_record_into(assignments, path, value);
+			path.truncate(len);
+			result
 		}),
 		value => {
 			assignments.push(ConfigAssignment {
-				path: prefix.unwrap_or_default().to_owned(),
+				path: path.clone(),
 				value,
 			});
 			Ok(())
