@@ -103,13 +103,10 @@ pub fn render_config(config: &GlorpConfig) -> String {
 }
 
 fn render_optional_preset(preset: Option<glorp_api::SamplePreset>) -> String {
-	preset.map_or_else(
-		|| "null".into(),
-		|preset| {
-			format!(
-				"\"{}\"",
-				<glorp_api::SamplePreset as glorp_api::EnumValue>::as_ref(preset)
-			)
-		},
-	)
+	preset.map_or("null".into(), |preset| {
+		format!(
+			"\"{}\"",
+			<glorp_api::SamplePreset as glorp_api::EnumValue>::as_ref(preset)
+		)
+	})
 }

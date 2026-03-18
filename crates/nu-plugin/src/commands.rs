@@ -219,8 +219,7 @@ fn capabilities(client: &mut impl GlorpHost) -> Result<glorp_api::GlorpCapabilit
 }
 
 fn spawn_host(repo_root: &Path, socket: &Path) -> Result<(), LabeledError> {
-	let host_bin = host_binary_path()?;
-	Command::new(host_bin)
+	Command::new(host_binary_path())
 		.arg("--repo-root")
 		.arg(repo_root)
 		.arg("--socket")
@@ -233,16 +232,16 @@ fn spawn_host(repo_root: &Path, socket: &Path) -> Result<(), LabeledError> {
 	Ok(())
 }
 
-fn host_binary_path() -> Result<PathBuf, LabeledError> {
-	if let Some(path) = std::env::var_os("GLORP_HOST_BIN") {
-		return Ok(PathBuf::from(path));
-	}
-
-	Ok(std::env::current_exe()
-		.ok()
-		.map(|current| current.with_file_name("glorp_host"))
-		.filter(|sibling| sibling.exists())
-		.unwrap_or_else(|| PathBuf::from("glorp_host")))
+fn host_binary_path() -> PathBuf {
+	std::env::var_os("GLORP_HOST_BIN")
+		.map(PathBuf::from)
+		.or_else(|| {
+			std::env::current_exe()
+				.ok()
+				.map(|current| current.with_file_name("glorp_host"))
+				.filter(|sibling| sibling.exists())
+		})
+		.unwrap_or_else(|| PathBuf::from("glorp_host"))
 }
 
 fn wait_for_socket(socket: &Path) -> Result<(), LabeledError> {

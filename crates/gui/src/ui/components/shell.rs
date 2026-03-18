@@ -115,7 +115,7 @@ pub fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
 	.width(Length::Fill)
 	.height(Length::Fill);
 
-	let static_layer = snapshot
+	let static_layer: Option<Element<'static, Message>> = snapshot
 		.scene
 		.clone()
 		.filter(|_| decorations.show_baselines || decorations.show_hitboxes)
@@ -135,15 +135,18 @@ pub fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
 			.height(Length::Fill)
 			.into()
 		});
-	let children = [backdrop.into(), underlay.into(), text_layer.into()]
-		.into_iter()
-		.chain(static_layer)
-		.chain([canvas_view.into(), overlay.into()])
-		.collect::<Vec<_>>();
-
 	container(
-		sensor(Stack::with_children(children).width(Length::Fill).height(Length::Fill))
-			.on_resize(|size| Message::Viewport(ViewportMessage::CanvasResized(size))),
+		sensor(
+			Stack::with_children(
+				[backdrop.into(), underlay.into(), text_layer.into()]
+					.into_iter()
+					.chain(static_layer)
+					.chain([canvas_view.into(), overlay.into()]),
+			)
+			.width(Length::Fill)
+			.height(Length::Fill),
+		)
+		.on_resize(|size| Message::Viewport(ViewportMessage::CanvasResized(size))),
 	)
 	.padding(8)
 	.width(Length::Fill)

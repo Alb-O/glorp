@@ -36,8 +36,7 @@ fn tracing_filter() -> Option<EnvFilter> {
 		Some(value) if value.is_empty() || value == "1" || value.eq_ignore_ascii_case("true") => {
 			Some(DEFAULT_TRACE_FILTER)
 		}
-		Some(value) => Some(value),
-		None => None,
+		value => value,
 	};
 
 	directive

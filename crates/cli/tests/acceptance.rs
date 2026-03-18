@@ -115,7 +115,7 @@ fn host_state(host: &mut impl GlorpHost) -> (String, EditorStateView, GlorpConfi
 fn string_field(value: &Value, field: &str) -> String {
 	value
 		.get_data_by_key(field)
-		.and_then(|value| value.coerce_str().ok().map(|value| value.into_owned()))
+		.and_then(|value| value.coerce_str().ok().map(std::borrow::Cow::into_owned))
 		.unwrap_or_else(|| panic!("{field} field should be string"))
 }
 
