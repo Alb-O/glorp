@@ -1485,6 +1485,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "glorp_api_catalog"
+version = "0.1.0"
+
+[[package]]
+name = "glorp_api_codegen"
+version = "0.1.0"
+dependencies = [
+ "glorp_api_catalog",
+]
+
+[[package]]
 name = "glorp_editor"
 version = "0.1.0"
 dependencies = [

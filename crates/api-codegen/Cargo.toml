@@ -1,0 +1,7 @@
+[package]
+name = "glorp_api_codegen"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+glorp_api_catalog = { path = "../api-catalog" }

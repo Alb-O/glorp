@@ -1,0 +1,4 @@
+[package]
+name = "glorp_api_catalog"
+version.workspace = true
+edition.workspace = true

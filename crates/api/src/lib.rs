@@ -1,4 +1,3 @@
-mod catalog;
 mod command;
 mod config;
 mod error;
