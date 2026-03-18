@@ -652,12 +652,36 @@
               "required": false
             },
             {
+              "name": "inspect",
+              "docs": "Inspect state view.",
+              "ty": {
+                "Named": "InspectStateView"
+              },
+              "required": true
+            },
+            {
+              "name": "perf",
+              "docs": "Performance state view.",
+              "ty": {
+                "Named": "PerfStateView"
+              },
+              "required": true
+            },
+            {
               "name": "ui",
               "docs": "UI state view.",
               "ty": {
                 "Named": "UiStateView"
               },
               "required": true
+            },
+            {
+              "name": "document_text",
+              "docs": "Document text when requested.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": false
             }
           ]
         }
@@ -678,8 +702,40 @@
               "required": true
             },
             {
+              "name": "selection",
+              "docs": "Current selection range.",
+              "ty": {
+                "Named": "TextRange"
+              },
+              "required": false
+            },
+            {
+              "name": "selection_head",
+              "docs": "Selection head byte offset.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": false
+            },
+            {
+              "name": "pointer_anchor",
+              "docs": "Pointer anchor byte offset.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": false
+            },
+            {
               "name": "text_bytes",
               "docs": "Document size in bytes.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "text_lines",
+              "docs": "Document line count.",
               "ty": {
                 "Builtin": "Int"
               },
@@ -700,6 +756,56 @@
                 "Builtin": "Int"
               },
               "required": true
+            },
+            {
+              "name": "viewport",
+              "docs": "Viewport-facing editor metrics.",
+              "ty": {
+                "Named": "EditorViewportView"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EditorViewportView",
+      "docs": "Viewport-facing editor metrics.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "wrapping",
+              "docs": "Current wrapping mode.",
+              "ty": {
+                "Named": "WrapChoice"
+              },
+              "required": true
+            },
+            {
+              "name": "measured_width",
+              "docs": "Measured content width.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "measured_height",
+              "docs": "Measured content height.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "viewport_target",
+              "docs": "Current viewport reveal target.",
+              "ty": {
+                "Named": "LayoutRectView"
+              },
+              "required": false
             }
           ]
         }
@@ -734,6 +840,552 @@
                 "Builtin": "Float"
               },
               "required": true
+            },
+            {
+              "name": "run_count",
+              "docs": "Layout run count.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "cluster_count",
+              "docs": "Layout cluster count.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "InspectStateView",
+      "docs": "Stable inspect state view.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "hovered_target",
+              "docs": "Hovered inspect target.",
+              "ty": {
+                "Named": "CanvasTarget"
+              },
+              "required": false
+            },
+            {
+              "name": "selected_target",
+              "docs": "Selected inspect target.",
+              "ty": {
+                "Named": "CanvasTarget"
+              },
+              "required": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "PerfStateView",
+      "docs": "Stable runtime perf counters.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "scene_builds",
+              "docs": "Scene build count.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "scene_build_millis",
+              "docs": "Accumulated scene build millis.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "SelectionStateView",
+      "docs": "Focused selection read model.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "mode",
+              "docs": "Editor mode.",
+              "ty": {
+                "Named": "EditorMode"
+              },
+              "required": true
+            },
+            {
+              "name": "range",
+              "docs": "Current selection range.",
+              "ty": {
+                "Named": "TextRange"
+              },
+              "required": false
+            },
+            {
+              "name": "selected_text",
+              "docs": "Selected text if any.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": false
+            },
+            {
+              "name": "selection_head",
+              "docs": "Selection head byte offset.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": false
+            },
+            {
+              "name": "pointer_anchor",
+              "docs": "Pointer anchor byte offset.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": false
+            },
+            {
+              "name": "viewport_target",
+              "docs": "Current viewport reveal target.",
+              "ty": {
+                "Named": "LayoutRectView"
+              },
+              "required": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "InspectDetailsView",
+      "docs": "Rich inspect read model.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "hovered_target",
+              "docs": "Hovered inspect target.",
+              "ty": {
+                "Named": "CanvasTarget"
+              },
+              "required": false
+            },
+            {
+              "name": "selected_target",
+              "docs": "Selected inspect target.",
+              "ty": {
+                "Named": "CanvasTarget"
+              },
+              "required": false
+            },
+            {
+              "name": "active_target",
+              "docs": "Active inspect target.",
+              "ty": {
+                "Named": "CanvasTarget"
+              },
+              "required": false
+            },
+            {
+              "name": "warnings",
+              "docs": "Scene warnings.",
+              "ty": {
+                "Named": "StringList"
+              },
+              "required": true
+            },
+            {
+              "name": "interaction_details",
+              "docs": "Human-readable target details.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": true
+            },
+            {
+              "name": "scene",
+              "docs": "Inspect scene summary.",
+              "ty": {
+                "Named": "InspectSceneView"
+              },
+              "required": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "InspectSceneView",
+      "docs": "Inspect-side scene summary.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "revision",
+              "docs": "Scene revision.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "run_count",
+              "docs": "Layout run count.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "cluster_count",
+              "docs": "Layout cluster count.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "PerfDashboardView",
+      "docs": "Rich runtime perf dashboard.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "overview",
+              "docs": "Perf overview.",
+              "ty": {
+                "Named": "PerfOverviewView"
+              },
+              "required": true
+            },
+            {
+              "name": "metrics",
+              "docs": "Perf metric summaries.",
+              "ty": {
+                "Named": "PerfMetricSummaryList"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "PerfOverviewView",
+      "docs": "Perf overview summary.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "editor_mode",
+              "docs": "Editor mode.",
+              "ty": {
+                "Named": "EditorMode"
+              },
+              "required": true
+            },
+            {
+              "name": "editor_bytes",
+              "docs": "Document size in bytes.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "text_lines",
+              "docs": "Document line count.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "layout_width",
+              "docs": "Current layout width.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "scene_ready",
+              "docs": "Whether scene data is materialized.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "scene_revision",
+              "docs": "Current scene revision.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": false
+            },
+            {
+              "name": "scene_width",
+              "docs": "Scene width.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "scene_height",
+              "docs": "Scene height.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "run_count",
+              "docs": "Layout run count.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "cluster_count",
+              "docs": "Layout cluster count.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "warning_count",
+              "docs": "Scene warning count.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "PerfMetricSummaryView",
+      "docs": "Perf metric summary row.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "label",
+              "docs": "Metric label.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": true
+            },
+            {
+              "name": "total_samples",
+              "docs": "Total samples.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "total_millis",
+              "docs": "Total millis.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "last_millis",
+              "docs": "Most recent millis.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "avg_millis",
+              "docs": "Average millis.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "TextRange",
+      "docs": "Byte range in the document.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "start",
+              "docs": "Start byte offset.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "end",
+              "docs": "End byte offset.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "LayoutRectView",
+      "docs": "Rectangle in layout coordinates.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "x",
+              "docs": "Left position.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "y",
+              "docs": "Top position.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "width",
+              "docs": "Rectangle width.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "height",
+              "docs": "Rectangle height.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpEventStreamView",
+      "docs": "Subscription handle for event polling.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "token",
+              "docs": "Subscription token.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "subscription",
+              "docs": "Subscription name.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpSessionView",
+      "docs": "Resolved live session endpoint.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "socket",
+              "docs": "Socket path.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": true
+            },
+            {
+              "name": "repo_root",
+              "docs": "Resolved repo root.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": false
+            },
+            {
+              "name": "capabilities",
+              "docs": "Runtime capabilities.",
+              "ty": {
+                "Named": "GlorpCapabilities"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "CanvasTarget",
+      "docs": "Canvas inspect target.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "run",
+              "docs": "Run index when targeting a run.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": false
+            },
+            {
+              "name": "cluster",
+              "docs": "Cluster index when targeting a cluster.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": false
             }
           ]
         }
@@ -754,6 +1406,14 @@
               "required": true
             },
             {
+              "name": "canvas_focused",
+              "docs": "Whether the canvas owns focus.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
               "name": "canvas_scroll_x",
               "docs": "Horizontal scroll offset.",
               "ty": {
@@ -764,6 +1424,30 @@
             {
               "name": "canvas_scroll_y",
               "docs": "Vertical scroll offset.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "layout_width",
+              "docs": "Current layout width.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "viewport_width",
+              "docs": "Viewport width.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "viewport_height",
+              "docs": "Viewport height.",
               "ty": {
                 "Builtin": "Float"
               },
@@ -846,6 +1530,17 @@
         "List": {
           "item": {
             "Named": "ConfigAssignment"
+          }
+        }
+      }
+    },
+    {
+      "name": "PerfMetricSummaryList",
+      "docs": "List of perf metric summaries.",
+      "kind": {
+        "List": {
+          "item": {
+            "Named": "PerfMetricSummaryView"
           }
         }
       }
@@ -1094,6 +1789,34 @@
       "docs": "Return the current document text.",
       "output": {
         "Builtin": "String"
+      }
+    },
+    {
+      "path": "glorp get selection",
+      "docs": "Return the current selection read model.",
+      "output": {
+        "Named": "SelectionStateView"
+      }
+    },
+    {
+      "path": "glorp get inspect-details",
+      "docs": "Return the current inspect read model.",
+      "output": {
+        "Named": "InspectDetailsView"
+      }
+    },
+    {
+      "path": "glorp get perf",
+      "docs": "Return the runtime perf dashboard.",
+      "output": {
+        "Named": "PerfDashboardView"
+      }
+    },
+    {
+      "path": "glorp get ui",
+      "docs": "Return the current UI state.",
+      "output": {
+        "Named": "UiStateView"
       }
     },
     {

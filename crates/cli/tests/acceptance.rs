@@ -8,6 +8,7 @@ use {
 	nu_protocol::{Span, Value},
 	serde_json::Value as JsonValue,
 	std::{
+		env,
 		path::PathBuf,
 		process::Command,
 		time::{SystemTime, UNIX_EPOCH},
@@ -101,6 +102,29 @@ fn document_text(host: &mut impl GlorpHost) -> String {
 		GlorpQueryResult::DocumentText(text) => text,
 		other => panic!("unexpected document text response: {other:?}"),
 	}
+}
+
+fn repo_root() -> PathBuf {
+	PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+		.parent()
+		.expect("cli crate should have a parent")
+		.parent()
+		.expect("repo root should exist")
+		.to_path_buf()
+}
+
+fn nu_command() -> Command {
+	let mut command = Command::new("nu");
+	let cli_bin = PathBuf::from(env!("CARGO_BIN_EXE_glorp_cli"));
+	let cli_dir = cli_bin.parent().expect("glorp_cli binary should have a parent");
+	let existing_path = env::var("PATH").unwrap_or_default();
+	let path = if existing_path.is_empty() {
+		cli_dir.display().to_string()
+	} else {
+		format!("{}:{existing_path}", cli_dir.display())
+	};
+	command.env("PATH", path);
+	command
 }
 
 fn run_standard_transcript(host: &mut impl GlorpHost) -> GlorpSnapshot {
@@ -592,4 +616,140 @@ fn golden_transcript_smoke_test() {
 	assert!(snapshot.editor.undo_depth > 0);
 	assert_eq!(snapshot.ui.active_tab, SidebarTab::Controls);
 	assert_eq!(snapshot.ui.canvas_scroll_y, 0.0);
+}
+
+#[test]
+fn selection_query_e2e() {
+	let mut host = Harness::new().runtime();
+	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
+		text: "alpha beta".to_owned(),
+	}))
+	.expect("replace should succeed");
+
+	let selection = match host
+		.query(GlorpQuery::Selection)
+		.expect("selection query should succeed")
+	{
+		GlorpQueryResult::Selection(selection) => selection,
+		other => panic!("unexpected selection response: {other:?}"),
+	};
+
+	assert_eq!(selection.mode, EditorMode::Normal);
+	assert!(selection.range.is_some());
+	assert_eq!(selection.selected_text.as_deref(), Some("a"));
+	assert!(selection.selection_head.is_some());
+}
+
+#[test]
+fn inspect_details_query_e2e() {
+	let mut host = Harness::new().runtime();
+	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
+		text: "inspect me".to_owned(),
+	}))
+	.expect("replace should succeed");
+	host.execute(GlorpCommand::Ui(UiCommand::SidebarSelect {
+		tab: SidebarTab::Inspect,
+	}))
+	.expect("sidebar select should succeed");
+	host.execute(GlorpCommand::Scene(SceneCommand::Ensure))
+		.expect("scene ensure should succeed");
+	host.execute(GlorpCommand::Ui(UiCommand::InspectTargetSelect {
+		target: Some(CanvasTarget::Cluster(0)),
+	}))
+	.expect("inspect target select should succeed");
+
+	let inspect = match host
+		.query(GlorpQuery::InspectDetails { target: None })
+		.expect("inspect-details query should succeed")
+	{
+		GlorpQueryResult::InspectDetails(inspect) => inspect,
+		other => panic!("unexpected inspect-details response: {other:?}"),
+	};
+
+	assert_eq!(inspect.active_target, Some(CanvasTarget::Cluster(0)));
+	assert!(inspect.scene.is_some());
+	assert!(inspect.interaction_details.contains("cluster index: 0"));
+}
+
+#[test]
+fn perf_dashboard_query_e2e() {
+	let mut host = Harness::new().runtime();
+	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
+		text: "one\ntwo\nthree".to_owned(),
+	}))
+	.expect("replace should succeed");
+
+	let perf = match host
+		.query(GlorpQuery::PerfDashboard)
+		.expect("perf dashboard query should succeed")
+	{
+		GlorpQueryResult::PerfDashboard(perf) => perf,
+		other => panic!("unexpected perf dashboard response: {other:?}"),
+	};
+
+	assert!(perf.overview.scene_ready);
+	assert!(perf.overview.scene_revision.is_some());
+	assert!(!perf.metrics.is_empty());
+	assert_eq!(perf.metrics[0].label, "scene.build");
+	assert!(perf.metrics[0].total_samples >= 1);
+}
+
+#[test]
+fn cli_session_attach_and_event_polling_e2e() {
+	let mut harness = Harness::new();
+	harness.start_server();
+
+	let session: GlorpSessionView = serde_json::from_value(cli_json_repo_root(&harness, &["session", "attach"]))
+		.expect("session attach JSON should decode");
+	assert_eq!(session.socket, harness.socket_path.display().to_string());
+	assert!(session.capabilities.subscriptions);
+
+	let stream: GlorpEventStreamView = serde_json::from_value(cli_json_repo_root(&harness, &["events", "subscribe"]))
+		.expect("event stream JSON should decode");
+	let _ = cli_json_repo_root(&harness, &["doc", "replace", "eventful"]);
+	let event: Option<GlorpEvent> = serde_json::from_value(cli_json_repo_root(
+		&harness,
+		&["events", "next", &stream.token.to_string()],
+	))
+	.expect("event JSON should decode");
+
+	match event {
+		Some(GlorpEvent::Changed(outcome)) => assert!(outcome.delta.text_changed),
+		other => panic!("unexpected event: {other:?}"),
+	}
+
+	let _ = cli_json_repo_root(&harness, &["events", "unsubscribe", &stream.token.to_string()]);
+}
+
+#[test]
+fn nu_module_session_and_txn_e2e() {
+	let mut harness = Harness::new();
+	harness.start_server();
+	let module_path = repo_root().join("nu/glorp.nu");
+
+	let output = nu_command()
+		.arg("-c")
+		.arg(format!(
+			r#"use "{}" *;
+let session = (glorp session attach --socket "{}");
+glorp txn [
+  (glorp cmd doc replace "hello")
+  (glorp cmd editor mode enter-insert-after)
+  (glorp cmd editor motion line-end)
+  (glorp cmd editor edit insert " world")
+] --session $session | ignore;
+glorp get document-text --session $session | to json -r"#,
+			module_path.display(),
+			harness.socket_path.display(),
+		))
+		.output()
+		.expect("nu should run");
+
+	assert!(
+		output.status.success(),
+		"nu stderr: {}",
+		String::from_utf8_lossy(&output.stderr)
+	);
+	let document: String = serde_json::from_slice(&output.stdout).expect("nu output should decode");
+	assert_eq!(document, "hello world");
 }

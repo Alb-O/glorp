@@ -373,7 +373,25 @@ pub fn glorp_schema() -> GlorpSchema {
 						TypeRef::Named("SceneStateView".to_owned()),
 						false,
 					),
+					field(
+						"inspect",
+						"Inspect state view.",
+						TypeRef::Named("InspectStateView".to_owned()),
+						true,
+					),
+					field(
+						"perf",
+						"Performance state view.",
+						TypeRef::Named("PerfStateView".to_owned()),
+						true,
+					),
 					field("ui", "UI state view.", TypeRef::Named("UiStateView".to_owned()), true),
+					field(
+						"document_text",
+						"Document text when requested.",
+						built(BuiltinType::String),
+						false,
+					),
 				],
 			),
 			record_type(
@@ -381,9 +399,64 @@ pub fn glorp_schema() -> GlorpSchema {
 				"Stable editor state view.",
 				vec![
 					field("mode", "Editor mode.", TypeRef::Named("EditorMode".to_owned()), true),
+					field(
+						"selection",
+						"Current selection range.",
+						TypeRef::Named("TextRange".to_owned()),
+						false,
+					),
+					field(
+						"selection_head",
+						"Selection head byte offset.",
+						built(BuiltinType::Int),
+						false,
+					),
+					field(
+						"pointer_anchor",
+						"Pointer anchor byte offset.",
+						built(BuiltinType::Int),
+						false,
+					),
 					field("text_bytes", "Document size in bytes.", built(BuiltinType::Int), true),
+					field("text_lines", "Document line count.", built(BuiltinType::Int), true),
 					field("undo_depth", "Undo depth.", built(BuiltinType::Int), true),
 					field("redo_depth", "Redo depth.", built(BuiltinType::Int), true),
+					field(
+						"viewport",
+						"Viewport-facing editor metrics.",
+						TypeRef::Named("EditorViewportView".to_owned()),
+						true,
+					),
+				],
+			),
+			record_type(
+				"EditorViewportView",
+				"Viewport-facing editor metrics.",
+				vec![
+					field(
+						"wrapping",
+						"Current wrapping mode.",
+						TypeRef::Named("WrapChoice".to_owned()),
+						true,
+					),
+					field(
+						"measured_width",
+						"Measured content width.",
+						built(BuiltinType::Float),
+						true,
+					),
+					field(
+						"measured_height",
+						"Measured content height.",
+						built(BuiltinType::Float),
+						true,
+					),
+					field(
+						"viewport_target",
+						"Current viewport reveal target.",
+						TypeRef::Named("LayoutRectView".to_owned()),
+						false,
+					),
 				],
 			),
 			record_type(
@@ -393,6 +466,241 @@ pub fn glorp_schema() -> GlorpSchema {
 					field("revision", "Scene revision.", built(BuiltinType::Int), true),
 					field("measured_width", "Measured width.", built(BuiltinType::Float), true),
 					field("measured_height", "Measured height.", built(BuiltinType::Float), true),
+					field("run_count", "Layout run count.", built(BuiltinType::Int), true),
+					field("cluster_count", "Layout cluster count.", built(BuiltinType::Int), true),
+				],
+			),
+			record_type(
+				"InspectStateView",
+				"Stable inspect state view.",
+				vec![
+					field(
+						"hovered_target",
+						"Hovered inspect target.",
+						TypeRef::Named("CanvasTarget".to_owned()),
+						false,
+					),
+					field(
+						"selected_target",
+						"Selected inspect target.",
+						TypeRef::Named("CanvasTarget".to_owned()),
+						false,
+					),
+				],
+			),
+			record_type(
+				"PerfStateView",
+				"Stable runtime perf counters.",
+				vec![
+					field("scene_builds", "Scene build count.", built(BuiltinType::Int), true),
+					field(
+						"scene_build_millis",
+						"Accumulated scene build millis.",
+						built(BuiltinType::Float),
+						true,
+					),
+				],
+			),
+			record_type(
+				"SelectionStateView",
+				"Focused selection read model.",
+				vec![
+					field("mode", "Editor mode.", TypeRef::Named("EditorMode".to_owned()), true),
+					field(
+						"range",
+						"Current selection range.",
+						TypeRef::Named("TextRange".to_owned()),
+						false,
+					),
+					field(
+						"selected_text",
+						"Selected text if any.",
+						built(BuiltinType::String),
+						false,
+					),
+					field(
+						"selection_head",
+						"Selection head byte offset.",
+						built(BuiltinType::Int),
+						false,
+					),
+					field(
+						"pointer_anchor",
+						"Pointer anchor byte offset.",
+						built(BuiltinType::Int),
+						false,
+					),
+					field(
+						"viewport_target",
+						"Current viewport reveal target.",
+						TypeRef::Named("LayoutRectView".to_owned()),
+						false,
+					),
+				],
+			),
+			record_type(
+				"InspectDetailsView",
+				"Rich inspect read model.",
+				vec![
+					field(
+						"hovered_target",
+						"Hovered inspect target.",
+						TypeRef::Named("CanvasTarget".to_owned()),
+						false,
+					),
+					field(
+						"selected_target",
+						"Selected inspect target.",
+						TypeRef::Named("CanvasTarget".to_owned()),
+						false,
+					),
+					field(
+						"active_target",
+						"Active inspect target.",
+						TypeRef::Named("CanvasTarget".to_owned()),
+						false,
+					),
+					field(
+						"warnings",
+						"Scene warnings.",
+						TypeRef::Named("StringList".to_owned()),
+						true,
+					),
+					field(
+						"interaction_details",
+						"Human-readable target details.",
+						built(BuiltinType::String),
+						true,
+					),
+					field(
+						"scene",
+						"Inspect scene summary.",
+						TypeRef::Named("InspectSceneView".to_owned()),
+						false,
+					),
+				],
+			),
+			record_type(
+				"InspectSceneView",
+				"Inspect-side scene summary.",
+				vec![
+					field("revision", "Scene revision.", built(BuiltinType::Int), true),
+					field("run_count", "Layout run count.", built(BuiltinType::Int), true),
+					field("cluster_count", "Layout cluster count.", built(BuiltinType::Int), true),
+				],
+			),
+			record_type(
+				"PerfDashboardView",
+				"Rich runtime perf dashboard.",
+				vec![
+					field(
+						"overview",
+						"Perf overview.",
+						TypeRef::Named("PerfOverviewView".to_owned()),
+						true,
+					),
+					field(
+						"metrics",
+						"Perf metric summaries.",
+						TypeRef::Named("PerfMetricSummaryList".to_owned()),
+						true,
+					),
+				],
+			),
+			record_type(
+				"PerfOverviewView",
+				"Perf overview summary.",
+				vec![
+					field(
+						"editor_mode",
+						"Editor mode.",
+						TypeRef::Named("EditorMode".to_owned()),
+						true,
+					),
+					field("editor_bytes", "Document size in bytes.", built(BuiltinType::Int), true),
+					field("text_lines", "Document line count.", built(BuiltinType::Int), true),
+					field("layout_width", "Current layout width.", built(BuiltinType::Float), true),
+					field(
+						"scene_ready",
+						"Whether scene data is materialized.",
+						built(BuiltinType::Bool),
+						true,
+					),
+					field(
+						"scene_revision",
+						"Current scene revision.",
+						built(BuiltinType::Int),
+						false,
+					),
+					field("scene_width", "Scene width.", built(BuiltinType::Float), true),
+					field("scene_height", "Scene height.", built(BuiltinType::Float), true),
+					field("run_count", "Layout run count.", built(BuiltinType::Int), true),
+					field("cluster_count", "Layout cluster count.", built(BuiltinType::Int), true),
+					field("warning_count", "Scene warning count.", built(BuiltinType::Int), true),
+				],
+			),
+			record_type(
+				"PerfMetricSummaryView",
+				"Perf metric summary row.",
+				vec![
+					field("label", "Metric label.", built(BuiltinType::String), true),
+					field("total_samples", "Total samples.", built(BuiltinType::Int), true),
+					field("total_millis", "Total millis.", built(BuiltinType::Float), true),
+					field("last_millis", "Most recent millis.", built(BuiltinType::Float), true),
+					field("avg_millis", "Average millis.", built(BuiltinType::Float), true),
+				],
+			),
+			record_type(
+				"TextRange",
+				"Byte range in the document.",
+				vec![
+					field("start", "Start byte offset.", built(BuiltinType::Int), true),
+					field("end", "End byte offset.", built(BuiltinType::Int), true),
+				],
+			),
+			record_type(
+				"LayoutRectView",
+				"Rectangle in layout coordinates.",
+				vec![
+					field("x", "Left position.", built(BuiltinType::Float), true),
+					field("y", "Top position.", built(BuiltinType::Float), true),
+					field("width", "Rectangle width.", built(BuiltinType::Float), true),
+					field("height", "Rectangle height.", built(BuiltinType::Float), true),
+				],
+			),
+			record_type(
+				"GlorpEventStreamView",
+				"Subscription handle for event polling.",
+				vec![
+					field("token", "Subscription token.", built(BuiltinType::Int), true),
+					field("subscription", "Subscription name.", built(BuiltinType::String), true),
+				],
+			),
+			record_type(
+				"GlorpSessionView",
+				"Resolved live session endpoint.",
+				vec![
+					field("socket", "Socket path.", built(BuiltinType::String), true),
+					field("repo_root", "Resolved repo root.", built(BuiltinType::String), false),
+					field(
+						"capabilities",
+						"Runtime capabilities.",
+						TypeRef::Named("GlorpCapabilities".to_owned()),
+						true,
+					),
+				],
+			),
+			record_type(
+				"CanvasTarget",
+				"Canvas inspect target.",
+				vec![
+					field("run", "Run index when targeting a run.", built(BuiltinType::Int), false),
+					field(
+						"cluster",
+						"Cluster index when targeting a cluster.",
+						built(BuiltinType::Int),
+						false,
+					),
 				],
 			),
 			record_type(
@@ -403,6 +711,12 @@ pub fn glorp_schema() -> GlorpSchema {
 						"active_tab",
 						"Active sidebar tab.",
 						TypeRef::Named("SidebarTab".to_owned()),
+						true,
+					),
+					field(
+						"canvas_focused",
+						"Whether the canvas owns focus.",
+						built(BuiltinType::Bool),
 						true,
 					),
 					field(
@@ -417,6 +731,9 @@ pub fn glorp_schema() -> GlorpSchema {
 						built(BuiltinType::Float),
 						true,
 					),
+					field("layout_width", "Current layout width.", built(BuiltinType::Float), true),
+					field("viewport_width", "Viewport width.", built(BuiltinType::Float), true),
+					field("viewport_height", "Viewport height.", built(BuiltinType::Float), true),
 					field("pane_ratio", "Sidebar/canvas ratio.", built(BuiltinType::Float), true),
 				],
 			),
@@ -445,6 +762,11 @@ pub fn glorp_schema() -> GlorpSchema {
 				"ConfigAssignmentList",
 				"List of config assignments.",
 				TypeRef::Named("ConfigAssignment".to_owned()),
+			),
+			list_type(
+				"PerfMetricSummaryList",
+				"List of perf metric summaries.",
+				TypeRef::Named("PerfMetricSummaryView".to_owned()),
 			),
 		],
 		config: vec![
@@ -604,6 +926,22 @@ pub fn glorp_schema() -> GlorpSchema {
 				"Return the current document text.",
 				built(BuiltinType::String),
 			),
+			query(
+				"glorp get selection",
+				"Return the current selection read model.",
+				named("SelectionStateView"),
+			),
+			query(
+				"glorp get inspect-details",
+				"Return the current inspect read model.",
+				named("InspectDetailsView"),
+			),
+			query(
+				"glorp get perf",
+				"Return the runtime perf dashboard.",
+				named("PerfDashboardView"),
+			),
+			query("glorp get ui", "Return the current UI state.", named("UiStateView")),
 			query(
 				"glorp get capabilities",
 				"Return stable runtime capability flags.",

@@ -6,6 +6,10 @@ pub fn print_query(result: &GlorpQueryResult) -> Result<(), glorp_api::GlorpErro
 		GlorpQueryResult::Config(value) => print_json(value),
 		GlorpQueryResult::Snapshot(value) => print_json(value),
 		GlorpQueryResult::DocumentText(value) => print_json(value),
+		GlorpQueryResult::Selection(value) => print_json(value),
+		GlorpQueryResult::InspectDetails(value) => print_json(value),
+		GlorpQueryResult::PerfDashboard(value) => print_json(value),
+		GlorpQueryResult::UiState(value) => print_json(value),
 		GlorpQueryResult::Capabilities(value) => print_json(value),
 	}
 }

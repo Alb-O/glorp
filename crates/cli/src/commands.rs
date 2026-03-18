@@ -24,6 +24,10 @@ enum Command {
 		#[command(subcommand)]
 		target: GetTarget,
 	},
+	Session {
+		#[command(subcommand)]
+		command: SessionSubcommand,
+	},
 	Config {
 		#[command(subcommand)]
 		command: ConfigSubcommand,
@@ -44,6 +48,10 @@ enum Command {
 		#[command(subcommand)]
 		command: SceneSubcommand,
 	},
+	Events {
+		#[command(subcommand)]
+		command: EventsSubcommand,
+	},
 	Txn {
 		json: String,
 	},
@@ -54,7 +62,19 @@ enum GetTarget {
 	Config,
 	State,
 	DocumentText,
+	Selection,
+	InspectDetails {
+		#[arg(long)]
+		target: Option<String>,
+	},
+	Perf,
+	Ui,
 	Capabilities,
+}
+
+#[derive(Debug, Subcommand)]
+enum SessionSubcommand {
+	Attach,
 }
 
 #[derive(Debug, Subcommand)]
@@ -127,6 +147,13 @@ enum SceneSubcommand {
 	Ensure,
 }
 
+#[derive(Debug, Subcommand)]
+enum EventsSubcommand {
+	Subscribe,
+	Next { token: u64 },
+	Unsubscribe { token: u64 },
+}
+
 enum Host {
 	Local(RuntimeHost),
 	Ipc(IpcClient),
@@ -146,9 +173,21 @@ impl Cli {
 						include_document_text: true,
 					},
 					GetTarget::DocumentText => GlorpQuery::DocumentText,
+					GetTarget::Selection => GlorpQuery::Selection,
+					GetTarget::InspectDetails { target } => GlorpQuery::InspectDetails {
+						target: target.as_deref().map(parse_canvas_target).transpose()?,
+					},
+					GetTarget::Perf => GlorpQuery::PerfDashboard,
+					GetTarget::Ui => GlorpQuery::UiState,
 					GetTarget::Capabilities => GlorpQuery::Capabilities,
 				};
 				output::print_query(&host.query(query)?)?;
+			}
+			Command::Session {
+				command: SessionSubcommand::Attach,
+			} => {
+				let session = self.attach_session()?;
+				output::print_json(&session)?;
 			}
 			Command::Config { command } => match command {
 				ConfigSubcommand::Set { path, value } => {
@@ -221,6 +260,23 @@ impl Cli {
 					output::print_outcome(&host.execute(GlorpCommand::Scene(SceneCommand::Ensure))?)?;
 				}
 			},
+			Command::Events { command } => match command {
+				EventsSubcommand::Subscribe => {
+					let token = host.subscribe(GlorpSubscription::Changes)?;
+					output::print_json(&GlorpEventStreamView {
+						token,
+						subscription: "changes".to_owned(),
+					})?;
+				}
+				EventsSubcommand::Next { token } => output::print_json(&host.next_event(token)?)?,
+				EventsSubcommand::Unsubscribe { token } => {
+					host.unsubscribe(token)?;
+					output::print_json(&serde_json::json!({
+						"ok": true,
+						"token": token,
+					}))?;
+				}
+			},
 			Command::Txn { json } => {
 				let txn: GlorpTxn = serde_json::from_str(&json)
 					.map_err(|error| GlorpError::validation(None, format!("invalid txn JSON: {error}")))?;
@@ -251,6 +307,55 @@ impl Cli {
 			paths: default_runtime_paths(repo_root),
 		};
 		Ok(Host::Local(RuntimeHost::new(options)?))
+	}
+
+	fn attach_session(&self) -> Result<GlorpSessionView, GlorpError> {
+		let (socket, repo_root) = self.live_socket()?;
+		let mut client = IpcClient::new(socket.clone());
+		let capabilities = match client.query(GlorpQuery::Capabilities)? {
+			GlorpQueryResult::Capabilities(capabilities) => capabilities,
+			_ => {
+				return Err(GlorpError::transport(format!(
+					"unexpected capabilities response from {}",
+					socket.display()
+				)));
+			}
+		};
+		Ok(GlorpSessionView {
+			socket: socket.display().to_string(),
+			repo_root: repo_root.map(|repo_root| repo_root.display().to_string()),
+			capabilities,
+		})
+	}
+
+	fn live_socket(&self) -> Result<(PathBuf, Option<PathBuf>), GlorpError> {
+		if let Some(socket) = self
+			.socket
+			.clone()
+			.or_else(|| std::env::var_os("GLORP_SOCKET").map(PathBuf::from))
+		{
+			if socket_is_live(&socket) {
+				return Ok((socket, None));
+			}
+			return Err(GlorpError::transport(format!(
+				"no live runtime at {}",
+				socket.display()
+			)));
+		}
+
+		let repo_root = self.repo_root.clone().unwrap_or(
+			std::env::current_dir()
+				.map_err(|error| GlorpError::transport(format!("failed to determine current directory: {error}")))?,
+		);
+		let socket = default_socket_path(&repo_root);
+		if socket_is_live(&socket) {
+			Ok((socket, Some(repo_root)))
+		} else {
+			Err(GlorpError::transport(format!(
+				"no live runtime at {}",
+				socket.display()
+			)))
+		}
 	}
 }
 
@@ -359,5 +464,22 @@ fn parse_tab(value: &str) -> Result<SidebarTab, GlorpError> {
 		"inspect" => Ok(SidebarTab::Inspect),
 		"perf" => Ok(SidebarTab::Perf),
 		_ => Err(GlorpError::validation(None, format!("unknown tab `{value}`"))),
+	}
+}
+
+fn parse_canvas_target(value: &str) -> Result<CanvasTarget, GlorpError> {
+	let (kind, index) = value
+		.split_once(':')
+		.ok_or_else(|| GlorpError::validation(None, format!("invalid canvas target `{value}`")))?;
+	let index = index
+		.parse::<usize>()
+		.map_err(|error| GlorpError::validation(None, format!("invalid canvas target `{value}`: {error}")))?;
+	match kind {
+		"run" => Ok(CanvasTarget::Run(index)),
+		"cluster" => Ok(CanvasTarget::Cluster(index)),
+		_ => Err(GlorpError::validation(
+			None,
+			format!("unknown canvas target kind `{kind}`"),
+		)),
 	}
 }

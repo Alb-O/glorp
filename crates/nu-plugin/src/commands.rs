@@ -13,6 +13,11 @@ pub fn all_commands() -> Vec<Box<dyn PluginCommand<Plugin = GlorpPlugin>>> {
 		Box::new(GlorpGetConfig),
 		Box::new(GlorpGetState),
 		Box::new(GlorpGetDocumentText),
+		Box::new(GlorpGetSelection),
+		Box::new(GlorpGetInspectDetails),
+		Box::new(GlorpGetPerf),
+		Box::new(GlorpGetUi),
+		Box::new(GlorpSessionAttach),
 		Box::new(GlorpConfigSet),
 		Box::new(GlorpConfigPatch),
 		Box::new(GlorpConfigReset),
@@ -25,6 +30,9 @@ pub fn all_commands() -> Vec<Box<dyn PluginCommand<Plugin = GlorpPlugin>>> {
 		Box::new(GlorpUiSidebarSelect),
 		Box::new(GlorpUiViewportScrollTo),
 		Box::new(GlorpSceneEnsure),
+		Box::new(GlorpEventsSubscribe),
+		Box::new(GlorpEventsNext),
+		Box::new(GlorpEventsUnsubscribe),
 	]
 }
 
@@ -32,6 +40,11 @@ struct GlorpSchema;
 struct GlorpGetConfig;
 struct GlorpGetState;
 struct GlorpGetDocumentText;
+struct GlorpGetSelection;
+struct GlorpGetInspectDetails;
+struct GlorpGetPerf;
+struct GlorpGetUi;
+struct GlorpSessionAttach;
 struct GlorpConfigSet;
 struct GlorpConfigPatch;
 struct GlorpConfigReset;
@@ -44,6 +57,9 @@ struct GlorpEditorHistory;
 struct GlorpUiSidebarSelect;
 struct GlorpUiViewportScrollTo;
 struct GlorpSceneEnsure;
+struct GlorpEventsSubscribe;
+struct GlorpEventsNext;
+struct GlorpEventsUnsubscribe;
 
 macro_rules! impl_simple_command {
 	($name:ident, $cmd_name:literal, $desc:literal, $sig:expr, $run:expr) => {
@@ -123,6 +139,87 @@ impl_simple_command!(
 		let mut client = client_from_call(call)?;
 		let result = client.query(GlorpQuery::DocumentText).map_err(to_labeled_error)?;
 		Ok(value_pipeline(query_to_value(result, span)))
+	}
+);
+
+impl_simple_command!(
+	GlorpGetSelection,
+	"glorp get selection",
+	"Return the current selection read model.",
+	base_signature("glorp get selection"),
+	|call, span, _input| {
+		let mut client = client_from_call(call)?;
+		let result = client.query(GlorpQuery::Selection).map_err(to_labeled_error)?;
+		Ok(value_pipeline(query_to_value(result, span)))
+	}
+);
+
+impl_simple_command!(
+	GlorpGetInspectDetails,
+	"glorp get inspect-details",
+	"Return the current inspect read model.",
+	base_signature("glorp get inspect-details").optional(
+		"target",
+		SyntaxShape::String,
+		"Optional canvas target run:<n> or cluster:<n>."
+	),
+	|call, span, _input| {
+		let mut client = client_from_call(call)?;
+		let target: Option<String> = call.opt(0)?;
+		let result = client
+			.query(GlorpQuery::InspectDetails {
+				target: target.as_deref().map(parse_canvas_target).transpose()?,
+			})
+			.map_err(to_labeled_error)?;
+		Ok(value_pipeline(query_to_value(result, span)))
+	}
+);
+
+impl_simple_command!(
+	GlorpGetPerf,
+	"glorp get perf",
+	"Return the runtime perf dashboard.",
+	base_signature("glorp get perf"),
+	|call, span, _input| {
+		let mut client = client_from_call(call)?;
+		let result = client.query(GlorpQuery::PerfDashboard).map_err(to_labeled_error)?;
+		Ok(value_pipeline(query_to_value(result, span)))
+	}
+);
+
+impl_simple_command!(
+	GlorpGetUi,
+	"glorp get ui",
+	"Return the current UI state.",
+	base_signature("glorp get ui"),
+	|call, span, _input| {
+		let mut client = client_from_call(call)?;
+		let result = client.query(GlorpQuery::UiState).map_err(to_labeled_error)?;
+		Ok(value_pipeline(query_to_value(result, span)))
+	}
+);
+
+impl_simple_command!(
+	GlorpSessionAttach,
+	"glorp session attach",
+	"Resolve and validate a live Glorp session.",
+	base_signature("glorp session attach"),
+	|call, span, _input| {
+		let socket = socket_from_call(call)?;
+		let mut client = IpcClient::new(socket.clone());
+		let capabilities = match client.query(GlorpQuery::Capabilities).map_err(to_labeled_error)? {
+			GlorpQueryResult::Capabilities(capabilities) => capabilities,
+			_ => return Err(LabeledError::new("unexpected capabilities response")),
+		};
+		Ok(value_pipeline(json_to_nu_value(
+			serde_json::to_value(GlorpSessionView {
+				socket,
+				repo_root: None,
+				capabilities,
+			})
+			.unwrap_or(JsonValue::Null),
+			span,
+		)))
 	}
 );
 
@@ -326,19 +423,84 @@ impl_simple_command!(
 	}
 );
 
+impl_simple_command!(
+	GlorpEventsSubscribe,
+	"glorp events subscribe",
+	"Subscribe to runtime change events.",
+	base_signature("glorp events subscribe"),
+	|call, span, _input| {
+		let mut client = client_from_call(call)?;
+		let token = client.subscribe(GlorpSubscription::Changes).map_err(to_labeled_error)?;
+		Ok(value_pipeline(json_to_nu_value(
+			serde_json::to_value(GlorpEventStreamView {
+				token,
+				subscription: "changes".to_owned(),
+			})
+			.unwrap_or(JsonValue::Null),
+			span,
+		)))
+	}
+);
+
+impl_simple_command!(
+	GlorpEventsNext,
+	"glorp events next",
+	"Poll the next event for a subscription token.",
+	base_signature("glorp events next").required("token", SyntaxShape::Int, "Subscription token."),
+	|call, span, _input| {
+		let mut client = client_from_call(call)?;
+		let token: i64 = call.req(0)?;
+		let event = client.next_event(token as u64).map_err(to_labeled_error)?;
+		Ok(value_pipeline(json_to_nu_value(
+			serde_json::to_value(event).unwrap_or(JsonValue::Null),
+			span,
+		)))
+	}
+);
+
+impl_simple_command!(
+	GlorpEventsUnsubscribe,
+	"glorp events unsubscribe",
+	"Release a subscription token.",
+	base_signature("glorp events unsubscribe").required("token", SyntaxShape::Int, "Subscription token."),
+	|call, span, _input| {
+		let mut client = client_from_call(call)?;
+		let token: i64 = call.req(0)?;
+		client.unsubscribe(token as u64).map_err(to_labeled_error)?;
+		Ok(value_pipeline(json_to_nu_value(
+			serde_json::json!({"ok": true, "token": token}),
+			span,
+		)))
+	}
+);
+
 fn base_signature(name: &str) -> Signature {
 	Signature::build(name)
 		.named("socket", SyntaxShape::String, "Runtime Unix socket path.", Some('s'))
+		.named(
+			"session",
+			SyntaxShape::Any,
+			"Session record returned by glorp session attach.",
+			None,
+		)
 		.input_output_types(vec![(Type::Nothing, Type::Any)])
 		.category(Category::Custom("glorp".to_owned()))
 }
 
 fn client_from_call(call: &EvaluatedCall) -> Result<IpcClient, LabeledError> {
+	Ok(IpcClient::new(socket_from_call(call)?))
+}
+
+fn socket_from_call(call: &EvaluatedCall) -> Result<String, LabeledError> {
+	let session: Option<Value> = call.get_flag("session")?;
 	let socket: Option<String> = call.get_flag("socket")?;
-	let socket = socket
+	session
+		.as_ref()
+		.map(session_socket)
+		.transpose()?
+		.or(socket)
 		.or_else(|| std::env::var("GLORP_SOCKET").ok())
-		.ok_or_else(|| LabeledError::new("GLORP_SOCKET is not set and --socket was not provided"))?;
-	Ok(IpcClient::new(socket))
+		.ok_or_else(|| LabeledError::new("GLORP_SOCKET is not set and neither --socket nor --session was provided"))
 }
 
 fn value_pipeline(value: Value) -> PipelineData {
@@ -355,6 +517,10 @@ fn query_to_value(result: GlorpQueryResult, span: Span) -> Value {
 		GlorpQueryResult::Config(value) => serde_json::to_value(value),
 		GlorpQueryResult::Snapshot(value) => serde_json::to_value(value),
 		GlorpQueryResult::DocumentText(value) => serde_json::to_value(value),
+		GlorpQueryResult::Selection(value) => serde_json::to_value(value),
+		GlorpQueryResult::InspectDetails(value) => serde_json::to_value(value),
+		GlorpQueryResult::PerfDashboard(value) => serde_json::to_value(value),
+		GlorpQueryResult::UiState(value) => serde_json::to_value(value),
 		GlorpQueryResult::Capabilities(value) => serde_json::to_value(value),
 	}
 	.unwrap_or(JsonValue::Null);
@@ -439,6 +605,35 @@ fn parse_tab(value: &str) -> Result<SidebarTab, LabeledError> {
 		"inspect" => Ok(SidebarTab::Inspect),
 		"perf" => Ok(SidebarTab::Perf),
 		_ => Err(LabeledError::new(format!("unknown tab `{value}`"))),
+	}
+}
+
+fn parse_canvas_target(value: &str) -> Result<CanvasTarget, LabeledError> {
+	let (kind, index) = value
+		.split_once(':')
+		.ok_or_else(|| LabeledError::new(format!("invalid canvas target `{value}`")))?;
+	let index = index
+		.parse::<usize>()
+		.map_err(|error| LabeledError::new(format!("invalid canvas target `{value}`: {error}")))?;
+	match kind {
+		"run" => Ok(CanvasTarget::Run(index)),
+		"cluster" => Ok(CanvasTarget::Cluster(index)),
+		_ => Err(LabeledError::new(format!("unknown canvas target kind `{kind}`"))),
+	}
+}
+
+fn session_socket(value: &Value) -> Result<String, LabeledError> {
+	match value {
+		Value::Record { val, .. } => val
+			.get("socket")
+			.and_then(|value| match value {
+				Value::String { val, .. } => Some(val.clone()),
+				_ => None,
+			})
+			.ok_or_else(|| LabeledError::new("session record does not contain a string `socket` field")),
+		_ => Err(LabeledError::new(
+			"session flag must be a record returned by glorp session attach",
+		)),
 	}
 }
 

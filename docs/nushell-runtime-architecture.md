@@ -392,6 +392,10 @@ pub enum GlorpQuery {
     Config,
     Snapshot { scene: SceneLevel, include_document_text: bool },
     DocumentText,
+    Selection,
+    InspectDetails { target: Option<CanvasTarget> },
+    PerfDashboard,
+    UiState,
     Capabilities,
 }
 
@@ -400,9 +404,16 @@ pub enum GlorpQueryResult {
     Config(GlorpConfig),
     Snapshot(GlorpSnapshot),
     DocumentText(String),
+    Selection(SelectionStateView),
+    InspectDetails(InspectDetailsView),
+    PerfDashboard(PerfDashboardView),
+    UiState(UiStateView),
     Capabilities(GlorpCapabilities),
 }
 ```
+
+These richer read-side queries are the supported way for Nu and automation to
+observe live editor state without scraping GUI-private structures.
 
 ### Scene materialization control
 

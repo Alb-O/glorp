@@ -72,6 +72,16 @@ impl GlorpHost for GlorpRuntime {
 				include_document_text,
 			))),
 			GlorpQuery::DocumentText => Ok(GlorpQueryResult::DocumentText(self.state.session.text().to_owned())),
+			GlorpQuery::Selection => Ok(GlorpQueryResult::Selection(project::selection_view_from_state(
+				&self.state,
+			))),
+			GlorpQuery::InspectDetails { target } => Ok(GlorpQueryResult::InspectDetails(
+				project::inspect_details_view_from_state(&mut self.state, target),
+			)),
+			GlorpQuery::PerfDashboard => Ok(GlorpQueryResult::PerfDashboard(
+				project::perf_dashboard_view_from_state(&mut self.state),
+			)),
+			GlorpQuery::UiState => Ok(GlorpQueryResult::UiState(project::ui_state_view(&self.state))),
 			GlorpQuery::Capabilities => Ok(GlorpQueryResult::Capabilities(GlorpCapabilities {
 				transactions: true,
 				subscriptions: true,

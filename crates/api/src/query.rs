@@ -12,6 +12,12 @@ pub enum GlorpQuery {
 		include_document_text: bool,
 	},
 	DocumentText,
+	Selection,
+	InspectDetails {
+		target: Option<CanvasTarget>,
+	},
+	PerfDashboard,
+	UiState,
 	Capabilities,
 }
 
@@ -21,6 +27,10 @@ pub enum GlorpQueryResult {
 	Config(GlorpConfig),
 	Snapshot(GlorpSnapshot),
 	DocumentText(String),
+	Selection(SelectionStateView),
+	InspectDetails(InspectDetailsView),
+	PerfDashboard(PerfDashboardView),
+	UiState(UiStateView),
 	Capabilities(GlorpCapabilities),
 }
 
@@ -87,9 +97,66 @@ pub struct InspectStateView {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct SelectionStateView {
+	pub mode: EditorMode,
+	pub range: Option<crate::TextRange>,
+	pub selected_text: Option<String>,
+	pub selection_head: Option<u64>,
+	pub pointer_anchor: Option<u64>,
+	pub viewport_target: Option<LayoutRectView>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct InspectDetailsView {
+	pub hovered_target: Option<CanvasTarget>,
+	pub selected_target: Option<CanvasTarget>,
+	pub active_target: Option<CanvasTarget>,
+	pub warnings: Vec<String>,
+	pub interaction_details: String,
+	pub scene: Option<InspectSceneView>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct InspectSceneView {
+	pub revision: u64,
+	pub run_count: usize,
+	pub cluster_count: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct PerfStateView {
 	pub scene_builds: usize,
 	pub scene_build_millis: f64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PerfDashboardView {
+	pub overview: PerfOverviewView,
+	pub metrics: Vec<PerfMetricSummaryView>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PerfOverviewView {
+	pub editor_mode: EditorMode,
+	pub editor_bytes: usize,
+	pub text_lines: usize,
+	pub layout_width: f32,
+	pub scene_ready: bool,
+	pub scene_revision: Option<u64>,
+	pub scene_width: f32,
+	pub scene_height: f32,
+	pub run_count: usize,
+	pub cluster_count: usize,
+	pub warning_count: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct PerfMetricSummaryView {
+	pub label: String,
+	pub total_samples: u64,
+	pub total_millis: f64,
+	pub last_millis: f64,
+	pub avg_millis: f64,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -102,6 +169,19 @@ pub struct UiStateView {
 	pub viewport_width: f32,
 	pub viewport_height: f32,
 	pub pane_ratio: f32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct GlorpSessionView {
+	pub socket: String,
+	pub repo_root: Option<String>,
+	pub capabilities: GlorpCapabilities,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct GlorpEventStreamView {
+	pub token: u64,
+	pub subscription: String,
 }
 
 #[allow(dead_code)]
