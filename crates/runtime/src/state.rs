@@ -370,7 +370,7 @@ fn build_editor_presentation(editor: &EditorEngine, revision: u64) -> EditorPres
 	)
 }
 
-pub fn selection_range(selection: Option<Range<usize>>) -> Option<glorp_api::TextRange> {
+pub fn selection_range(selection: Option<&Range<usize>>) -> Option<glorp_api::TextRange> {
 	selection.map(|selection| glorp_api::TextRange {
 		start: selection.start as u64,
 		end: selection.end as u64,

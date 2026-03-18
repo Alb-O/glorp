@@ -16,7 +16,7 @@ struct InsertCursorGeometry {
 	block_width: f32,
 }
 
-pub fn cluster_rectangle(cluster: &LayoutCluster) -> LayoutRect {
+pub const fn cluster_rectangle(cluster: &LayoutCluster) -> LayoutRect {
 	LayoutRect {
 		x: cluster.x,
 		y: cluster.y,

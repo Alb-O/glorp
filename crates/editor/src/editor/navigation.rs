@@ -30,7 +30,7 @@ impl EditorEngine {
 			EditorMode::Insert => {
 				self.set_insert_head(
 					layout,
-					next_char_boundary(self.text(), self.caret()).unwrap_or(self.text().len()),
+					next_char_boundary(self.text(), self.caret()).unwrap_or_else(|| self.text().len()),
 				);
 				self.set_preferred_x(None);
 			}
@@ -44,7 +44,7 @@ impl EditorEngine {
 				let Some(current) = self.active_selection(layout) else {
 					return;
 				};
-				let preferred_x = self.preferred_x().unwrap_or(current.center_x());
+				let preferred_x = self.preferred_x().unwrap_or_else(|| current.center_x());
 				let Some(target) = layout.nearest_cluster_on_adjacent_run(current.run_index, preferred_x, direction)
 				else {
 					return;
@@ -84,7 +84,7 @@ impl EditorEngine {
 			}
 			EditorMode::Insert => {
 				let caret = layout.caret_metrics(self.caret());
-				let target = Self::run_edge_byte(layout, caret.run_index, to_start).unwrap_or(self.caret());
+				let target = Self::run_edge_byte(layout, caret.run_index, to_start).unwrap_or_else(|| self.caret());
 
 				self.set_insert_head(layout, target);
 				self.set_preferred_x(None);

@@ -97,8 +97,7 @@ impl GlorpConfig {
 			"editor.preset" => Ok(self
 				.editor
 				.preset
-				.map(|value| value.as_ref().into())
-				.unwrap_or(GlorpValue::Null)),
+				.map_or(GlorpValue::Null, |value| value.as_ref().into())),
 			"editor.font" => Ok(self.editor.font.as_ref().into()),
 			"editor.shaping" => Ok(self.editor.shaping.as_ref().into()),
 			"editor.wrapping" => Ok(self.editor.wrapping.as_ref().into()),

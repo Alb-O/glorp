@@ -214,7 +214,7 @@ impl EditorEngine {
 					&self.buffer(),
 					self.text(),
 					selection.range(),
-					selection_head.unwrap_or(selection.range().start),
+					selection_head.unwrap_or_else(|| selection.range().start),
 				)
 			},
 		);

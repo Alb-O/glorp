@@ -367,44 +367,43 @@ fn autodetect_socket(repo_root: &Path) -> Option<PathBuf> {
 impl GlorpHost for Host {
 	fn execute(&mut self, command: GlorpCommand) -> Result<GlorpOutcome, GlorpError> {
 		match self {
-			Host::Local(host) => host.execute(command),
-			Host::Ipc(host) => host.execute(command),
+			Self::Local(host) => host.execute(command),
+			Self::Ipc(host) => host.execute(command),
 		}
 	}
 
 	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
 		match self {
-			Host::Local(host) => host.query(query),
-			Host::Ipc(host) => host.query(query),
+			Self::Local(host) => host.query(query),
+			Self::Ipc(host) => host.query(query),
 		}
 	}
 
 	fn subscribe(&mut self, request: GlorpSubscription) -> Result<GlorpStreamToken, GlorpError> {
 		match self {
-			Host::Local(host) => host.subscribe(request),
-			Host::Ipc(host) => host.subscribe(request),
+			Self::Local(host) => host.subscribe(request),
+			Self::Ipc(host) => host.subscribe(request),
 		}
 	}
 
 	fn next_event(&mut self, token: GlorpStreamToken) -> Result<Option<GlorpEvent>, GlorpError> {
 		match self {
-			Host::Local(host) => host.next_event(token),
-			Host::Ipc(host) => host.next_event(token),
+			Self::Local(host) => host.next_event(token),
+			Self::Ipc(host) => host.next_event(token),
 		}
 	}
 
 	fn unsubscribe(&mut self, token: GlorpStreamToken) -> Result<(), GlorpError> {
 		match self {
-			Host::Local(host) => host.unsubscribe(token),
-			Host::Ipc(host) => host.unsubscribe(token),
+			Self::Local(host) => host.unsubscribe(token),
+			Self::Ipc(host) => host.unsubscribe(token),
 		}
 	}
 }
 
 fn parse_value(input: &str) -> GlorpValue {
 	serde_json::from_str::<serde_json::Value>(input)
-		.map(GlorpValue::from)
-		.unwrap_or_else(|_| GlorpValue::String(input.to_owned()))
+		.map_or_else(|_| GlorpValue::String(input.to_owned()), GlorpValue::from)
 }
 
 fn flatten_patch(prefix: Option<&str>, value: &GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {
@@ -412,9 +411,7 @@ fn flatten_patch(prefix: Option<&str>, value: &GlorpValue) -> Result<Vec<ConfigA
 		GlorpValue::Record(fields) => {
 			let mut assignments = Vec::new();
 			for (key, value) in fields {
-				let path = prefix
-					.map(|prefix| format!("{prefix}.{key}"))
-					.unwrap_or_else(|| key.clone());
+				let path = prefix.map_or_else(|| key.clone(), |prefix| format!("{prefix}.{key}"));
 				assignments.extend(flatten_patch(Some(&path), value)?);
 			}
 			Ok(assignments)

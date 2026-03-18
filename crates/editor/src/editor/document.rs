@@ -21,11 +21,11 @@ impl DocumentState {
 		&self.text
 	}
 
-	pub fn len(&self) -> usize {
+	pub const fn len(&self) -> usize {
 		self.text.len()
 	}
 
-	pub fn is_empty(&self) -> bool {
+	pub const fn is_empty(&self) -> bool {
 		self.text.is_empty()
 	}
 

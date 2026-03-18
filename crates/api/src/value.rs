@@ -16,13 +16,13 @@ pub enum GlorpValue {
 	Int(i64),
 	Float(f64),
 	String(String),
-	List(Vec<GlorpValue>),
-	Record(BTreeMap<String, GlorpValue>),
+	List(Vec<Self>),
+	Record(BTreeMap<String, Self>),
 }
 
 impl GlorpValue {
 	#[must_use]
-	pub fn kind(&self) -> &'static str {
+	pub const fn kind(&self) -> &'static str {
 		match self {
 			Self::Null => "null",
 			Self::Bool(_) => "bool",
@@ -35,7 +35,7 @@ impl GlorpValue {
 	}
 
 	#[must_use]
-	pub fn as_bool(&self) -> Option<bool> {
+	pub const fn as_bool(&self) -> Option<bool> {
 		match self {
 			Self::Bool(value) => Some(*value),
 			_ => None,
@@ -43,7 +43,7 @@ impl GlorpValue {
 	}
 
 	#[must_use]
-	pub fn as_i64(&self) -> Option<i64> {
+	pub const fn as_i64(&self) -> Option<i64> {
 		match self {
 			Self::Int(value) => Some(*value),
 			_ => None,
@@ -51,7 +51,7 @@ impl GlorpValue {
 	}
 
 	#[must_use]
-	pub fn as_f64(&self) -> Option<f64> {
+	pub const fn as_f64(&self) -> Option<f64> {
 		match self {
 			Self::Float(value) => Some(*value),
 			Self::Int(value) => Some(*value as f64),

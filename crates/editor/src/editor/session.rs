@@ -13,15 +13,15 @@ impl EditorSession {
 		Self::default()
 	}
 
-	pub fn mode(&self) -> EditorMode {
+	pub const fn mode(&self) -> EditorMode {
 		self.mode
 	}
 
-	pub fn selection(&self) -> Option<&EditorSelection> {
+	pub const fn selection(&self) -> Option<&EditorSelection> {
 		self.selection.as_ref()
 	}
 
-	pub fn set_mode(&mut self, mode: EditorMode) {
+	pub const fn set_mode(&mut self, mode: EditorMode) {
 		self.mode = mode;
 	}
 
@@ -29,22 +29,22 @@ impl EditorSession {
 		self.selection.as_ref().map_or(0, EditorSelection::head)
 	}
 
-	pub fn preferred_x(&self) -> Option<f32> {
+	pub const fn preferred_x(&self) -> Option<f32> {
 		self.preferred_x
 	}
 
-	pub fn pointer_anchor(&self) -> Option<usize> {
+	pub const fn pointer_anchor(&self) -> Option<usize> {
 		self.pointer_anchor
 	}
 
-	pub fn enter_insert(&mut self, selection: Option<EditorSelection>) {
+	pub const fn enter_insert(&mut self, selection: Option<EditorSelection>) {
 		self.mode = EditorMode::Insert;
 		self.selection = selection;
 		self.preferred_x = None;
 		self.pointer_anchor = None;
 	}
 
-	pub fn set_normal_selection(
+	pub const fn set_normal_selection(
 		&mut self, selection: EditorSelection, preferred_x: Option<f32>, pointer_anchor: Option<usize>,
 	) {
 		self.mode = EditorMode::Normal;
@@ -53,15 +53,15 @@ impl EditorSession {
 		self.pointer_anchor = pointer_anchor;
 	}
 
-	pub fn set_selection(&mut self, selection: Option<EditorSelection>) {
+	pub const fn set_selection(&mut self, selection: Option<EditorSelection>) {
 		self.selection = selection;
 	}
 
-	pub fn set_preferred_x(&mut self, preferred_x: Option<f32>) {
+	pub const fn set_preferred_x(&mut self, preferred_x: Option<f32>) {
 		self.preferred_x = preferred_x;
 	}
 
-	pub fn set_pointer_anchor(&mut self, pointer_anchor: Option<usize>) {
+	pub const fn set_pointer_anchor(&mut self, pointer_anchor: Option<usize>) {
 		self.pointer_anchor = pointer_anchor;
 	}
 

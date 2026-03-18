@@ -110,7 +110,7 @@ fn apply_enter_insert(editor: &mut EditorEngine, before: bool) -> ApplyResult {
 	layout_result(layout)
 }
 
-fn layout_result(layout: DocumentLayout) -> ApplyResult {
+const fn layout_result(layout: DocumentLayout) -> ApplyResult {
 	ApplyResult {
 		text_edit: None,
 		layout: Some(layout),

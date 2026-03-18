@@ -104,19 +104,23 @@ impl RuntimeShell {
 		iced::time::every(std::time::Duration::from_millis(100)).map(|now| Message::Perf(PerfMessage::Tick(now)))
 	}
 
-	pub(crate) fn theme(&self) -> Theme {
+	pub(crate) const fn theme(&self) -> Theme {
 		Theme::TokyoNightStorm
 	}
 
 	pub(crate) fn view(&self) -> Element<'_, Message> {
 		responsive(move |size| {
+			let snapshot = Arc::new(self.frame.snapshot.clone());
 			if is_stacked_shell(size) {
-				view_stacked_shell(self.render_sidebar(true), self.render_canvas(true))
+				view_stacked_shell(
+					self.view_sidebar(Arc::clone(&snapshot), true),
+					self.view_canvas(Arc::clone(&snapshot), true),
+				)
 			} else {
 				let grid = pane_grid(&self.shell, move |_, pane, _| {
 					let content = match pane {
-						ShellPane::Sidebar => self.render_sidebar(false),
-						ShellPane::Canvas => self.render_canvas(false),
+						ShellPane::Sidebar => self.view_sidebar(Arc::clone(&snapshot), false),
+						ShellPane::Canvas => self.view_canvas(Arc::clone(&snapshot), false),
 					};
 					pane_grid::Content::new(content)
 				})
@@ -140,13 +144,7 @@ impl RuntimeShell {
 		.into()
 	}
 
-	fn render_sidebar(&self, stacked: bool) -> Element<'static, Message> {
-		let snapshot = Arc::new(self.frame.snapshot.clone());
-		self.view_sidebar(snapshot, stacked)
-	}
-
-	fn render_canvas(&self, stacked: bool) -> Element<'static, Message> {
-		let snapshot = Arc::new(self.frame.snapshot.clone());
+	fn view_canvas(&self, snapshot: Arc<SessionSnapshot>, stacked: bool) -> Element<'static, Message> {
 		let inspect_targets_active = self.frame.ui.active_tab == SidebarTab::Inspect;
 		let inspect_overlays = snapshot.scene.as_ref().filter(|_| inspect_targets_active).map_or_else(
 			|| Arc::<[OverlayPrimitive]>::from([]),
@@ -351,7 +349,7 @@ where
 	GlorpValue::String(value.as_ref().to_owned())
 }
 
-fn message_tab(message: crate::types::SidebarMessage) -> SidebarTab {
+const fn message_tab(message: crate::types::SidebarMessage) -> SidebarTab {
 	match message {
 		crate::types::SidebarMessage::SelectTab(tab) => tab,
 	}
@@ -361,7 +359,7 @@ fn inspect_target(active_tab: SidebarTab, target: Option<glorp_api::CanvasTarget
 	(active_tab == SidebarTab::Inspect).then_some(target).flatten()
 }
 
-fn scene_required(frame: &GuiRuntimeFrame) -> bool {
+const fn scene_required(frame: &GuiRuntimeFrame) -> bool {
 	matches!(frame.ui.active_tab, SidebarTab::Inspect | SidebarTab::Perf)
 		|| frame.config.inspect.show_baselines
 		|| frame.config.inspect.show_hitboxes

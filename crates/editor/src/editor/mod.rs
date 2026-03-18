@@ -66,7 +66,7 @@ pub struct EditorSelection {
 }
 
 impl EditorSelection {
-	fn new(range: Range<usize>, head: usize) -> Self {
+	const fn new(range: Range<usize>, head: usize) -> Self {
 		Self { range, head }
 	}
 
@@ -80,11 +80,11 @@ impl EditorSelection {
 		}
 	}
 
-	fn range(&self) -> &Range<usize> {
+	const fn range(&self) -> &Range<usize> {
 		&self.range
 	}
 
-	fn head(&self) -> usize {
+	const fn head(&self) -> usize {
 		self.head
 	}
 }
@@ -201,6 +201,7 @@ impl EditorOutcome {
 }
 
 impl EditorViewState {
+	#[must_use]
 	pub fn overlay_count(&self, kind: OverlayRectKind) -> usize {
 		self.overlays.iter().filter(|primitive| primitive.kind == kind).count()
 	}

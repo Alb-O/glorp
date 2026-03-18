@@ -29,14 +29,15 @@ pub fn snapshot_from_state(
 
 pub fn selection_view_from_state(state: &crate::state::RuntimeState) -> SelectionStateView {
 	let editor = &state.session.snapshot().editor;
-	let range = state::selection_range(editor.editor.selection.clone());
+	let selection = editor.editor.selection.as_ref();
+	let range = state::selection_range(selection);
 	SelectionStateView {
 		mode: state::mode(editor.editor.mode),
-		selected_text: range.as_ref().and_then(|range| {
+		selected_text: selection.and_then(|selection| {
 			state
 				.session
 				.text()
-				.get(range.start as usize..range.end as usize)
+				.get(selection.start..selection.end)
 				.map(ToOwned::to_owned)
 		}),
 		range,
@@ -57,7 +58,7 @@ pub fn inspect_details_view_from_state(
 		|| (Vec::new(), "derived scene unavailable".to_owned(), None),
 		|scene| {
 			(
-				scene.layout.warnings.iter().cloned().collect(),
+				scene.layout.warnings.to_vec(),
 				scene
 					.layout
 					.target_details(active_target)
@@ -150,7 +151,7 @@ fn editor_view(snapshot: &SessionSnapshot, text: &str) -> EditorStateView {
 	let editor = &snapshot.editor;
 	EditorStateView {
 		mode: state::mode(editor.editor.mode),
-		selection: state::selection_range(editor.editor.selection.clone()),
+		selection: state::selection_range(editor.editor.selection.as_ref()),
 		selection_head: state::selection_head(&editor.editor),
 		pointer_anchor: state::pointer_anchor(&editor.editor),
 		text_bytes: editor.editor_bytes,

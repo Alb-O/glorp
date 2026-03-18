@@ -53,7 +53,7 @@ impl EditorLayout {
 		self.view_state.clone()
 	}
 
-	pub fn view_state_ref(&self) -> &EditorViewState {
+	pub const fn view_state_ref(&self) -> &EditorViewState {
 		&self.view_state
 	}
 

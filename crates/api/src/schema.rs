@@ -1031,7 +1031,7 @@ fn field(name: &str, docs: &str, ty: TypeRef, required: bool) -> FieldSchema {
 	}
 }
 
-fn built(kind: BuiltinType) -> TypeRef {
+const fn built(kind: BuiltinType) -> TypeRef {
 	TypeRef::Builtin(kind)
 }
 

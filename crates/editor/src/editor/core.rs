@@ -146,6 +146,7 @@ impl EditorEngine {
 		self.set_insert_head(&layout, caret);
 	}
 
+	#[must_use]
 	pub fn insert_selection(layout: &DocumentLayout, head: usize) -> Option<EditorSelection> {
 		layout
 			.cluster_at_insert_head(head)
