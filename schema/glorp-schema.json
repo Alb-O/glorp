@@ -1,0 +1,1123 @@
+{
+  "version": 1,
+  "named_types": [
+    {
+      "name": "SamplePreset",
+      "docs": "Built-in sample document presets.",
+      "kind": {
+        "Enum": {
+          "variants": [
+            {
+              "name": "tall",
+              "docs": "A tall multi-script sample."
+            },
+            {
+              "name": "mixed",
+              "docs": "A short mixed-script sample."
+            },
+            {
+              "name": "rust",
+              "docs": "A Rust source sample."
+            },
+            {
+              "name": "ligatures",
+              "docs": "A ligature-heavy sample."
+            },
+            {
+              "name": "arabic",
+              "docs": "An Arabic sample."
+            },
+            {
+              "name": "cjk",
+              "docs": "A CJK sample."
+            },
+            {
+              "name": "emoji",
+              "docs": "An emoji-heavy sample."
+            },
+            {
+              "name": "custom",
+              "docs": "No built-in sample."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "WrapChoice",
+      "docs": "Stable editor wrapping choices.",
+      "kind": {
+        "Enum": {
+          "variants": [
+            {
+              "name": "none",
+              "docs": "Do not wrap lines."
+            },
+            {
+              "name": "word",
+              "docs": "Wrap at word boundaries."
+            },
+            {
+              "name": "glyph",
+              "docs": "Wrap at glyph boundaries."
+            },
+            {
+              "name": "word-or-glyph",
+              "docs": "Prefer word boundaries, fall back to glyph boundaries."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "FontChoice",
+      "docs": "Stable editor font families.",
+      "kind": {
+        "Enum": {
+          "variants": [
+            {
+              "name": "jetbrains-mono",
+              "docs": "JetBrains Mono."
+            },
+            {
+              "name": "monospace",
+              "docs": "The platform monospace family."
+            },
+            {
+              "name": "noto-sans-cjk",
+              "docs": "Noto Sans CJK."
+            },
+            {
+              "name": "sans-serif",
+              "docs": "The platform sans-serif family."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "ShapingChoice",
+      "docs": "Stable shaping choices.",
+      "kind": {
+        "Enum": {
+          "variants": [
+            {
+              "name": "auto",
+              "docs": "Choose shaping based on content."
+            },
+            {
+              "name": "basic",
+              "docs": "Use basic shaping."
+            },
+            {
+              "name": "advanced",
+              "docs": "Use advanced shaping."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "SidebarTab",
+      "docs": "Stable sidebar tabs.",
+      "kind": {
+        "Enum": {
+          "variants": [
+            {
+              "name": "controls",
+              "docs": "Configuration controls."
+            },
+            {
+              "name": "inspect",
+              "docs": "Scene inspection."
+            },
+            {
+              "name": "perf",
+              "docs": "Performance projections."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EditorMotion",
+      "docs": "Typed editor motions.",
+      "kind": {
+        "Enum": {
+          "variants": [
+            {
+              "name": "left",
+              "docs": "Move left."
+            },
+            {
+              "name": "right",
+              "docs": "Move right."
+            },
+            {
+              "name": "up",
+              "docs": "Move up."
+            },
+            {
+              "name": "down",
+              "docs": "Move down."
+            },
+            {
+              "name": "line-start",
+              "docs": "Move to line start."
+            },
+            {
+              "name": "line-end",
+              "docs": "Move to line end."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EditorModeCommand",
+      "docs": "Typed mode transitions.",
+      "kind": {
+        "Enum": {
+          "variants": [
+            {
+              "name": "enter-insert-before",
+              "docs": "Enter insert mode before the selection."
+            },
+            {
+              "name": "enter-insert-after",
+              "docs": "Enter insert mode after the selection."
+            },
+            {
+              "name": "exit-insert",
+              "docs": "Return to normal mode."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EditorHistoryCommand",
+      "docs": "Typed undo/redo operations.",
+      "kind": {
+        "Enum": {
+          "variants": [
+            {
+              "name": "undo",
+              "docs": "Undo the most recent edit."
+            },
+            {
+              "name": "redo",
+              "docs": "Redo the most recent undone edit."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EditorMode",
+      "docs": "Stable editor modes.",
+      "kind": {
+        "Enum": {
+          "variants": [
+            {
+              "name": "normal",
+              "docs": "Normal mode."
+            },
+            {
+              "name": "insert",
+              "docs": "Insert mode."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpCommand",
+      "docs": "Top-level command namespaces.",
+      "kind": {
+        "Enum": {
+          "variants": [
+            {
+              "name": "txn",
+              "docs": "Atomic transaction."
+            },
+            {
+              "name": "config",
+              "docs": "Config mutation."
+            },
+            {
+              "name": "document",
+              "docs": "Document mutation."
+            },
+            {
+              "name": "editor",
+              "docs": "Editor command."
+            },
+            {
+              "name": "ui",
+              "docs": "UI command."
+            },
+            {
+              "name": "scene",
+              "docs": "Scene command."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "ConfigAssignment",
+      "docs": "One path-based config assignment.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "path",
+              "docs": "Config path.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": true
+            },
+            {
+              "name": "value",
+              "docs": "Config value.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "ConfigPatch",
+      "docs": "Multiple path-based config assignments.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "values",
+              "docs": "Config assignments.",
+              "ty": {
+                "Named": "ConfigAssignmentList"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "ScrollTarget",
+      "docs": "Viewport scroll target.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "x",
+              "docs": "Horizontal scroll offset.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "y",
+              "docs": "Vertical scroll offset.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpCapabilities",
+      "docs": "Stable runtime capability flags.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "transactions",
+              "docs": "Whether transactions are supported.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "subscriptions",
+              "docs": "Whether subscriptions are supported.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "transports",
+              "docs": "Supported transport names.",
+              "ty": {
+                "Named": "StringList"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpOutcome",
+      "docs": "Revisioned outcome for a successful command.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "delta",
+              "docs": "Change flags.",
+              "ty": {
+                "Named": "GlorpDelta"
+              },
+              "required": true
+            },
+            {
+              "name": "revisions",
+              "docs": "Post-command revisions.",
+              "ty": {
+                "Named": "GlorpRevisions"
+              },
+              "required": true
+            },
+            {
+              "name": "changed_config_paths",
+              "docs": "Config paths changed by the command.",
+              "ty": {
+                "Named": "StringList"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpDelta",
+      "docs": "Boolean change flags.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "text_changed",
+              "docs": "Document text changed.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "view_changed",
+              "docs": "Editor view changed.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "selection_changed",
+              "docs": "Selection changed.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "mode_changed",
+              "docs": "Mode changed.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "config_changed",
+              "docs": "Config changed.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "ui_changed",
+              "docs": "UI state changed.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "scene_changed",
+              "docs": "Scene state changed.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpRevisions",
+      "docs": "Runtime revisions.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "editor",
+              "docs": "Editor revision.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "scene",
+              "docs": "Scene revision if materialized.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": false
+            },
+            {
+              "name": "config",
+              "docs": "Config revision.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpConfig",
+      "docs": "Stable runtime config.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "editor",
+              "docs": "Editor config namespace.",
+              "ty": {
+                "Named": "EditorConfig"
+              },
+              "required": true
+            },
+            {
+              "name": "inspect",
+              "docs": "Inspect config namespace.",
+              "ty": {
+                "Named": "InspectConfig"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EditorConfig",
+      "docs": "Editor configuration namespace.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "preset",
+              "docs": "Sample preset.",
+              "ty": {
+                "Named": "SamplePreset"
+              },
+              "required": false
+            },
+            {
+              "name": "font",
+              "docs": "Font choice.",
+              "ty": {
+                "Named": "FontChoice"
+              },
+              "required": true
+            },
+            {
+              "name": "shaping",
+              "docs": "Shaping choice.",
+              "ty": {
+                "Named": "ShapingChoice"
+              },
+              "required": true
+            },
+            {
+              "name": "wrapping",
+              "docs": "Wrapping choice.",
+              "ty": {
+                "Named": "WrapChoice"
+              },
+              "required": true
+            },
+            {
+              "name": "font_size",
+              "docs": "Font size.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "line_height",
+              "docs": "Line height.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "InspectConfig",
+      "docs": "Inspect configuration namespace.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "show_baselines",
+              "docs": "Show baselines.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            },
+            {
+              "name": "show_hitboxes",
+              "docs": "Show hitboxes.",
+              "ty": {
+                "Builtin": "Bool"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpSnapshot",
+      "docs": "Read-only runtime snapshot.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "revisions",
+              "docs": "Runtime revisions.",
+              "ty": {
+                "Named": "GlorpRevisions"
+              },
+              "required": true
+            },
+            {
+              "name": "config",
+              "docs": "Effective config.",
+              "ty": {
+                "Named": "GlorpConfig"
+              },
+              "required": true
+            },
+            {
+              "name": "editor",
+              "docs": "Editor state view.",
+              "ty": {
+                "Named": "EditorStateView"
+              },
+              "required": true
+            },
+            {
+              "name": "scene",
+              "docs": "Scene state view.",
+              "ty": {
+                "Named": "SceneStateView"
+              },
+              "required": false
+            },
+            {
+              "name": "ui",
+              "docs": "UI state view.",
+              "ty": {
+                "Named": "UiStateView"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EditorStateView",
+      "docs": "Stable editor state view.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "mode",
+              "docs": "Editor mode.",
+              "ty": {
+                "Named": "EditorMode"
+              },
+              "required": true
+            },
+            {
+              "name": "text_bytes",
+              "docs": "Document size in bytes.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "undo_depth",
+              "docs": "Undo depth.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "redo_depth",
+              "docs": "Redo depth.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "SceneStateView",
+      "docs": "Stable scene state view.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "revision",
+              "docs": "Scene revision.",
+              "ty": {
+                "Builtin": "Int"
+              },
+              "required": true
+            },
+            {
+              "name": "measured_width",
+              "docs": "Measured width.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "measured_height",
+              "docs": "Measured height.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "UiStateView",
+      "docs": "Stable UI state view.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "active_tab",
+              "docs": "Active sidebar tab.",
+              "ty": {
+                "Named": "SidebarTab"
+              },
+              "required": true
+            },
+            {
+              "name": "canvas_scroll_x",
+              "docs": "Horizontal scroll offset.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "canvas_scroll_y",
+              "docs": "Vertical scroll offset.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            },
+            {
+              "name": "pane_ratio",
+              "docs": "Sidebar/canvas ratio.",
+              "ty": {
+                "Builtin": "Float"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpTxn",
+      "docs": "Atomic command batch.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "commands",
+              "docs": "Commands to apply atomically.",
+              "ty": {
+                "Named": "CommandList"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GlorpNotice",
+      "docs": "Notice payload.",
+      "kind": {
+        "Record": {
+          "fields": [
+            {
+              "name": "message",
+              "docs": "Notice message.",
+              "ty": {
+                "Builtin": "String"
+              },
+              "required": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "StringList",
+      "docs": "List of strings.",
+      "kind": {
+        "List": {
+          "item": {
+            "Builtin": "String"
+          }
+        }
+      }
+    },
+    {
+      "name": "CommandList",
+      "docs": "List of commands.",
+      "kind": {
+        "List": {
+          "item": {
+            "Named": "GlorpCommand"
+          }
+        }
+      }
+    },
+    {
+      "name": "ConfigAssignmentList",
+      "docs": "List of config assignments.",
+      "kind": {
+        "List": {
+          "item": {
+            "Named": "ConfigAssignment"
+          }
+        }
+      }
+    }
+  ],
+  "config": [
+    {
+      "path": "editor.preset",
+      "docs": "Optional sample preset.",
+      "ty": {
+        "Named": "SamplePreset"
+      },
+      "default": "tall",
+      "mutable": true
+    },
+    {
+      "path": "editor.font",
+      "docs": "Editor font choice.",
+      "ty": {
+        "Named": "FontChoice"
+      },
+      "default": "jetbrains-mono",
+      "mutable": true
+    },
+    {
+      "path": "editor.shaping",
+      "docs": "Editor shaping mode.",
+      "ty": {
+        "Named": "ShapingChoice"
+      },
+      "default": "advanced",
+      "mutable": true
+    },
+    {
+      "path": "editor.wrapping",
+      "docs": "Editor wrapping mode.",
+      "ty": {
+        "Named": "WrapChoice"
+      },
+      "default": "word",
+      "mutable": true
+    },
+    {
+      "path": "editor.font_size",
+      "docs": "Editor font size in logical pixels.",
+      "ty": {
+        "Builtin": "Float"
+      },
+      "default": 24.0,
+      "mutable": true
+    },
+    {
+      "path": "editor.line_height",
+      "docs": "Editor line height in logical pixels.",
+      "ty": {
+        "Builtin": "Float"
+      },
+      "default": 32.0,
+      "mutable": true
+    },
+    {
+      "path": "inspect.show_baselines",
+      "docs": "Show line baselines in inspect mode.",
+      "ty": {
+        "Builtin": "Bool"
+      },
+      "default": false,
+      "mutable": true
+    },
+    {
+      "path": "inspect.show_hitboxes",
+      "docs": "Show glyph hitboxes in inspect mode.",
+      "ty": {
+        "Builtin": "Bool"
+      },
+      "default": false,
+      "mutable": true
+    }
+  ],
+  "commands": [
+    {
+      "path": "glorp config set",
+      "docs": "Set one config field.",
+      "input": {
+        "Named": "ConfigAssignment"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp config patch",
+      "docs": "Patch multiple config fields.",
+      "input": {
+        "Named": "ConfigPatch"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp config reset",
+      "docs": "Reset one config field to its default.",
+      "input": {
+        "Builtin": "String"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp config reload",
+      "docs": "Reload durable config from disk.",
+      "input": {
+        "Builtin": "Null"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp config persist",
+      "docs": "Persist the current config to disk.",
+      "input": {
+        "Builtin": "Null"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp doc replace",
+      "docs": "Replace the entire document text.",
+      "input": {
+        "Builtin": "String"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp editor motion",
+      "docs": "Apply a typed motion command.",
+      "input": {
+        "Named": "EditorMotion"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp editor mode",
+      "docs": "Apply a typed mode command.",
+      "input": {
+        "Named": "EditorModeCommand"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp editor edit",
+      "docs": "Apply a typed edit command.",
+      "input": {
+        "Named": "EditorEditCommand"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp editor history",
+      "docs": "Apply history navigation.",
+      "input": {
+        "Named": "EditorHistoryCommand"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp ui sidebar select",
+      "docs": "Select a sidebar tab.",
+      "input": {
+        "Named": "SidebarTab"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp ui viewport scroll-to",
+      "docs": "Set runtime viewport scroll position.",
+      "input": {
+        "Named": "ScrollTarget"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp scene ensure",
+      "docs": "Materialize scene state.",
+      "input": {
+        "Builtin": "Null"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp txn",
+      "docs": "Apply a transaction atomically.",
+      "input": {
+        "Named": "GlorpTxn"
+      },
+      "output": {
+        "Named": "GlorpOutcome"
+      }
+    }
+  ],
+  "queries": [
+    {
+      "path": "glorp schema",
+      "docs": "Return the runtime reflection schema.",
+      "output": {
+        "Named": "GlorpSchema"
+      }
+    },
+    {
+      "path": "glorp get config",
+      "docs": "Return the effective runtime config.",
+      "output": {
+        "Named": "GlorpConfig"
+      }
+    },
+    {
+      "path": "glorp get state",
+      "docs": "Return a snapshot of runtime state.",
+      "output": {
+        "Named": "GlorpSnapshot"
+      }
+    },
+    {
+      "path": "glorp get document-text",
+      "docs": "Return the current document text.",
+      "output": {
+        "Builtin": "String"
+      }
+    },
+    {
+      "path": "glorp get capabilities",
+      "docs": "Return stable runtime capability flags.",
+      "output": {
+        "Named": "GlorpCapabilities"
+      }
+    }
+  ],
+  "events": [
+    {
+      "path": "glorp changed",
+      "docs": "Revisioned state change event.",
+      "payload": {
+        "Named": "GlorpOutcome"
+      }
+    },
+    {
+      "path": "glorp notice",
+      "docs": "Runtime notices.",
+      "payload": {
+        "Named": "GlorpNotice"
+      }
+    }
+  ]
+}

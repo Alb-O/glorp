@@ -1,0 +1,15 @@
+# API
+
+Glorp exposes one semantic contract:
+
+`GlorpCommand` / `GlorpQuery` -> `GlorpOutcome` / `GlorpSnapshot` / `GlorpEvent`
+
+Stable namespaces:
+
+- `config.*`: path-based durable config writes
+- `document.*`: whole-document replacement
+- `editor.*`: typed motions, mode transitions, edits, history
+- `ui.*`: sidebar selection, inspect target selection, viewport scroll, pane ratio
+- `scene.*`: explicit scene materialization
+
+See [`schema/glorp-schema.json`](/home/albert/polyrepo1/repos/glorp/schema/glorp-schema.json) for the reflection source used by CLI, Nu, and agents.

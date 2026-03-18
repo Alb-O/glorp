@@ -1,38 +1,46 @@
 # glorp
 
-Simple text editor and inspection app built on `iced` and `cosmic-text`.
+Nushell-first text runtime with one public semantic API shared by the runtime,
+IPC transport, GUI client, CLI, and Nu plugin.
 
-## Run
+## Workspace
 
-```bash
-cargo run
-```
+- `crates/glorp-api`: public commands, queries, events, config, schema
+- `crates/glorp-editor`: editing and layout engine
+- `crates/glorp-runtime`: canonical state owner and persistence
+- `crates/glorp-transport`: in-process and IPC clients
+- `crates/glorp-gui`: thin GUI/client adapter
+- `crates/glorp-cli`: operator and agent entrypoint
+- `crates/glorp-nu-plugin`: Nu plugin commands over IPC
 
-## Repro Perf Checks
-
-Run the representative scripted scenarios:
-
-```bash
-cargo run -- --perf-scenario large-paste
-cargo run -- --perf-scenario incremental-typing
-cargo run -- --perf-scenario undo-redo-burst
-cargo run -- --perf-scenario delete-forward-burst
-cargo run -- --perf-scenario motion-sweep
-cargo run -- --perf-scenario resize-reflow
-```
-
-## Repro Trace Analysis
-
-Use tracing to inspect where edit time goes:
+## Run Checks
 
 ```bash
-GLORP_TRACE=glorp=trace cargo run -- --perf-scenario large-paste
-GLORP_TRACE='glorp::editor=trace,glorp::app::update=warn' cargo run -- --perf-scenario incremental-typing 2>&1 | rg 'layout edit rebuilt full buffer|layout edit updated buffer|refresh view state|editor apply|editor command over'
-GLORP_TRACE=glorp=trace cargo run -- --perf-scenario resize-reflow
+devenv-run -C . cargo test --workspace
 ```
 
-## Current Read
+## CLI
 
-- `large-paste` is dominated by the full buffer rebuild path when line structure changes.
-- Incremental typing is dominated more by repeated editor snapshot and refresh work than by string cloning.
-- Resize/reflow timings look reasonable for a coalesced multi-step scenario.
+```bash
+./target/debug/glorp-cli schema
+./target/debug/glorp-cli get state
+./target/debug/glorp-cli config set editor.wrapping glyph
+./target/debug/glorp-cli doc replace "hello"
+./target/debug/glorp-cli editor mode enter-insert-after
+./target/debug/glorp-cli editor motion line-end
+./target/debug/glorp-cli editor edit insert " world"
+./target/debug/glorp-cli scene ensure
+```
+
+## Nu
+
+- `nu/default-config.nu`: durable data-first config
+- `nu/glorp.nu`: generated readable Nu namespace that shells through the CLI
+- `crates/glorp-nu-plugin`: direct Nu plugin surface over IPC
+
+## Proof
+
+The acceptance suite lives in [`crates/glorp-cli/tests/acceptance.rs`](/home/albert/polyrepo1/repos/glorp/crates/glorp-cli/tests/acceptance.rs).
+It proves schema export, Nu round-trip, invalid config rejection, transaction
+atomicity, GUI/runtime integration, scene materialization, IPC/client parity,
+persistence, event stream behavior, and a golden transcript.

@@ -147,6 +147,7 @@ glorp/
       src/theme.rs
 
     glorp-nu-plugin/
+      src/lib.rs
       src/main.rs
       src/plugin.rs
       src/commands.rs
@@ -748,12 +749,13 @@ ______________________________________________________________________
 
 ## Durable Config File Shape
 
-`nu/default-config.nu` should be data-first:
+`nu/default-config.nu` should be data-first and use canonical kebab-case enum tokens:
 
 ```nu
 export const config = {
   editor: {
-    font: "JetBrainsMono"
+    preset: "tall"
+    font: "jetbrains-mono"
     shaping: "advanced"
     wrapping: "word"
     font_size: 24
@@ -877,17 +879,17 @@ Proves the runtime can actually surface a usable schema.
 ### 2. Nu plugin round-trip smoke test
 
 Proves the generated Nu surface is actually wired to the runtime.
+In practice this is cleanest with Nushell's `nu_plugin_test_support` harness so the test asserts plugin behavior directly without flaky external registration steps.
 
 - boot runtime host
 - run:
   ```nu
   glorp get config
-  glorp config set editor.wrapping word
+  glorp config set editor.wrapping glyph
   glorp get config
   ```
 - assert second config read reflects the change
-- assert process exit status is zero
-- assert plugin stderr is empty
+- assert the harness reports no evaluation error
 - assert runtime emitted exactly one config revision increment
 
 ### 3. Invalid config rejection e2e
