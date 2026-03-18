@@ -312,7 +312,7 @@ pub fn glorp_schema() -> GlorpSchema {
 	}
 
 	GlorpSchema {
-		version: 3,
+		version: 4,
 		types: registry.into_types(),
 		operations,
 		events,
@@ -377,14 +377,6 @@ fn register_type_ref(registry: &mut TypeRegistry, ty: &TypeRef) {
 			"EditorMotionInput" => registry.register::<crate::EditorMotionInput>(),
 			"EditorModeInput" => registry.register::<crate::EditorModeInput>(),
 			"EditorHistoryInput" => registry.register::<crate::EditorHistoryInput>(),
-			"SidebarTabInput" => registry.register::<crate::SidebarTabInput>(),
-			"ScrollTarget" => registry.register::<crate::ScrollTarget>(),
-			"PaneRatioInput" => registry.register::<crate::PaneRatioInput>(),
-			"ViewportMetricsInput" => registry.register::<crate::ViewportMetricsInput>(),
-			"CanvasFocusInput" => registry.register::<crate::CanvasFocusInput>(),
-			"InspectTargetInput" => registry.register::<crate::InspectTargetInput>(),
-			"EditorPointerBeginInput" => registry.register::<crate::EditorPointerBeginInput>(),
-			"EditorPointerDragInput" => registry.register::<crate::EditorPointerDragInput>(),
 			"GlorpTxn" => registry.register::<crate::GlorpTxn>(),
 			"GlorpExec" => registry.register::<crate::GlorpExec>(),
 			"GlorpQuery" => registry.register::<crate::GlorpQuery>(),
@@ -397,39 +389,22 @@ fn register_type_ref(registry: &mut TypeRegistry, ty: &TypeRef) {
 			"GlorpDelta" => registry.register::<crate::GlorpDelta>(),
 			"GlorpConfig" => registry.register::<crate::GlorpConfig>(),
 			"EditorConfig" => registry.register::<crate::EditorConfig>(),
-			"InspectConfig" => registry.register::<crate::InspectConfig>(),
 			"GlorpCapabilities" => registry.register::<crate::GlorpCapabilities>(),
-			"GlorpSnapshot" => registry.register::<crate::GlorpSnapshot>(),
 			"EditorStateView" => registry.register::<crate::EditorStateView>(),
 			"EditorViewportView" => registry.register::<crate::EditorViewportView>(),
-			"SceneStateView" => registry.register::<crate::SceneStateView>(),
-			"InspectStateView" => registry.register::<crate::InspectStateView>(),
-			"SelectionStateView" => registry.register::<crate::SelectionStateView>(),
-			"InspectDetailsView" => registry.register::<crate::InspectDetailsView>(),
-			"InspectSceneView" => registry.register::<crate::InspectSceneView>(),
-			"PerfStateView" => registry.register::<crate::PerfStateView>(),
-			"PerfDashboardView" => registry.register::<crate::PerfDashboardView>(),
-			"PerfOverviewView" => registry.register::<crate::PerfOverviewView>(),
-			"PerfMetricSummaryView" => registry.register::<crate::PerfMetricSummaryView>(),
-			"UiStateView" => registry.register::<crate::UiStateView>(),
 			"GlorpSessionView" => registry.register::<crate::GlorpSessionView>(),
 			"GlorpEventStreamView" => registry.register::<crate::GlorpEventStreamView>(),
 			"OkView" => registry.register::<crate::OkView>(),
 			"TokenAckView" => registry.register::<crate::TokenAckView>(),
 			"StreamTokenInput" => registry.register::<crate::StreamTokenInput>(),
-			"SnapshotQuery" => registry.register::<crate::SnapshotQuery>(),
-			"InspectDetailsQuery" => registry.register::<crate::InspectDetailsQuery>(),
-			"CanvasTarget" => registry.register::<crate::CanvasTarget>(),
 			"SamplePreset" => registry.register::<crate::SamplePreset>(),
 			"WrapChoice" => registry.register::<crate::WrapChoice>(),
 			"FontChoice" => registry.register::<crate::FontChoice>(),
 			"ShapingChoice" => registry.register::<crate::ShapingChoice>(),
-			"SidebarTab" => registry.register::<crate::SidebarTab>(),
 			"EditorMotion" => registry.register::<crate::EditorMotion>(),
 			"EditorModeCommand" => registry.register::<crate::EditorModeCommand>(),
 			"EditorHistoryCommand" => registry.register::<crate::EditorHistoryCommand>(),
 			"EditorMode" => registry.register::<crate::EditorMode>(),
-			"SceneLevel" => registry.register::<crate::SceneLevel>(),
 			"TextRange" => registry.register::<crate::TextRange>(),
 			"LayoutRectView" => registry.register::<crate::LayoutRectView>(),
 			other => panic!("unregistered schema type {other}"),
@@ -442,7 +417,6 @@ impl_named_enum_schema!(crate::SamplePreset, "SamplePreset", "Built-in sample do
 impl_named_enum_schema!(crate::WrapChoice, "WrapChoice", "Stable editor wrapping choices.");
 impl_named_enum_schema!(crate::FontChoice, "FontChoice", "Stable editor font families.");
 impl_named_enum_schema!(crate::ShapingChoice, "ShapingChoice", "Stable shaping choices.");
-impl_named_enum_schema!(crate::SidebarTab, "SidebarTab", "Stable sidebar tabs.");
 impl_named_enum_schema!(crate::EditorMotion, "EditorMotion", "Typed editor motions.");
 impl_named_enum_schema!(crate::EditorModeCommand, "EditorModeCommand", "Typed mode transitions.");
 impl_named_enum_schema!(
@@ -571,67 +545,22 @@ impl_named_record_schema!(crate::EditorModeInput, "EditorModeInput", "One editor
 impl_named_record_schema!(crate::EditorHistoryInput, "EditorHistoryInput", "One editor history input.", {
 	"action" => crate::EditorHistoryCommand: "Editor history action.",
 });
-impl_named_record_schema!(crate::SidebarTabInput, "SidebarTabInput", "One sidebar tab input.", {
-	"tab" => crate::SidebarTab: "Sidebar tab.",
-});
-impl_named_record_schema!(crate::ScrollTarget, "ScrollTarget", "Viewport scroll target.", {
-	"x" => f32: "Horizontal scroll offset.",
-	"y" => f32: "Vertical scroll offset.",
-});
-impl_named_record_schema!(crate::PaneRatioInput, "PaneRatioInput", "Sidebar/canvas ratio input.", {
-	"ratio" => f32: "Sidebar/canvas ratio.",
-});
-impl_named_record_schema!(crate::ViewportMetricsInput, "ViewportMetricsInput", "Viewport metrics update.", {
-	"layout_width" => f32: "Measured layout width.",
-	"viewport_width" => f32: "Measured viewport width.",
-	"viewport_height" => f32: "Measured viewport height.",
-});
-impl_named_record_schema!(crate::CanvasFocusInput, "CanvasFocusInput", "Canvas focus change input.", {
-	"focused" => bool: "Whether the canvas owns focus.",
-});
-impl_named_record_schema!(crate::InspectTargetInput, "InspectTargetInput", "Inspect target input.", {
-	"target" => Option<crate::CanvasTarget>: "Optional inspect target.",
-});
-impl_named_record_schema!(crate::EditorPointerBeginInput, "EditorPointerBeginInput", "Pointer press input.", {
-	"x" => f32: "Pointer x position.",
-	"y" => f32: "Pointer y position.",
-	"select_word" => bool: "Whether to select a word.",
-});
-impl_named_record_schema!(crate::EditorPointerDragInput, "EditorPointerDragInput", "Pointer drag input.", {
-	"x" => f32: "Pointer x position.",
-	"y" => f32: "Pointer y position.",
-});
 impl_named_record_schema!(crate::GlorpTxn, "GlorpTxn", "Multiple exec operations applied atomically.", {
 	"execs" => Vec<crate::GlorpExec>: "Ordered exec operations.",
 });
 impl_named_record_schema!(crate::StreamTokenInput, "StreamTokenInput", "Subscription token input.", {
 	"token" => u64: "Subscription token.",
 });
-impl_named_record_schema!(crate::SnapshotQuery, "SnapshotQuery", "Snapshot query input.", {
-	"scene" => crate::SceneLevel: "Scene materialization policy.",
-	"include_document_text" => bool: "Whether to include document text.",
-});
-impl_named_record_schema!(crate::InspectDetailsQuery, "InspectDetailsQuery", "Inspect-details query input.", {
-	"target" => Option<crate::CanvasTarget>: "Optional active inspect target.",
-});
 impl_named_record_schema!(crate::GlorpCapabilities, "GlorpCapabilities", "Stable runtime capability flags.", {
 	"transactions" => bool: "Whether transactions are supported.",
 	"subscriptions" => bool: "Whether subscriptions are supported.",
 	"transports" => Vec<String>: "Supported transport names.",
 });
-impl_named_record_schema!(crate::GlorpSnapshot, "GlorpSnapshot", "Read-only runtime snapshot.", {
-	"revisions" => crate::GlorpRevisions: "Runtime revisions.",
-	"config" => crate::GlorpConfig: "Effective config.",
-	"editor" => crate::EditorStateView: "Editor state view.",
-	"scene" => Option<crate::SceneStateView>: "Scene state view.",
-	"inspect" => crate::InspectStateView: "Inspect state view.",
-	"perf" => crate::PerfStateView: "Performance state view.",
-	"ui" => crate::UiStateView: "UI state view.",
-	"document_text" => Option<String>: "Document text when requested.",
-});
 impl_named_record_schema!(crate::EditorStateView, "EditorStateView", "Stable editor state view.", {
+	"revisions" => crate::GlorpRevisions: "Runtime revisions.",
 	"mode" => crate::EditorMode: "Editor mode.",
 	"selection" => Option<crate::TextRange>: "Current selection range.",
+	"selected_text" => Option<String>: "Selected text if any.",
 	"selection_head" => Option<u64>: "Selection head byte offset.",
 	"pointer_anchor" => Option<u64>: "Pointer anchor byte offset.",
 	"text_bytes" => usize: "Document size in bytes.",
@@ -645,76 +574,6 @@ impl_named_record_schema!(crate::EditorViewportView, "EditorViewportView", "View
 	"measured_width" => f32: "Measured content width.",
 	"measured_height" => f32: "Measured content height.",
 	"viewport_target" => Option<crate::LayoutRectView>: "Current viewport reveal target.",
-});
-impl_named_record_schema!(crate::SceneStateView, "SceneStateView", "Stable scene state view.", {
-	"revision" => u64: "Scene revision.",
-	"measured_width" => f32: "Measured width.",
-	"measured_height" => f32: "Measured height.",
-	"run_count" => usize: "Layout run count.",
-	"cluster_count" => usize: "Layout cluster count.",
-});
-impl_named_record_schema!(crate::InspectStateView, "InspectStateView", "Stable inspect state view.", {
-	"hovered_target" => Option<crate::CanvasTarget>: "Hovered inspect target.",
-	"selected_target" => Option<crate::CanvasTarget>: "Selected inspect target.",
-});
-impl_named_record_schema!(crate::SelectionStateView, "SelectionStateView", "Focused selection read model.", {
-	"mode" => crate::EditorMode: "Editor mode.",
-	"range" => Option<crate::TextRange>: "Current selection range.",
-	"selected_text" => Option<String>: "Selected text if any.",
-	"selection_head" => Option<u64>: "Selection head byte offset.",
-	"pointer_anchor" => Option<u64>: "Pointer anchor byte offset.",
-	"viewport_target" => Option<crate::LayoutRectView>: "Current viewport reveal target.",
-});
-impl_named_record_schema!(crate::InspectDetailsView, "InspectDetailsView", "Rich inspect read model.", {
-	"hovered_target" => Option<crate::CanvasTarget>: "Hovered inspect target.",
-	"selected_target" => Option<crate::CanvasTarget>: "Selected inspect target.",
-	"active_target" => Option<crate::CanvasTarget>: "Active inspect target.",
-	"warnings" => Vec<String>: "Scene warnings.",
-	"interaction_details" => String: "Human-readable target details.",
-	"scene" => Option<crate::InspectSceneView>: "Inspect scene summary.",
-});
-impl_named_record_schema!(crate::InspectSceneView, "InspectSceneView", "Inspect-side scene summary.", {
-	"revision" => u64: "Scene revision.",
-	"run_count" => usize: "Layout run count.",
-	"cluster_count" => usize: "Layout cluster count.",
-});
-impl_named_record_schema!(crate::PerfStateView, "PerfStateView", "Stable runtime perf counters.", {
-	"scene_builds" => usize: "Scene build count.",
-	"scene_build_millis" => f64: "Accumulated scene build millis.",
-});
-impl_named_record_schema!(crate::PerfDashboardView, "PerfDashboardView", "Rich runtime perf dashboard.", {
-	"overview" => crate::PerfOverviewView: "Perf overview.",
-	"metrics" => Vec<crate::PerfMetricSummaryView>: "Perf metric summaries.",
-});
-impl_named_record_schema!(crate::PerfOverviewView, "PerfOverviewView", "Perf overview summary.", {
-	"editor_mode" => crate::EditorMode: "Editor mode.",
-	"editor_bytes" => usize: "Document size in bytes.",
-	"text_lines" => usize: "Document line count.",
-	"layout_width" => f32: "Current layout width.",
-	"scene_ready" => bool: "Whether scene data is materialized.",
-	"scene_revision" => Option<u64>: "Current scene revision.",
-	"scene_width" => f32: "Scene width.",
-	"scene_height" => f32: "Scene height.",
-	"run_count" => usize: "Layout run count.",
-	"cluster_count" => usize: "Layout cluster count.",
-	"warning_count" => usize: "Scene warning count.",
-});
-impl_named_record_schema!(crate::PerfMetricSummaryView, "PerfMetricSummaryView", "Perf metric summary row.", {
-	"label" => String: "Metric label.",
-	"total_samples" => u64: "Total samples.",
-	"total_millis" => f64: "Total millis.",
-	"last_millis" => f64: "Most recent millis.",
-	"avg_millis" => f64: "Average millis.",
-});
-impl_named_record_schema!(crate::UiStateView, "UiStateView", "Stable UI state view.", {
-	"active_tab" => crate::SidebarTab: "Active sidebar tab.",
-	"canvas_focused" => bool: "Whether the canvas owns focus.",
-	"canvas_scroll_x" => f32: "Horizontal scroll offset.",
-	"canvas_scroll_y" => f32: "Vertical scroll offset.",
-	"layout_width" => f32: "Current layout width.",
-	"viewport_width" => f32: "Viewport width.",
-	"viewport_height" => f32: "Viewport height.",
-	"pane_ratio" => f32: "Sidebar/canvas ratio.",
 });
 impl_named_record_schema!(crate::GlorpSessionView, "GlorpSessionView", "Resolved live session endpoint.", {
 	"socket" => String: "Socket path.",
@@ -748,7 +607,6 @@ impl_named_record_schema!(crate::GlorpNotice, "GlorpNotice", "Notice payload.", 
 });
 impl_named_record_schema!(crate::GlorpRevisions, "GlorpRevisions", "Runtime revisions.", {
 	"editor" => u64: "Editor revision.",
-	"scene" => Option<u64>: "Scene revision if materialized.",
 	"config" => u64: "Config revision.",
 });
 impl_named_record_schema!(crate::GlorpDelta, "GlorpDelta", "Boolean change flags.", {
@@ -757,12 +615,9 @@ impl_named_record_schema!(crate::GlorpDelta, "GlorpDelta", "Boolean change flags
 	"selection_changed" => bool: "Selection changed.",
 	"mode_changed" => bool: "Mode changed.",
 	"config_changed" => bool: "Config changed.",
-	"ui_changed" => bool: "UI state changed.",
-	"scene_changed" => bool: "Scene state changed.",
 });
 impl_named_record_schema!(crate::GlorpConfig, "GlorpConfig", "Stable runtime config.", {
 	"editor" => crate::EditorConfig: "Editor config namespace.",
-	"inspect" => crate::InspectConfig: "Inspect config namespace.",
 });
 impl_named_record_schema!(crate::EditorConfig, "EditorConfig", "Editor configuration namespace.", {
 	"preset" => Option<crate::SamplePreset>: "Sample preset.",
@@ -771,10 +626,6 @@ impl_named_record_schema!(crate::EditorConfig, "EditorConfig", "Editor configura
 	"wrapping" => crate::WrapChoice: "Wrapping choice.",
 	"font_size" => f32: "Font size.",
 	"line_height" => f32: "Line height.",
-});
-impl_named_record_schema!(crate::InspectConfig, "InspectConfig", "Inspect configuration namespace.", {
-	"show_baselines" => bool: "Show baselines.",
-	"show_hitboxes" => bool: "Show hitboxes.",
 });
 impl_named_record_schema!(crate::TextRange, "TextRange", "Byte range in the document.", {
 	"start" => u64: "Start byte offset.",
@@ -877,60 +728,6 @@ impl SchemaType for TypeSchema {
 					field::<String>(registry, "tag", "Tag field name."),
 					field::<String>(registry, "content", "Content field name."),
 					field::<Vec<TaggedVariantSchema>>(registry, "variants", "Tagged union variants."),
-				],
-			}
-		});
-	}
-}
-
-impl SchemaType for crate::CanvasTarget {
-	fn type_ref() -> TypeRef {
-		TypeRef::Named("CanvasTarget".to_owned())
-	}
-
-	fn register(registry: &mut TypeRegistry) {
-		registry.register_named("CanvasTarget", "Canvas inspect target.", |_registry| {
-			TypeSchema::TaggedUnion {
-				tag: "kind".to_owned(),
-				content: "value".to_owned(),
-				variants: vec![
-					TaggedVariantSchema {
-						name: "run".to_owned(),
-						docs: "Run index target.".to_owned(),
-						payload: Some(usize::type_ref()),
-					},
-					TaggedVariantSchema {
-						name: "cluster".to_owned(),
-						docs: "Cluster index target.".to_owned(),
-						payload: Some(usize::type_ref()),
-					},
-				],
-			}
-		});
-	}
-}
-
-impl SchemaType for crate::SceneLevel {
-	fn type_ref() -> TypeRef {
-		TypeRef::Named("SceneLevel".to_owned())
-	}
-
-	fn register(registry: &mut TypeRegistry) {
-		registry.register_named("SceneLevel", "Scene materialization policies.", |_registry| {
-			TypeSchema::Enum {
-				variants: vec![
-					EnumVariantSchema {
-						name: "omit".to_owned(),
-						docs: "Do not include scene state.".to_owned(),
-					},
-					EnumVariantSchema {
-						name: "if-ready".to_owned(),
-						docs: "Include scene state when already materialized.".to_owned(),
-					},
-					EnumVariantSchema {
-						name: "materialize".to_owned(),
-						docs: "Materialize scene state before returning.".to_owned(),
-					},
 				],
 			}
 		});

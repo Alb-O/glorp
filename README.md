@@ -46,5 +46,6 @@ when a shared runtime is not already live.
 
 The acceptance suite lives in crates/cli/tests/acceptance.rs.
 It proves schema export, Nu round-trip, invalid config rejection, transaction
-atomicity, GUI/runtime integration, scene materialization, IPC/plugin parity,
-persistence, event stream behavior, host auto-start, the GUI socket contract, and generated artifact drift.
+atomicity, GUI/runtime integration through the private adapter path, IPC/plugin
+parity, persistence, event stream behavior, host auto-start, the GUI socket
+contract, and generated artifact drift.

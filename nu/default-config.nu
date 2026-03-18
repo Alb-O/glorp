@@ -7,9 +7,4 @@ export const config = {
     font_size: 24
     line_height: 32
   }
-
-  inspect: {
-    show_baselines: false
-    show_hitboxes: false
-  }
 }

@@ -1,5 +1,6 @@
 use {
 	crate::{
+		GuiCommand, project,
 		runtime::GlorpRuntime,
 		state::{SessionDelta, SessionRequest},
 	},
@@ -29,34 +30,51 @@ pub fn execute(runtime: &mut GlorpRuntime, exec: GlorpExec) -> Result<GlorpOutco
 		GlorpExec::EditorDeleteForward => Ok(execute_editor_edit(runtime, EditorEditIntent::DeleteForward)),
 		GlorpExec::EditorDeleteSelection => Ok(execute_editor_edit(runtime, EditorEditIntent::DeleteSelection)),
 		GlorpExec::EditorHistory(input) => Ok(execute_editor_history(runtime, input.action)),
-		GlorpExec::EditorPointerBegin(input) => Ok(execute_editor_pointer(
-			runtime,
-			EditorPointerIntent::Begin {
-				position: iced::Point::new(input.x, input.y),
-				select_word: input.select_word,
-			},
-		)),
-		GlorpExec::EditorPointerDrag(input) => Ok(execute_editor_pointer(
-			runtime,
-			EditorPointerIntent::Drag(iced::Point::new(input.x, input.y)),
-		)),
-		GlorpExec::EditorPointerEnd => Ok(execute_editor_pointer(runtime, EditorPointerIntent::End)),
-		GlorpExec::UiSidebarSelect(input) => Ok(execute_ui(runtime, |state| state.active_tab = input.tab)),
-		GlorpExec::UiInspectTargetHover(input) => Ok(execute_ui(runtime, |state| state.hovered_target = input.target)),
-		GlorpExec::UiInspectTargetSelect(input) => {
-			Ok(execute_ui(runtime, |state| state.selected_target = input.target))
-		}
-		GlorpExec::UiCanvasFocusSet(input) => Ok(execute_ui(runtime, |state| state.canvas_focused = input.focused)),
-		GlorpExec::UiViewportScrollTo(input) => Ok(execute_ui(runtime, |state| {
-			state.canvas_scroll_x = input.x.max(0.0);
-			state.canvas_scroll_y = input.y.max(0.0);
-		})),
-		GlorpExec::UiViewportMetricsSet(input) => Ok(execute_viewport_metrics(runtime, input)),
-		GlorpExec::UiPaneRatioSet(input) => Ok(execute_ui(runtime, |state| {
-			state.pane_ratio = input.ratio.clamp(0.1, 0.9)
-		})),
-		GlorpExec::SceneEnsure => Ok(execute_scene_ensure(runtime)),
 	}
+}
+
+pub fn execute_gui(runtime: &mut GlorpRuntime, command: GuiCommand) -> Result<(), GlorpError> {
+	match command {
+		GuiCommand::SidebarSelect(tab) => execute_ui(runtime, |state| state.active_tab = tab),
+		GuiCommand::InspectTargetHover(target) => execute_ui(runtime, |state| state.hovered_target = target),
+		GuiCommand::InspectTargetSelect(target) => execute_ui(runtime, |state| state.selected_target = target),
+		GuiCommand::CanvasFocusSet(focused) => execute_ui(runtime, |state| state.canvas_focused = focused),
+		GuiCommand::ViewportScrollTo { x, y } => execute_ui(runtime, |state| {
+			state.canvas_scroll_x = x.max(0.0);
+			state.canvas_scroll_y = y.max(0.0);
+		}),
+		GuiCommand::ViewportMetricsSet {
+			layout_width,
+			viewport_width,
+			viewport_height,
+		} => publish_public_change(
+			execute_viewport_metrics(runtime, layout_width, viewport_width, viewport_height),
+			runtime,
+		),
+		GuiCommand::PaneRatioSet(ratio) => execute_ui(runtime, |state| state.pane_ratio = ratio.clamp(0.1, 0.9)),
+		GuiCommand::ShowBaselinesSet(show) => execute_ui(runtime, |state| state.show_baselines = show),
+		GuiCommand::ShowHitboxesSet(show) => execute_ui(runtime, |state| state.show_hitboxes = show),
+		GuiCommand::EditorPointerBegin { x, y, select_word } => publish_public_change(
+			execute_editor_pointer(
+				runtime,
+				EditorPointerIntent::Begin {
+					position: point(x, y),
+					select_word,
+				},
+			),
+			runtime,
+		),
+		GuiCommand::EditorPointerDrag { x, y } => publish_public_change(
+			execute_editor_pointer(runtime, EditorPointerIntent::Drag(point(x, y))),
+			runtime,
+		),
+		GuiCommand::EditorPointerEnd => {
+			publish_public_change(execute_editor_pointer(runtime, EditorPointerIntent::End), runtime)
+		}
+		GuiCommand::SceneEnsure => execute_scene_ensure(runtime),
+	}
+
+	Ok(())
 }
 
 fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome, GlorpError> {
@@ -168,37 +186,31 @@ fn execute_editor_pointer(runtime: &mut GlorpRuntime, pointer: EditorPointerInte
 	)
 }
 
-fn execute_ui(runtime: &mut GlorpRuntime, update: impl FnOnce(&mut crate::state::UiRuntimeState)) -> GlorpOutcome {
+fn execute_ui(runtime: &mut GlorpRuntime, update: impl FnOnce(&mut crate::state::UiRuntimeState)) {
 	update(&mut runtime.state.ui);
-	publish(
-		runtime,
-		outcome(
-			runtime.state.revisions,
-			GlorpDelta {
-				ui_changed: true,
-				..GlorpDelta::default()
-			},
-			vec![],
-		),
-	)
 }
 
-fn execute_viewport_metrics(runtime: &mut GlorpRuntime, input: glorp_api::ViewportMetricsInput) -> GlorpOutcome {
-	runtime.state.ui.layout_width = input.layout_width.max(1.0);
-	runtime.state.ui.viewport_width = input.viewport_width.max(1.0);
-	runtime.state.ui.viewport_height = input.viewport_height.max(1.0);
-	let mut outcome = run_session(runtime, SessionRequest::SyncConfig);
-	outcome.delta.ui_changed = true;
-	publish(runtime, outcome)
-}
-
-fn execute_scene_ensure(runtime: &mut GlorpRuntime) -> GlorpOutcome {
-	let outcome = run_session(runtime, SessionRequest::EnsureScene);
-	if outcome.delta.scene_changed {
-		publish(runtime, outcome)
-	} else {
-		outcome
+fn publish_public_change(outcome: GlorpOutcome, runtime: &mut GlorpRuntime) {
+	if public_delta_changed(&outcome.delta) {
+		runtime.publish_changed(&outcome);
 	}
+}
+
+fn execute_viewport_metrics(
+	runtime: &mut GlorpRuntime, layout_width: f32, viewport_width: f32, viewport_height: f32,
+) -> GlorpOutcome {
+	runtime.state.ui.layout_width = layout_width.max(1.0);
+	runtime.state.ui.viewport_width = viewport_width.max(1.0);
+	runtime.state.ui.viewport_height = viewport_height.max(1.0);
+	run_session(runtime, SessionRequest::SyncConfig)
+}
+
+fn execute_scene_ensure(runtime: &mut GlorpRuntime) {
+	project::ensure_scene_materialized(&mut runtime.state);
+}
+
+const fn point(x: f32, y: f32) -> iced::Point {
+	iced::Point::new(x, y)
 }
 
 fn merge_outcome(accumulated: &mut GlorpOutcome, outcome: GlorpOutcome) {
@@ -214,16 +226,13 @@ const fn merge_delta(accumulated: &mut GlorpDelta, delta: &GlorpDelta) {
 	accumulated.selection_changed |= delta.selection_changed;
 	accumulated.mode_changed |= delta.mode_changed;
 	accumulated.config_changed |= delta.config_changed;
-	accumulated.ui_changed |= delta.ui_changed;
-	accumulated.scene_changed |= delta.scene_changed;
 }
 
 fn run_session(runtime: &mut GlorpRuntime, request: SessionRequest) -> GlorpOutcome {
 	let delta = runtime
 		.state
 		.session
-		.execute(request, &runtime.state.config, runtime.state.ui.layout_width)
-		.delta;
+		.execute(request, &runtime.state.config, runtime.state.ui.layout_width);
 	session_outcome(runtime, &delta)
 }
 
@@ -240,6 +249,10 @@ fn session_outcome(runtime: &mut GlorpRuntime, session_delta: &SessionDelta) -> 
 fn publish(runtime: &mut GlorpRuntime, outcome: GlorpOutcome) -> GlorpOutcome {
 	runtime.publish_changed(&outcome);
 	outcome
+}
+
+const fn public_delta_changed(delta: &GlorpDelta) -> bool {
+	delta.text_changed || delta.view_changed || delta.selection_changed || delta.mode_changed || delta.config_changed
 }
 
 const fn outcome(revisions: GlorpRevisions, delta: GlorpDelta, changed_config_paths: Vec<ConfigPath>) -> GlorpOutcome {

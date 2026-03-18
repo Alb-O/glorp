@@ -310,12 +310,8 @@ fn query_to_value(result: GlorpQueryResult, span: Span) -> Value {
 	match result {
 		GlorpQueryResult::Schema(value) => serialize_to_value!(value, span),
 		GlorpQueryResult::Config(value) => serialize_to_value!(value, span),
-		GlorpQueryResult::Snapshot(value) => serialize_to_value!(value, span),
 		GlorpQueryResult::DocumentText(value) => serialize_to_value!(value, span),
-		GlorpQueryResult::Selection(value) => serialize_to_value!(value, span),
-		GlorpQueryResult::InspectDetails(value) => serialize_to_value!(value, span),
-		GlorpQueryResult::Perf(value) => serialize_to_value!(value, span),
-		GlorpQueryResult::Ui(value) => serialize_to_value!(value, span),
+		GlorpQueryResult::Editor(value) => serialize_to_value!(value, span),
 		GlorpQueryResult::Capabilities(value) => serialize_to_value!(value, span),
 	}
 }

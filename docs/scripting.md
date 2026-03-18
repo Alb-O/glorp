@@ -22,6 +22,6 @@ glorp exec txn {
   ]
 } --session $session
 
-glorp query selection --session $session
-glorp query perf --session $session
+glorp query editor --session $session
+glorp query document-text --session $session
 ```

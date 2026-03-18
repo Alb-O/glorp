@@ -3,7 +3,6 @@ use crate::{BuiltinType, ConfigAssignment, ConfigFieldSchema, ConfigPath, GlorpE
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct GlorpConfig {
 	pub editor: EditorConfig,
-	pub inspect: InspectConfig,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -16,12 +15,6 @@ pub struct EditorConfig {
 	pub line_height: f32,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct InspectConfig {
-	pub show_baselines: bool,
-	pub show_hitboxes: bool,
-}
-
 impl Default for GlorpConfig {
 	fn default() -> Self {
 		Self {
@@ -32,10 +25,6 @@ impl Default for GlorpConfig {
 				wrapping: crate::WrapChoice::Word,
 				font_size: 24.0,
 				line_height: 32.0,
-			},
-			inspect: InspectConfig {
-				show_baselines: false,
-				show_hitboxes: false,
 			},
 		}
 	}
@@ -79,18 +68,6 @@ macro_rules! config_fields {
 			TypeRef::Builtin(BuiltinType::Float),
 			32.0.into()
 		);
-		$field!(
-			"inspect.show_baselines",
-			"Show line baselines in inspect mode.",
-			TypeRef::Builtin(BuiltinType::Bool),
-			false.into()
-		);
-		$field!(
-			"inspect.show_hitboxes",
-			"Show glyph hitboxes in inspect mode.",
-			TypeRef::Builtin(BuiltinType::Bool),
-			false.into()
-		);
 	};
 }
 
@@ -131,14 +108,6 @@ impl GlorpConfig {
 				self.editor.line_height = parse_f32(path, value)?;
 				Ok(())
 			}
-			"inspect.show_baselines" => {
-				self.inspect.show_baselines = parse_bool(path, value)?;
-				Ok(())
-			}
-			"inspect.show_hitboxes" => {
-				self.inspect.show_hitboxes = parse_bool(path, value)?;
-				Ok(())
-			}
 			_ => Err(unknown_path(path)),
 		}
 	}
@@ -156,8 +125,6 @@ impl GlorpConfig {
 			"editor.wrapping" => Ok(enum_value(self.editor.wrapping)),
 			"editor.font_size" => Ok(self.editor.font_size.into()),
 			"editor.line_height" => Ok(self.editor.line_height.into()),
-			"inspect.show_baselines" => Ok(self.inspect.show_baselines.into()),
-			"inspect.show_hitboxes" => Ok(self.inspect.show_hitboxes.into()),
 			_ => Err(unknown_path(path)),
 		}
 	}
@@ -293,12 +260,6 @@ impl_enum_value!(crate::EditorMode {
 	"insert" => crate::EditorMode::Insert: "Insert mode.",
 });
 
-impl_enum_value!(crate::SidebarTab {
-	"controls" => crate::SidebarTab::Controls: "Configuration controls.",
-	"inspect" => crate::SidebarTab::Inspect: "Scene inspection.",
-	"perf" => crate::SidebarTab::Perf: "Performance projections.",
-});
-
 fn parse_string_enum<T>(path: &str, value: &GlorpValue) -> Result<T, GlorpError>
 where
 	T: EnumValue, {
@@ -339,10 +300,6 @@ fn optional_enum_value<T>(value: Option<T>) -> GlorpValue
 where
 	T: EnumValue, {
 	value.map_or(GlorpValue::Null, enum_value)
-}
-
-fn parse_bool(path: &str, value: &GlorpValue) -> Result<bool, GlorpError> {
-	value.as_bool().ok_or_else(|| type_error(path, "bool", value.kind()))
 }
 
 fn parse_f32(path: &str, value: &GlorpValue) -> Result<f32, GlorpError> {

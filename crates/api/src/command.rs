@@ -17,17 +17,6 @@ pub enum GlorpExec {
 	EditorDeleteForward,
 	EditorDeleteSelection,
 	EditorHistory(EditorHistoryInput),
-	EditorPointerBegin(EditorPointerBeginInput),
-	EditorPointerDrag(EditorPointerDragInput),
-	EditorPointerEnd,
-	UiSidebarSelect(SidebarTabInput),
-	UiInspectTargetHover(InspectTargetInput),
-	UiInspectTargetSelect(InspectTargetInput),
-	UiCanvasFocusSet(CanvasFocusInput),
-	UiViewportScrollTo(ScrollTarget),
-	UiViewportMetricsSet(ViewportMetricsInput),
-	UiPaneRatioSet(PaneRatioInput),
-	SceneEnsure,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -60,52 +49,6 @@ pub struct EditorHistoryInput {
 	pub action: EditorHistoryCommand,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct SidebarTabInput {
-	pub tab: SidebarTab,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct ScrollTarget {
-	pub x: f32,
-	pub y: f32,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct PaneRatioInput {
-	pub ratio: f32,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct ViewportMetricsInput {
-	pub layout_width: f32,
-	pub viewport_width: f32,
-	pub viewport_height: f32,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct CanvasFocusInput {
-	pub focused: bool,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct InspectTargetInput {
-	pub target: Option<CanvasTarget>,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct EditorPointerBeginInput {
-	pub x: f32,
-	pub y: f32,
-	pub select_word: bool,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct EditorPointerDragInput {
-	pub x: f32,
-	pub y: f32,
-}
-
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum EditorMotion {
@@ -130,21 +73,6 @@ pub enum EditorModeCommand {
 pub enum EditorHistoryCommand {
 	Undo,
 	Redo,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "kebab-case")]
-pub enum SidebarTab {
-	Controls,
-	Inspect,
-	Perf,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
-#[serde(tag = "kind", content = "value", rename_all = "kebab-case")]
-pub enum CanvasTarget {
-	Run(usize),
-	Cluster(usize),
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

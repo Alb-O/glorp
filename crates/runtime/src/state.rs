@@ -1,9 +1,9 @@
 use {
-	crate::{perf::PerfProjection, scene::scene_config_from_runtime},
-	glorp_api::{CanvasTarget, GlorpConfig, GlorpDelta, GlorpRevisions, SidebarTab},
+	crate::{SidebarTab, perf::PerfProjection, scene::scene_config_from_runtime},
+	glorp_api::{GlorpConfig, GlorpDelta, GlorpRevisions},
 	glorp_editor::{
-		EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorPresentation, EditorViewState, ScenePresentation,
-		SessionSnapshot, make_font_system,
+		CanvasTarget, EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorPresentation, EditorViewState,
+		ScenePresentation, SessionSnapshot, make_font_system,
 	},
 	std::{
 		ops::Range,
@@ -19,26 +19,13 @@ pub enum SessionRequest {
 	EnsureScene,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SessionChange {
-	Text,
-	View,
-	Selection,
-	Mode,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct SessionChanges(u8);
-
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SessionDelta {
-	changes: SessionChanges,
+	pub text_changed: bool,
+	pub view_changed: bool,
+	pub selection_changed: bool,
+	pub mode_changed: bool,
 	pub scene_materialized: Option<Duration>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SessionFeedback {
-	pub delta: SessionDelta,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +49,8 @@ pub struct UiRuntimeState {
 	pub hovered_target: Option<CanvasTarget>,
 	pub selected_target: Option<CanvasTarget>,
 	pub canvas_focused: bool,
+	pub show_baselines: bool,
+	pub show_hitboxes: bool,
 	pub canvas_scroll_x: f32,
 	pub canvas_scroll_y: f32,
 	pub layout_width: f32,
@@ -79,61 +68,15 @@ pub struct RuntimeState {
 	pub perf: PerfProjection,
 }
 
-impl SessionChange {
-	const fn bit(self) -> u8 {
-		match self {
-			Self::Text => 1 << 0,
-			Self::View => 1 << 1,
-			Self::Selection => 1 << 2,
-			Self::Mode => 1 << 3,
-		}
-	}
-}
-
-impl SessionChanges {
-	const ALL: Self = Self(
-		SessionChange::Text.bit()
-			| SessionChange::View.bit()
-			| SessionChange::Selection.bit()
-			| SessionChange::Mode.bit(),
-	);
-
-	const fn with(mut self, change: SessionChange) -> Self {
-		self.0 |= change.bit();
-		self
-	}
-
-	const fn with_if(self, condition: bool, change: SessionChange) -> Self {
-		if condition { self.with(change) } else { self }
-	}
-
-	const fn contains(self, change: SessionChange) -> bool {
-		self.0 & change.bit() != 0
-	}
-}
-
 impl SessionDelta {
-	fn with_changes(changes: SessionChanges) -> Self {
+	const fn all_public_changes() -> Self {
 		Self {
-			changes,
-			..Self::default()
+			text_changed: true,
+			view_changed: true,
+			selection_changed: true,
+			mode_changed: true,
+			scene_materialized: None,
 		}
-	}
-
-	pub const fn text_changed(&self) -> bool {
-		self.changes.contains(SessionChange::Text)
-	}
-
-	pub const fn view_changed(&self) -> bool {
-		self.changes.contains(SessionChange::View)
-	}
-
-	pub const fn selection_changed(&self) -> bool {
-		self.changes.contains(SessionChange::Selection)
-	}
-
-	pub const fn mode_changed(&self) -> bool {
-		self.changes.contains(SessionChange::Mode)
 	}
 }
 
@@ -152,7 +95,7 @@ impl DocumentSession {
 		}
 	}
 
-	pub fn execute(&mut self, request: SessionRequest, config: &GlorpConfig, layout_width: f32) -> SessionFeedback {
+	pub fn execute(&mut self, request: SessionRequest, config: &GlorpConfig, layout_width: f32) -> SessionDelta {
 		let ensure_scene = matches!(request, SessionRequest::EnsureScene);
 		let mut delta = match request {
 			SessionRequest::ReplaceDocument(text) => self.execute_replace_document(&text, config, layout_width),
@@ -165,7 +108,7 @@ impl DocumentSession {
 			delta.scene_materialized = self.materialize_scene_if_needed();
 		}
 
-		SessionFeedback { delta }
+		delta
 	}
 
 	pub fn text(&self) -> &str {
@@ -199,7 +142,7 @@ impl DocumentSession {
 		);
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		SessionDelta::with_changes(SessionChanges::ALL)
+		SessionDelta::all_public_changes()
 	}
 
 	fn execute_sync_config(&mut self, config: &GlorpConfig, layout_width: f32) -> SessionDelta {
@@ -212,7 +155,10 @@ impl DocumentSession {
 
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		SessionDelta::with_changes(SessionChanges::default().with(SessionChange::View))
+		SessionDelta {
+			view_changed: true,
+			..SessionDelta::default()
+		}
 	}
 
 	fn execute_editor_intent(&mut self, intent: EditorIntent) -> SessionDelta {
@@ -233,13 +179,13 @@ impl DocumentSession {
 			self.invalidate_scene();
 		}
 
-		SessionDelta::with_changes(
-			SessionChanges::default()
-				.with_if(text_changed, SessionChange::Text)
-				.with_if(view_changed, SessionChange::View)
-				.with_if(selection_changed, SessionChange::Selection)
-				.with_if(mode_changed, SessionChange::Mode),
-		)
+		SessionDelta {
+			text_changed,
+			view_changed,
+			selection_changed,
+			mode_changed,
+			..SessionDelta::default()
+		}
 	}
 
 	fn refresh_editor_snapshot(&mut self) {
@@ -271,6 +217,8 @@ impl UiRuntimeState {
 			hovered_target: None,
 			selected_target: None,
 			canvas_focused: false,
+			show_baselines: false,
+			show_hitboxes: false,
 			canvas_scroll_x: 0.0,
 			canvas_scroll_y: 0.0,
 			layout_width: 540.0,
@@ -290,11 +238,7 @@ impl RuntimeState {
 			config,
 			session,
 			ui,
-			revisions: GlorpRevisions {
-				editor: 1,
-				scene: None,
-				config: 1,
-			},
+			revisions: GlorpRevisions { editor: 1, config: 1 },
 			perf: PerfProjection::default(),
 		}
 	}
@@ -318,20 +262,13 @@ impl RuntimeState {
 	}
 
 	pub fn delta_from_session(&mut self, session_delta: &SessionDelta) -> GlorpDelta {
-		let text_changed = session_delta.text_changed();
-		let view_changed = session_delta.view_changed();
-		let selection_changed = session_delta.selection_changed();
-		let mode_changed = session_delta.mode_changed();
+		let text_changed = session_delta.text_changed;
+		let view_changed = session_delta.view_changed;
+		let selection_changed = session_delta.selection_changed;
+		let mode_changed = session_delta.mode_changed;
 		let editor_changed = text_changed || view_changed || selection_changed || mode_changed;
-		let scene_changed = session_delta.scene_materialized.is_some();
 		if editor_changed {
 			self.revisions.editor += 1;
-		}
-
-		if let Some(scene) = self.session.snapshot().scene.as_ref() {
-			self.revisions.scene = Some(scene.revision);
-		} else if text_changed || view_changed {
-			self.revisions.scene = None;
 		}
 
 		if let Some(duration) = session_delta.scene_materialized {
@@ -344,8 +281,6 @@ impl RuntimeState {
 			selection_changed,
 			mode_changed,
 			config_changed: false,
-			ui_changed: false,
-			scene_changed,
 		}
 	}
 }

@@ -92,72 +92,6 @@ static OPERATION_SPECS: LazyLock<Vec<OperationSpec>> = LazyLock::new(|| {
 			Some(named::<crate::EditorHistoryInput>()),
 			named::<crate::GlorpOutcome>(),
 		),
-		exec(
-			"editor-pointer-begin",
-			"Begin a pointer interaction.",
-			Some(named::<crate::EditorPointerBeginInput>()),
-			named::<crate::GlorpOutcome>(),
-		),
-		exec(
-			"editor-pointer-drag",
-			"Extend a pointer interaction.",
-			Some(named::<crate::EditorPointerDragInput>()),
-			named::<crate::GlorpOutcome>(),
-		),
-		exec(
-			"editor-pointer-end",
-			"End a pointer interaction.",
-			None,
-			named::<crate::GlorpOutcome>(),
-		),
-		exec(
-			"ui-sidebar-select",
-			"Select a sidebar tab.",
-			Some(named::<crate::SidebarTabInput>()),
-			named::<crate::GlorpOutcome>(),
-		),
-		exec(
-			"ui-inspect-target-hover",
-			"Set the hovered inspect target.",
-			Some(named::<crate::InspectTargetInput>()),
-			named::<crate::GlorpOutcome>(),
-		),
-		exec(
-			"ui-inspect-target-select",
-			"Set the selected inspect target.",
-			Some(named::<crate::InspectTargetInput>()),
-			named::<crate::GlorpOutcome>(),
-		),
-		exec(
-			"ui-canvas-focus-set",
-			"Set canvas focus state.",
-			Some(named::<crate::CanvasFocusInput>()),
-			named::<crate::GlorpOutcome>(),
-		),
-		exec(
-			"ui-viewport-scroll-to",
-			"Set viewport scroll position.",
-			Some(named::<crate::ScrollTarget>()),
-			named::<crate::GlorpOutcome>(),
-		),
-		exec(
-			"ui-viewport-metrics-set",
-			"Update viewport metrics.",
-			Some(named::<crate::ViewportMetricsInput>()),
-			named::<crate::GlorpOutcome>(),
-		),
-		exec(
-			"ui-pane-ratio-set",
-			"Set the sidebar/canvas split ratio.",
-			Some(named::<crate::PaneRatioInput>()),
-			named::<crate::GlorpOutcome>(),
-		),
-		exec(
-			"scene-ensure",
-			"Materialize scene state.",
-			None,
-			named::<crate::GlorpOutcome>(),
-		),
 		query(
 			"schema",
 			"Return the protocol reflection schema.",
@@ -171,40 +105,16 @@ static OPERATION_SPECS: LazyLock<Vec<OperationSpec>> = LazyLock::new(|| {
 			named::<crate::GlorpConfig>(),
 		),
 		query(
-			"snapshot",
-			"Return a runtime snapshot.",
-			Some(named::<crate::SnapshotQuery>()),
-			named::<crate::GlorpSnapshot>(),
-		),
-		query(
 			"document-text",
 			"Return the current document text.",
 			None,
 			TypeRef::Builtin(crate::BuiltinType::String),
 		),
 		query(
-			"selection",
-			"Return the current selection read model.",
+			"editor",
+			"Return the current editor read model.",
 			None,
-			named::<crate::SelectionStateView>(),
-		),
-		query(
-			"inspect-details",
-			"Return the current inspect read model.",
-			Some(named::<crate::InspectDetailsQuery>()),
-			named::<crate::InspectDetailsView>(),
-		),
-		query(
-			"perf",
-			"Return the runtime perf dashboard.",
-			None,
-			named::<crate::PerfDashboardView>(),
-		),
-		query(
-			"ui",
-			"Return the current UI state.",
-			None,
-			named::<crate::UiStateView>(),
+			named::<crate::EditorStateView>(),
 		),
 		query(
 			"capabilities",
@@ -298,23 +208,6 @@ pub fn build_exec(id: &str, input: Option<&GlorpValue>) -> Result<GlorpExec, Glo
 			GlorpExec::EditorDeleteSelection
 		}
 		"editor-history" => GlorpExec::EditorHistory(decode_required(id, input)?),
-		"editor-pointer-begin" => GlorpExec::EditorPointerBegin(decode_required(id, input)?),
-		"editor-pointer-drag" => GlorpExec::EditorPointerDrag(decode_required(id, input)?),
-		"editor-pointer-end" => {
-			ensure_no_input(id, input)?;
-			GlorpExec::EditorPointerEnd
-		}
-		"ui-sidebar-select" => GlorpExec::UiSidebarSelect(decode_required(id, input)?),
-		"ui-inspect-target-hover" => GlorpExec::UiInspectTargetHover(decode_required(id, input)?),
-		"ui-inspect-target-select" => GlorpExec::UiInspectTargetSelect(decode_required(id, input)?),
-		"ui-canvas-focus-set" => GlorpExec::UiCanvasFocusSet(decode_required(id, input)?),
-		"ui-viewport-scroll-to" => GlorpExec::UiViewportScrollTo(decode_required(id, input)?),
-		"ui-viewport-metrics-set" => GlorpExec::UiViewportMetricsSet(decode_required(id, input)?),
-		"ui-pane-ratio-set" => GlorpExec::UiPaneRatioSet(decode_required(id, input)?),
-		"scene-ensure" => {
-			ensure_no_input(id, input)?;
-			GlorpExec::SceneEnsure
-		}
 		_ => return Err(unknown_operation("exec", id)),
 	})
 }
@@ -329,23 +222,13 @@ pub fn build_query(id: &str, input: Option<&GlorpValue>) -> Result<GlorpQuery, G
 			ensure_no_input(id, input)?;
 			GlorpQuery::Config
 		}
-		"snapshot" => GlorpQuery::Snapshot(decode_required(id, input)?),
 		"document-text" => {
 			ensure_no_input(id, input)?;
 			GlorpQuery::DocumentText
 		}
-		"selection" => {
+		"editor" => {
 			ensure_no_input(id, input)?;
-			GlorpQuery::Selection
-		}
-		"inspect-details" => GlorpQuery::InspectDetails(decode_optional(id, input)?),
-		"perf" => {
-			ensure_no_input(id, input)?;
-			GlorpQuery::Perf
-		}
-		"ui" => {
-			ensure_no_input(id, input)?;
-			GlorpQuery::Ui
+			GlorpQuery::Editor
 		}
 		"capabilities" => {
 			ensure_no_input(id, input)?;
@@ -436,18 +319,6 @@ where
 
 	serde_json::from_value::<T>(input.clone().into())
 		.map_err(|error| GlorpError::validation(None, format!("invalid input for `{id}`: {error}")))
-}
-
-fn decode_optional<T>(id: &str, input: Option<&GlorpValue>) -> Result<T, GlorpError>
-where
-	T: Default + DeserializeOwned, {
-	input.map_or_else(
-		|| Ok(T::default()),
-		|input| {
-			serde_json::from_value::<T>(input.clone().into())
-				.map_err(|error| GlorpError::validation(None, format!("invalid input for `{id}`: {error}")))
-		},
-	)
 }
 
 fn unknown_operation(kind: &str, id: &str) -> GlorpError {

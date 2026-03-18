@@ -11,13 +11,6 @@ impl PerfMetricProjection {
 		self.total_millis += millis;
 		self.last_millis = millis;
 	}
-
-	pub fn average_millis(&self) -> f64 {
-		match self.total_samples {
-			0 => 0.0,
-			total_samples => self.total_millis / total_samples as f64,
-		}
-	}
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

@@ -10,8 +10,8 @@ Transactions are typed exec batches:
 
 The public surface is registry-driven:
 
-- exec operations: `config-set`, `document-replace`, `editor-motion`, `scene-ensure`, and related UI/editor ops
-- query operations: `schema`, `config`, `snapshot`, `selection`, `inspect-details`, `perf`, `ui`, `capabilities`
+- exec operations: `config-set`, `document-replace`, `editor-motion`, `editor-mode`, `editor-insert`, `editor-history`, and related editor/config ops
+- query operations: `schema`, `config`, `document-text`, `editor`, `capabilities`
 - helper operations: `session-attach`, `session-shutdown`, `config-validate`, `events-subscribe`, `events-next`, `events-unsubscribe`
 
 The Nu plugin exposes exactly three commands:
@@ -24,7 +24,7 @@ Examples:
 
 ```nu
 glorp exec config-set {path: "editor.wrapping", value: "word"}
-glorp query snapshot {scene: "materialize", include_document_text: true}
+glorp query editor
 glorp helper session-attach
 ```
 

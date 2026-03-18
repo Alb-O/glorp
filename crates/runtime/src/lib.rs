@@ -3,7 +3,6 @@ mod events;
 mod execute;
 mod gui;
 mod host;
-mod inspect;
 pub mod nu;
 mod perf;
 mod persistence;
@@ -14,7 +13,7 @@ mod state;
 
 pub use self::{
 	config_store::{ConfigStore, ConfigStorePaths},
-	gui::GuiRuntimeFrame,
+	gui::{GuiCommand, GuiRuntimeFrame, SidebarTab},
 	host::RuntimeHost,
 	persistence::export_surface_artifacts,
 	runtime::{RuntimeOptions, default_runtime_paths},
