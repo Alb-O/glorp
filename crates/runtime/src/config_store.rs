@@ -18,12 +18,12 @@ pub struct ConfigStore {
 
 impl ConfigStore {
 	#[must_use]
-	pub fn new(paths: ConfigStorePaths) -> Self {
+	pub const fn new(paths: ConfigStorePaths) -> Self {
 		Self { paths }
 	}
 
 	#[must_use]
-	pub fn paths(&self) -> &ConfigStorePaths {
+	pub const fn paths(&self) -> &ConfigStorePaths {
 		&self.paths
 	}
 

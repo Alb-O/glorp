@@ -6,23 +6,23 @@ use {
 	},
 };
 
-pub(crate) const SIDEBAR_WIDTH: f32 = 380.0;
+pub const SIDEBAR_WIDTH: f32 = 380.0;
 const CONTROL_LABEL_WIDTH: f32 = 90.0;
-pub(crate) const CONTROL_RADIUS: f32 = 6.0;
-pub(crate) const PICK_LIST_PADDING: [u16; 2] = [8, 12];
+pub const CONTROL_RADIUS: f32 = 6.0;
+pub const PICK_LIST_PADDING: [u16; 2] = [8, 12];
 const CHECKBOX_RADIUS: f32 = 4.0;
 const PANEL_SCROLLBAR_WIDTH: f32 = 8.0;
 const PANEL_SCROLLER_WIDTH: f32 = 8.0;
 const PANEL_SCROLLBAR_GAP: f32 = 10.0;
 
-pub(crate) fn control_row(label: impl Into<String>, control: Element<'_, Message>) -> Element<'_, Message> {
+pub fn control_row(label: impl Into<String>, control: Element<'_, Message>) -> Element<'_, Message> {
 	row![text(label.into()).width(CONTROL_LABEL_WIDTH), control]
 		.spacing(12)
 		.align_y(iced::Center)
 		.into()
 }
 
-pub(crate) fn panel_style(theme: &Theme) -> container::Style {
+pub fn panel_style(theme: &Theme) -> container::Style {
 	let palette = theme.palette();
 	container::Style {
 		background: Some(palette.background.weak.color.into()),
@@ -35,7 +35,7 @@ pub(crate) fn panel_style(theme: &Theme) -> container::Style {
 	}
 }
 
-pub(crate) fn panel_scrollable<'a>(content: impl Into<Element<'a, Message>>) -> iced::widget::Scrollable<'a, Message> {
+pub fn panel_scrollable<'a>(content: impl Into<Element<'a, Message>>) -> iced::widget::Scrollable<'a, Message> {
 	scrollable(content)
 		.width(Length::Fill)
 		.direction(scrollable::Direction::Vertical(
@@ -47,7 +47,7 @@ pub(crate) fn panel_scrollable<'a>(content: impl Into<Element<'a, Message>>) -> 
 		.style(panel_scrollable_style)
 }
 
-pub(crate) fn surface_style(theme: &Theme) -> container::Style {
+pub fn surface_style(theme: &Theme) -> container::Style {
 	let palette = theme.palette();
 	container::Style {
 		background: Some(palette.background.base.color.into()),
@@ -60,7 +60,7 @@ pub(crate) fn surface_style(theme: &Theme) -> container::Style {
 	}
 }
 
-pub(crate) fn panel_scrollable_style(
+pub fn panel_scrollable_style(
 	theme: &Theme, status: iced::widget::scrollable::Status,
 ) -> iced::widget::scrollable::Style {
 	let palette = theme.palette();
@@ -112,7 +112,7 @@ pub(crate) fn panel_scrollable_style(
 	style
 }
 
-pub(crate) fn rounded_pick_list_style(
+pub fn rounded_pick_list_style(
 	theme: &Theme, status: iced::widget::pick_list::Status,
 ) -> iced::widget::pick_list::Style {
 	let mut style = iced::widget::pick_list::default(theme, status);
@@ -120,27 +120,25 @@ pub(crate) fn rounded_pick_list_style(
 	style
 }
 
-pub(crate) fn rounded_pick_list_menu_style(theme: &Theme) -> iced::overlay::menu::Style {
+pub fn rounded_pick_list_menu_style(theme: &Theme) -> iced::overlay::menu::Style {
 	let mut style = iced::overlay::menu::default(theme);
 	style.border.radius = CONTROL_RADIUS.into();
 	style
 }
 
-pub(crate) fn rounded_checkbox_style(
-	theme: &Theme, status: iced::widget::checkbox::Status,
-) -> iced::widget::checkbox::Style {
+pub fn rounded_checkbox_style(theme: &Theme, status: iced::widget::checkbox::Status) -> iced::widget::checkbox::Style {
 	let mut style = iced::widget::checkbox::primary(theme, status);
 	style.border.radius = CHECKBOX_RADIUS.into();
 	style
 }
 
-pub(crate) fn rounded_slider_style(theme: &Theme, status: iced::widget::slider::Status) -> iced::widget::slider::Style {
+pub fn rounded_slider_style(theme: &Theme, status: iced::widget::slider::Status) -> iced::widget::slider::Style {
 	let mut style = iced::widget::slider::default(theme, status);
 	style.rail.border.radius = CONTROL_RADIUS.into();
 	style
 }
 
-pub(crate) fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'static, Message> {
+pub fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'static, Message> {
 	let label_text = text(sidebar_tab_label(tab)).size(14).style(move |theme: &Theme| {
 		let palette = theme.palette();
 		iced::widget::text::Style {

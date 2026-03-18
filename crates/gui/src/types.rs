@@ -1,10 +1,10 @@
-pub(crate) use glorp_api::{CanvasTarget, FontChoice, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
+pub use glorp_api::{CanvasTarget, FontChoice, SamplePreset, ShapingChoice, SidebarTab, WrapChoice};
 use {
 	glorp_editor::{EditorIntent, EditorPointerIntent},
 	iced::{Size, Vector, time::Instant, widget::pane_grid},
 };
 
-pub(crate) const SAMPLE_PRESETS: [SamplePreset; 8] = [
+pub const SAMPLE_PRESETS: [SamplePreset; 8] = [
 	SamplePreset::Tall,
 	SamplePreset::Mixed,
 	SamplePreset::Rust,
@@ -15,27 +15,26 @@ pub(crate) const SAMPLE_PRESETS: [SamplePreset; 8] = [
 	SamplePreset::Custom,
 ];
 
-pub(crate) const FONT_CHOICES: [FontChoice; 4] = [
+pub const FONT_CHOICES: [FontChoice; 4] = [
 	FontChoice::JetBrainsMono,
 	FontChoice::Monospace,
 	FontChoice::NotoSansCjk,
 	FontChoice::SansSerif,
 ];
 
-pub(crate) const SHAPING_CHOICES: [ShapingChoice; 3] =
-	[ShapingChoice::Auto, ShapingChoice::Basic, ShapingChoice::Advanced];
+pub const SHAPING_CHOICES: [ShapingChoice; 3] = [ShapingChoice::Auto, ShapingChoice::Basic, ShapingChoice::Advanced];
 
-pub(crate) const WRAP_CHOICES: [WrapChoice; 4] = [
+pub const WRAP_CHOICES: [WrapChoice; 4] = [
 	WrapChoice::None,
 	WrapChoice::Word,
 	WrapChoice::Glyph,
 	WrapChoice::WordOrGlyph,
 ];
 
-pub(crate) const SIDEBAR_TABS: [SidebarTab; 3] = [SidebarTab::Controls, SidebarTab::Inspect, SidebarTab::Perf];
+pub const SIDEBAR_TABS: [SidebarTab; 3] = [SidebarTab::Controls, SidebarTab::Inspect, SidebarTab::Perf];
 
 #[derive(Debug, Clone)]
-pub(crate) enum Message {
+pub enum Message {
 	Controls(ControlsMessage),
 	Sidebar(SidebarMessage),
 	Canvas(CanvasEvent),
@@ -46,7 +45,7 @@ pub(crate) enum Message {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum ControlsMessage {
+pub enum ControlsMessage {
 	LoadPreset(SamplePreset),
 	FontSelected(FontChoice),
 	ShapingSelected(ShapingChoice),
@@ -58,12 +57,12 @@ pub(crate) enum ControlsMessage {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SidebarMessage {
+pub enum SidebarMessage {
 	SelectTab(SidebarTab),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum CanvasEvent {
+pub enum CanvasEvent {
 	Hovered(Option<CanvasTarget>),
 	FocusChanged(bool),
 	ScrollChanged(Vector),
@@ -74,21 +73,21 @@ pub(crate) enum CanvasEvent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PerfMessage {
+pub enum PerfMessage {
 	Tick(Instant),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum ViewportMessage {
+pub enum ViewportMessage {
 	CanvasResized(Size),
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum ShellMessage {
+pub enum ShellMessage {
 	PaneResized(pane_grid::ResizeEvent),
 }
 
-pub(crate) fn sample_preset_label(preset: SamplePreset) -> &'static str {
+pub const fn sample_preset_label(preset: SamplePreset) -> &'static str {
 	match preset {
 		SamplePreset::Tall => "Tall",
 		SamplePreset::Mixed => "Mixed",
@@ -101,7 +100,7 @@ pub(crate) fn sample_preset_label(preset: SamplePreset) -> &'static str {
 	}
 }
 
-pub(crate) fn sample_preset_text(preset: SamplePreset) -> &'static str {
+pub const fn sample_preset_text(preset: SamplePreset) -> &'static str {
 	match preset {
 		SamplePreset::Tall => concat!(
 			"chapter 01: office affine ffi ffl fj\n",
@@ -135,7 +134,7 @@ pub(crate) fn sample_preset_text(preset: SamplePreset) -> &'static str {
 	}
 }
 
-pub(crate) fn font_choice_label(font: FontChoice) -> &'static str {
+pub const fn font_choice_label(font: FontChoice) -> &'static str {
 	match font {
 		FontChoice::JetBrainsMono => "JetBrains Mono",
 		FontChoice::Monospace => "Monospace family",
@@ -144,7 +143,7 @@ pub(crate) fn font_choice_label(font: FontChoice) -> &'static str {
 	}
 }
 
-pub(crate) fn shaping_choice_label(shaping: ShapingChoice) -> &'static str {
+pub const fn shaping_choice_label(shaping: ShapingChoice) -> &'static str {
 	match shaping {
 		ShapingChoice::Auto => "Auto",
 		ShapingChoice::Basic => "Basic",
@@ -152,7 +151,7 @@ pub(crate) fn shaping_choice_label(shaping: ShapingChoice) -> &'static str {
 	}
 }
 
-pub(crate) fn wrap_choice_label(wrapping: WrapChoice) -> &'static str {
+pub const fn wrap_choice_label(wrapping: WrapChoice) -> &'static str {
 	match wrapping {
 		WrapChoice::None => "None",
 		WrapChoice::Word => "Word",
@@ -161,7 +160,7 @@ pub(crate) fn wrap_choice_label(wrapping: WrapChoice) -> &'static str {
 	}
 }
 
-pub(crate) fn sidebar_tab_label(tab: SidebarTab) -> &'static str {
+pub const fn sidebar_tab_label(tab: SidebarTab) -> &'static str {
 	match tab {
 		SidebarTab::Controls => "Controls",
 		SidebarTab::Inspect => "Inspect",

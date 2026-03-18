@@ -30,7 +30,7 @@ struct StaticSceneKey {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct StaticSceneLayer {
+pub struct StaticSceneLayer {
 	scene: ScenePresentation,
 	layout_width: f32,
 	show_baselines: bool,
@@ -42,7 +42,7 @@ pub(crate) struct StaticSceneLayer {
 }
 
 impl StaticSceneLayer {
-	pub(crate) fn new(
+	pub fn new(
 		scene: ScenePresentation, layout_width: f32, show_baselines: bool, show_hitboxes: bool, scroll: Vector,
 		perf: CanvasPerfSink,
 	) -> Self {
@@ -58,12 +58,12 @@ impl StaticSceneLayer {
 		}
 	}
 
-	pub(crate) fn width(mut self, width: impl Into<Length>) -> Self {
+	pub fn width(mut self, width: impl Into<Length>) -> Self {
 		self.width = width.into();
 		self
 	}
 
-	pub(crate) fn height(mut self, height: impl Into<Length>) -> Self {
+	pub fn height(mut self, height: impl Into<Length>) -> Self {
 		self.height = height.into();
 		self
 	}

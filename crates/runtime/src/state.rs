@@ -30,7 +30,7 @@ enum SessionChange {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct SessionChanges(u8);
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SessionDelta {
 	changes: SessionChanges,
 	pub scene_materialized: Option<Duration>,
@@ -113,19 +113,19 @@ impl SessionDelta {
 		}
 	}
 
-	pub fn text_changed(&self) -> bool {
+	pub const fn text_changed(&self) -> bool {
 		self.changes.contains(SessionChange::Text)
 	}
 
-	pub fn view_changed(&self) -> bool {
+	pub const fn view_changed(&self) -> bool {
 		self.changes.contains(SessionChange::View)
 	}
 
-	pub fn selection_changed(&self) -> bool {
+	pub const fn selection_changed(&self) -> bool {
 		self.changes.contains(SessionChange::Selection)
 	}
 
-	pub fn mode_changed(&self) -> bool {
+	pub const fn mode_changed(&self) -> bool {
 		self.changes.contains(SessionChange::Mode)
 	}
 }
@@ -165,7 +165,7 @@ impl DocumentSession {
 		self.editor.text()
 	}
 
-	pub fn snapshot(&self) -> &SessionSnapshot {
+	pub const fn snapshot(&self) -> &SessionSnapshot {
 		&self.snapshot
 	}
 
@@ -264,7 +264,7 @@ impl DocumentSession {
 }
 
 impl UiRuntimeState {
-	pub fn new() -> Self {
+	pub const fn new() -> Self {
 		Self {
 			active_tab: SidebarTab::Controls,
 			hovered_target: None,
@@ -370,11 +370,11 @@ fn build_editor_presentation(editor: &EditorEngine, revision: u64) -> EditorPres
 	)
 }
 
-pub fn selection_range(selection: Option<&Range<usize>>) -> Option<glorp_api::TextRange> {
-	selection.map(|selection| glorp_api::TextRange {
-		start: selection.start as u64,
-		end: selection.end as u64,
-	})
+pub fn text_range(range: &Range<usize>) -> glorp_api::TextRange {
+	glorp_api::TextRange {
+		start: range.start as u64,
+		end: range.end as u64,
+	}
 }
 
 pub fn selection_head(view: &EditorViewState) -> Option<u64> {
@@ -385,7 +385,7 @@ pub fn pointer_anchor(view: &EditorViewState) -> Option<u64> {
 	view.pointer_anchor.map(|anchor| anchor as u64)
 }
 
-pub fn mode(mode: EditorMode) -> glorp_api::EditorMode {
+pub const fn mode(mode: EditorMode) -> glorp_api::EditorMode {
 	match mode {
 		EditorMode::Normal => glorp_api::EditorMode::Normal,
 		EditorMode::Insert => glorp_api::EditorMode::Insert,

@@ -20,18 +20,18 @@ use {
 /// Props for the controls tab.
 ///
 /// The tab is a pure view over parent-owned state.
-pub(crate) struct ControlsTabProps {
-	pub(crate) preset: SamplePreset,
-	pub(crate) font: FontChoice,
-	pub(crate) shaping: ShapingChoice,
-	pub(crate) wrapping: WrapChoice,
-	pub(crate) font_size: f32,
-	pub(crate) line_height: f32,
-	pub(crate) show_baselines: bool,
-	pub(crate) show_hitboxes: bool,
+pub struct ControlsTabProps {
+	pub preset: SamplePreset,
+	pub font: FontChoice,
+	pub shaping: ShapingChoice,
+	pub wrapping: WrapChoice,
+	pub font_size: f32,
+	pub line_height: f32,
+	pub show_baselines: bool,
+	pub show_hitboxes: bool,
 }
 
-pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Message> {
+pub fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Message> {
 	panel_scrollable(
 		column![
 			control_row(

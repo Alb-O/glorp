@@ -3,7 +3,11 @@ use {
 		runtime::GlorpRuntime,
 		state::{SessionDelta, SessionRequest},
 	},
-	glorp_api::*,
+	glorp_api::{
+		ConfigCommand, ConfigPath, DocumentCommand, EditorCommand, EditorEditCommand, EditorHistoryCommand,
+		EditorModeCommand, EditorMotion, EditorPointerCommand, GlorpCommand, GlorpConfig, GlorpDelta, GlorpError,
+		GlorpOutcome, GlorpRevisions, GlorpTxn, SceneCommand, UiCommand,
+	},
 	glorp_editor::{
 		EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion as EngineMotion,
 		EditorPointerIntent,
@@ -25,20 +29,16 @@ fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome
 	let checkpoint = runtime.state.checkpoint();
 	let previous_events = runtime.subscriptions_state();
 
-	match txn
-		.commands
+	txn.commands
 		.into_iter()
 		.try_fold(GlorpOutcome::default(), |mut accumulated, command| {
 			merge_outcome(&mut accumulated, execute(runtime, command)?);
 			Ok(accumulated)
-		}) {
-		Ok(outcome) => Ok(outcome),
-		Err(error) => {
+		})
+		.inspect_err(|_| {
 			runtime.state.restore(checkpoint);
 			runtime.restore_subscriptions(previous_events);
-			Err(error)
-		}
-	}
+		})
 }
 
 fn execute_config(runtime: &mut GlorpRuntime, command: ConfigCommand) -> Result<GlorpOutcome, GlorpError> {
@@ -61,7 +61,10 @@ fn execute_config(runtime: &mut GlorpRuntime, command: ConfigCommand) -> Result<
 		}
 		ConfigCommand::Persist => {
 			runtime.config_store.save(&runtime.state.config)?;
-			return Ok(outcome(runtime.state.revisions, GlorpDelta::default(), Vec::new()));
+			return Ok(GlorpOutcome {
+				revisions: runtime.state.revisions,
+				..GlorpOutcome::default()
+			});
 		}
 	};
 
@@ -176,7 +179,7 @@ fn execute_ui(runtime: &mut GlorpRuntime, command: &UiCommand) -> GlorpOutcome {
 				ui_changed: true,
 				..GlorpDelta::default()
 			},
-			Vec::new(),
+			vec![],
 		),
 	)
 }
@@ -206,7 +209,7 @@ fn merge_outcome(accumulated: &mut GlorpOutcome, outcome: GlorpOutcome) {
 	accumulated.revisions = outcome.revisions;
 }
 
-fn merge_delta(accumulated: &mut GlorpDelta, delta: &GlorpDelta) {
+const fn merge_delta(accumulated: &mut GlorpDelta, delta: &GlorpDelta) {
 	accumulated.text_changed |= delta.text_changed;
 	accumulated.view_changed |= delta.view_changed;
 	accumulated.selection_changed |= delta.selection_changed;
@@ -218,7 +221,7 @@ fn merge_delta(accumulated: &mut GlorpDelta, delta: &GlorpDelta) {
 
 fn session_outcome(runtime: &mut GlorpRuntime, session_delta: &SessionDelta) -> GlorpOutcome {
 	let delta = runtime.state.delta_from_session(session_delta);
-	outcome(runtime.state.revisions, delta, Vec::new())
+	outcome(runtime.state.revisions, delta, vec![])
 }
 
 fn publish(runtime: &mut GlorpRuntime, outcome: GlorpOutcome) -> GlorpOutcome {
@@ -226,11 +229,11 @@ fn publish(runtime: &mut GlorpRuntime, outcome: GlorpOutcome) -> GlorpOutcome {
 	outcome
 }
 
-fn outcome(revisions: GlorpRevisions, delta: GlorpDelta, changed_config_paths: Vec<ConfigPath>) -> GlorpOutcome {
+const fn outcome(revisions: GlorpRevisions, delta: GlorpDelta, changed_config_paths: Vec<ConfigPath>) -> GlorpOutcome {
 	GlorpOutcome {
 		delta,
 		revisions,
 		changed_config_paths,
-		warnings: Vec::new(),
+		warnings: vec![],
 	}
 }

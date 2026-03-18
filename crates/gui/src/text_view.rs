@@ -15,7 +15,7 @@ const GUIDE_COLOR: Color = Color::from_rgba(0.6, 0.7, 1.0, 0.18);
 const BORDER_COLOR: Color = Color::from_rgba(0.8, 0.8, 0.9, 0.65);
 
 #[derive(Debug, Clone)]
-pub(crate) struct SceneTextLayer {
+pub struct SceneTextLayer {
 	snapshot: Arc<SessionSnapshot>,
 	layout_width: f32,
 	scroll: Vector,
@@ -26,7 +26,7 @@ pub(crate) struct SceneTextLayer {
 }
 
 impl SceneTextLayer {
-	pub(crate) fn new(snapshot: Arc<SessionSnapshot>, layout_width: f32, scroll: Vector) -> Self {
+	pub fn new(snapshot: Arc<SessionSnapshot>, layout_width: f32, scroll: Vector) -> Self {
 		Self {
 			snapshot,
 			layout_width,
@@ -38,24 +38,24 @@ impl SceneTextLayer {
 		}
 	}
 
-	pub(crate) fn backdrop_only(mut self) -> Self {
+	pub fn backdrop_only(mut self) -> Self {
 		self.draw_backdrop = true;
 		self.draw_text = false;
 		self
 	}
 
-	pub(crate) fn text_only(mut self) -> Self {
+	pub fn text_only(mut self) -> Self {
 		self.draw_backdrop = false;
 		self.draw_text = true;
 		self
 	}
 
-	pub(crate) fn width(mut self, width: impl Into<Length>) -> Self {
+	pub fn width(mut self, width: impl Into<Length>) -> Self {
 		self.width = width.into();
 		self
 	}
 
-	pub(crate) fn height(mut self, height: impl Into<Length>) -> Self {
+	pub fn height(mut self, height: impl Into<Length>) -> Self {
 		self.height = height.into();
 		self
 	}

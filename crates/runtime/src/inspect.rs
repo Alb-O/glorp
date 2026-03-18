@@ -1,7 +1,7 @@
 use glorp_api::InspectStateView;
 
 #[must_use]
-pub fn inspect_state(
+pub const fn inspect_state(
 	hovered_target: Option<glorp_api::CanvasTarget>, selected_target: Option<glorp_api::CanvasTarget>,
 ) -> InspectStateView {
 	InspectStateView {

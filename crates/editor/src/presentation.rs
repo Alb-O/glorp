@@ -48,7 +48,7 @@ impl EditorPresentation {
 	/// Builds a synchronized hot-path presentation from already-derived editor
 	/// state.
 	#[must_use]
-	pub fn new(
+	pub const fn new(
 		revision: u64, viewport_metrics: EditorViewportMetrics, text_layer: EditorTextLayerState,
 		editor: EditorViewState, editor_bytes: usize, undo_depth: usize, redo_depth: usize,
 	) -> Self {
@@ -66,24 +66,24 @@ impl EditorPresentation {
 
 impl ScenePresentation {
 	#[must_use]
-	pub fn new(revision: u64, layout: Arc<DocumentLayout>) -> Self {
+	pub const fn new(revision: u64, layout: Arc<DocumentLayout>) -> Self {
 		Self { revision, layout }
 	}
 }
 
 impl SessionSnapshot {
 	#[must_use]
-	pub fn new(editor: EditorPresentation) -> Self {
+	pub const fn new(editor: EditorPresentation) -> Self {
 		Self { editor, scene: None }
 	}
 
 	#[must_use]
-	pub fn mode(&self) -> EditorMode {
+	pub const fn mode(&self) -> EditorMode {
 		self.editor.editor.mode
 	}
 
 	#[must_use]
-	pub fn editor_bytes(&self) -> usize {
+	pub const fn editor_bytes(&self) -> usize {
 		self.editor.editor_bytes
 	}
 }

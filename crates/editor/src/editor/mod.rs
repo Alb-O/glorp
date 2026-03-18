@@ -191,13 +191,13 @@ impl EditorOutcome {
 
 	#[cfg(test)]
 	#[must_use]
-	pub fn document_changed(&self) -> bool {
+	pub const fn document_changed(&self) -> bool {
 		self.text_edit.is_some()
 	}
 
 	#[cfg(test)]
 	#[must_use]
-	pub fn requires_scene_rebuild(&self) -> bool {
+	pub const fn requires_scene_rebuild(&self) -> bool {
 		self.document_changed()
 	}
 }

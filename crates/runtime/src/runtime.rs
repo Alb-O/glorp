@@ -2,7 +2,10 @@ use {
 	crate::{
 		ConfigStore, ConfigStorePaths, events::SubscriptionSet, execute, persistence, project, state::RuntimeState,
 	},
-	glorp_api::*,
+	glorp_api::{
+		GlorpCapabilities, GlorpCommand, GlorpError, GlorpEvent, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult,
+		GlorpStreamToken, GlorpSubscription, SamplePreset,
+	},
 	std::path::PathBuf,
 };
 
@@ -49,7 +52,7 @@ impl GlorpRuntime {
 			ui: self.state.ui.clone(),
 			revisions: self.state.revisions,
 			snapshot: self.state.session.snapshot().clone(),
-			document_text: self.state.session.text().to_owned(),
+			document_text: self.state.session.text().into(),
 		}
 	}
 }
@@ -71,7 +74,7 @@ impl GlorpHost for GlorpRuntime {
 				scene,
 				include_document_text,
 			))),
-			GlorpQuery::DocumentText => Ok(GlorpQueryResult::DocumentText(self.state.session.text().to_owned())),
+			GlorpQuery::DocumentText => Ok(GlorpQueryResult::DocumentText(self.state.session.text().into())),
 			GlorpQuery::Selection => Ok(GlorpQueryResult::Selection(project::selection_view_from_state(
 				&self.state,
 			))),
@@ -122,13 +125,13 @@ fn sample_text(preset: Option<SamplePreset>) -> String {
 			"chapter 04: emoji 🙂🚀👩‍💻 over baseline checks\n",
 			"chapter 05: end marker"
 		)
-		.to_owned(),
-		SamplePreset::Mixed => "office affine ffi ffl\n漢字カタカナ and Latin\nالسلام عليكم\nemoji 🙂🚀👩‍💻".to_owned(),
-		SamplePreset::Rust => "fn main() {\n    println!(\"ffi -> office -> 汉字\");\n}\n".to_owned(),
-		SamplePreset::Ligatures => "office affine final fluff ffi ffl fj".to_owned(),
-		SamplePreset::Arabic => "السلام عليكم\nمرحبا بالعالم".to_owned(),
-		SamplePreset::Cjk => "漢字かなカナ\n混在テキスト with ASCII".to_owned(),
-		SamplePreset::Emoji => "🙂🚀👩‍💻 text + emoji fallback".to_owned(),
+		.into(),
+		SamplePreset::Mixed => "office affine ffi ffl\n漢字カタカナ and Latin\nالسلام عليكم\nemoji 🙂🚀👩‍💻".into(),
+		SamplePreset::Rust => "fn main() {\n    println!(\"ffi -> office -> 汉字\");\n}\n".into(),
+		SamplePreset::Ligatures => "office affine final fluff ffi ffl fj".into(),
+		SamplePreset::Arabic => "السلام عليكم\nمرحبا بالعالم".into(),
+		SamplePreset::Cjk => "漢字かなカナ\n混在テキスト with ASCII".into(),
+		SamplePreset::Emoji => "🙂🚀👩‍💻 text + emoji fallback".into(),
 		SamplePreset::Custom => String::new(),
 	}
 }

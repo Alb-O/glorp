@@ -13,7 +13,7 @@ use {
 const SCROLL_SETTLE_EPSILON: f32 = 0.01;
 
 #[derive(Debug, Default)]
-pub(crate) struct CanvasState {
+pub struct CanvasState {
 	hovered_target: Option<CanvasTarget>,
 	focused: bool,
 	scroll: Vector,
@@ -29,7 +29,7 @@ pub(super) struct DecodedEvent {
 }
 
 impl DecodedEvent {
-	pub(super) fn new(canvas_intent: CanvasIntent, editor_intent: Option<EditorIntent>) -> Self {
+	pub(super) const fn new(canvas_intent: CanvasIntent, editor_intent: Option<EditorIntent>) -> Self {
 		Self {
 			canvas_intent,
 			editor_intent,
@@ -68,11 +68,11 @@ pub(super) enum CanvasAction {
 }
 
 impl CanvasAction {
-	pub(super) fn publish_canvas(event: CanvasEvent, capture: bool) -> Self {
+	pub(super) const fn publish_canvas(event: CanvasEvent, capture: bool) -> Self {
 		Self::Publish(Message::Canvas(event), capture)
 	}
 
-	pub(super) fn publish_editor(intent: EditorIntent, capture: bool) -> Self {
+	pub(super) const fn publish_editor(intent: EditorIntent, capture: bool) -> Self {
 		Self::Publish(Message::Editor(intent), capture)
 	}
 
@@ -87,11 +87,11 @@ impl CanvasAction {
 }
 
 impl CanvasState {
-	pub(super) fn focused(&self) -> bool {
+	pub const fn focused(&self) -> bool {
 		self.focused
 	}
 
-	pub(super) fn scroll(&self) -> Vector {
+	pub const fn scroll(&self) -> Vector {
 		self.scroll
 	}
 

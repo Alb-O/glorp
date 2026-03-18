@@ -12,17 +12,17 @@ use {
 /// Props for the sidebar shell.
 ///
 /// The parent supplies the active tab body.
-pub(crate) struct SidebarProps<'a> {
-	pub(crate) active_tab: SidebarTab,
-	pub(crate) editor_mode: crate::editor::EditorMode,
-	pub(crate) editor_bytes: usize,
-	pub(crate) undo_depth: usize,
-	pub(crate) redo_depth: usize,
-	pub(crate) body: Element<'a, Message>,
-	pub(crate) stacked: bool,
+pub struct SidebarProps<'a> {
+	pub active_tab: SidebarTab,
+	pub editor_mode: crate::editor::EditorMode,
+	pub editor_bytes: usize,
+	pub undo_depth: usize,
+	pub redo_depth: usize,
+	pub body: Element<'a, Message>,
+	pub stacked: bool,
 }
 
-pub(crate) fn view_sidebar(props: SidebarProps<'_>) -> Element<'_, Message> {
+pub fn view_sidebar(props: SidebarProps<'_>) -> Element<'_, Message> {
 	let SidebarProps {
 		active_tab,
 		editor_mode,

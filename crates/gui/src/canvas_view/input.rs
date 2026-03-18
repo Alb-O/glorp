@@ -91,7 +91,7 @@ fn key_intent(
 	}
 }
 
-fn command_key_intent(latin: Option<char>, redo_modifier: bool) -> Option<EditorIntent> {
+const fn command_key_intent(latin: Option<char>, redo_modifier: bool) -> Option<EditorIntent> {
 	match latin {
 		Some('z') if redo_modifier => Some(EditorIntent::History(EditorHistoryIntent::Redo)),
 		Some('z') => Some(EditorIntent::History(EditorHistoryIntent::Undo)),
@@ -123,7 +123,7 @@ fn normal_named_key_intent(key: &keyboard::Key) -> Option<EditorIntent> {
 	}
 }
 
-fn normal_latin_key_intent(latin: Option<char>) -> Option<EditorIntent> {
+const fn normal_latin_key_intent(latin: Option<char>) -> Option<EditorIntent> {
 	match latin {
 		Some('h') => Some(EditorIntent::Motion(EditorMotion::Left)),
 		Some('l') => Some(EditorIntent::Motion(EditorMotion::Right)),

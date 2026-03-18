@@ -556,21 +556,29 @@ fn glorp_value(value: Value) -> Result<GlorpValue, LabeledError> {
 }
 
 fn flatten_record(prefix: Option<&str>, value: GlorpValue) -> Result<Vec<ConfigAssignment>, LabeledError> {
+	let mut assignments = Vec::new();
+	flatten_record_into(&mut assignments, prefix, value)?;
+	Ok(assignments)
+}
+
+fn flatten_record_into(
+	assignments: &mut Vec<ConfigAssignment>, prefix: Option<&str>, value: GlorpValue,
+) -> Result<(), LabeledError> {
 	match value {
-		GlorpValue::Record(fields) => fields
-			.into_iter()
-			.try_fold(Vec::new(), |mut assignments, (key, value)| {
-				let path = match prefix {
-					Some(prefix) => format!("{prefix}.{key}"),
-					None => key,
-				};
-				assignments.extend(flatten_record(Some(&path), value)?);
-				Ok(assignments)
-			}),
-		value => Ok(vec![ConfigAssignment {
-			path: prefix.unwrap_or_default().to_owned(),
-			value,
-		}]),
+		GlorpValue::Record(fields) => fields.into_iter().try_for_each(|(key, value)| {
+			let path = match prefix {
+				Some(prefix) => format!("{prefix}.{key}"),
+				None => key,
+			};
+			flatten_record_into(assignments, Some(&path), value)
+		}),
+		value => {
+			assignments.push(ConfigAssignment {
+				path: prefix.unwrap_or_default().to_owned(),
+				value,
+			});
+			Ok(())
+		}
 	}
 }
 

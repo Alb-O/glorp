@@ -9,7 +9,7 @@ mod perf;
 mod shell;
 mod sidebar;
 
-pub(crate) use {
+pub use {
 	controls::{ControlsTabProps, view_controls_tab},
 	inspect::{InspectTabProps, view_inspect_tab},
 	perf::view_perf_tab,

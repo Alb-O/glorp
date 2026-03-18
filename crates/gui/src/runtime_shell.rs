@@ -34,7 +34,7 @@ enum ShellPane {
 	Canvas,
 }
 
-pub(crate) struct RuntimeShell {
+pub struct RuntimeShell {
 	session: GuiRuntimeSession,
 	host: Arc<Mutex<RuntimeHost>>,
 	frame: GuiRuntimeFrame,

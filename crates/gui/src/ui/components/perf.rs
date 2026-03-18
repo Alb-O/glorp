@@ -10,7 +10,7 @@ use {
 	},
 };
 
-pub(crate) fn view_perf_tab(dashboard: &PerfDashboard) -> Element<'static, Message> {
+pub fn view_perf_tab(dashboard: &PerfDashboard) -> Element<'static, Message> {
 	panel_scrollable(
 		container(
 			column![
@@ -121,7 +121,7 @@ fn chart_bounds(size: Size) -> Rectangle {
 
 fn draw_grid(frame: &mut canvas::Frame, bounds: Rectangle, palette: &iced::theme::Palette) {
 	for (fraction, alpha) in [(0.0, 0.18), (0.5, 0.18), (1.0, 0.5)] {
-		let y = bounds.y + bounds.height * fraction;
+		let y = bounds.height.mul_add(fraction, bounds.y);
 		let path = canvas::Path::line(Point::new(bounds.x, y), Point::new(bounds.x + bounds.width, y));
 		frame.stroke(
 			&path,
@@ -163,7 +163,7 @@ fn draw_series(frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSe
 	if graph.samples_ms.is_empty() {
 		frame.fill_text(canvas::Text {
 			content: "waiting for samples".to_string(),
-			position: Point::new(bounds.x + 10.0, bounds.y + bounds.height * 0.55),
+			position: Point::new(bounds.x + 10.0, bounds.height.mul_add(0.55, bounds.y)),
 			color: palette.background.base.text,
 			size: Pixels(14.0),
 			font: Font::MONOSPACE,
@@ -270,7 +270,7 @@ fn count_as_f32(items: impl IntoIterator) -> f32 {
 
 fn sample_y(bounds: Rectangle, sample_ms: f32, ceiling_ms: f32) -> f32 {
 	let normalized = 1.0 - (sample_ms / ceiling_ms.max(0.001)).clamp(0.0, 1.0);
-	bounds.y + bounds.height * normalized
+	bounds.height.mul_add(normalized, bounds.y)
 }
 
 fn spike_color(sample_ms: f32, warning_ms: Option<f32>, severe_ms: Option<f32>) -> Color {

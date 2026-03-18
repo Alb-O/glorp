@@ -22,7 +22,7 @@ use {
 };
 
 #[derive(Debug, Clone)]
-pub(crate) struct SceneOverlayLayer {
+pub struct SceneOverlayLayer {
 	snapshot: Arc<SessionSnapshot>,
 	layout_width: f32,
 	inspect_overlays: Arc<[OverlayPrimitive]>,
@@ -34,7 +34,7 @@ pub(crate) struct SceneOverlayLayer {
 }
 
 impl SceneOverlayLayer {
-	pub(crate) fn new(
+	pub const fn new(
 		snapshot: Arc<SessionSnapshot>, layout_width: f32, inspect_overlays: Arc<[OverlayPrimitive]>, focused: bool,
 		scroll: Vector, perf: CanvasPerfSink,
 	) -> Self {
@@ -71,7 +71,7 @@ impl SceneOverlayLayer {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct EditorUnderlayLayer {
+pub struct EditorUnderlayLayer {
 	snapshot: Arc<SessionSnapshot>,
 	scroll: Vector,
 	perf: CanvasPerfSink,
@@ -80,7 +80,7 @@ pub(crate) struct EditorUnderlayLayer {
 }
 
 impl EditorUnderlayLayer {
-	pub(crate) fn new(snapshot: Arc<SessionSnapshot>, scroll: Vector, perf: CanvasPerfSink) -> Self {
+	pub const fn new(snapshot: Arc<SessionSnapshot>, scroll: Vector, perf: CanvasPerfSink) -> Self {
 		Self {
 			snapshot,
 			scroll,
@@ -298,7 +298,7 @@ fn draw_rect_primitive(
 			bounds: rect_bounds,
 			border: style
 				.stroke
-				.map_or(iced::Border::default(), |(color, width)| iced::Border {
+				.map_or_else(iced::Border::default, |(color, width)| iced::Border {
 					color,
 					width,
 					..iced::Border::default()
@@ -473,13 +473,13 @@ fn rectangle_outline(rect: LayoutRect) -> [OutlineSegment; 4] {
 
 fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 	if rectangles.is_empty() {
-		return Vec::new();
+		return vec![];
 	}
 
 	let xs = unique_sorted_edges(rectangles.iter().flat_map(|rect| [rect.x, rect.x + rect.width]));
 	let ys = unique_sorted_edges(rectangles.iter().flat_map(|rect| [rect.y, rect.y + rect.height]));
 	let (Some(columns), Some(rows)) = (xs.len().checked_sub(1), ys.len().checked_sub(1)) else {
-		return Vec::new();
+		return vec![];
 	};
 	let mut occupied = vec![false; rows * columns];
 
@@ -494,17 +494,18 @@ fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 				.any(|rect| x0 >= rect.x && x1 <= rect.x + rect.width && y0 >= rect.y && y1 <= rect.y + rect.height);
 		}
 	}
+	let occupied = |row: usize, column: usize| occupied[row * columns + column];
 
 	let mut horizontal = Vec::new();
 	let mut vertical = Vec::new();
 
 	for row in 0..rows {
 		for column in 0..columns {
-			if !occupied[row * columns + column] {
+			if !occupied(row, column) {
 				continue;
 			}
 
-			if row == 0 || !occupied[(row - 1) * columns + column] {
+			if row == 0 || !occupied(row - 1, column) {
 				horizontal.push(HorizontalSegment {
 					y: ys[row],
 					x0: xs[column],
@@ -512,7 +513,7 @@ fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 				});
 			}
 
-			if row + 1 == rows || !occupied[(row + 1) * columns + column] {
+			if row + 1 == rows || !occupied(row + 1, column) {
 				horizontal.push(HorizontalSegment {
 					y: ys[row + 1],
 					x0: xs[column],
@@ -520,7 +521,7 @@ fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 				});
 			}
 
-			if column == 0 || !occupied[row * columns + column - 1] {
+			if column == 0 || !occupied(row, column - 1) {
 				vertical.push(VerticalSegment {
 					x: xs[column],
 					y0: ys[row],
@@ -528,7 +529,7 @@ fn merged_selection_outline(rectangles: &[LayoutRect]) -> Vec<OutlineSegment> {
 				});
 			}
 
-			if column + 1 == columns || !occupied[row * columns + column + 1] {
+			if column + 1 == columns || !occupied(row, column + 1) {
 				vertical.push(VerticalSegment {
 					x: xs[column + 1],
 					y0: ys[row],
@@ -674,7 +675,7 @@ fn rect_style(kind: OverlayRectKind) -> RectStyle {
 	}
 }
 
-fn label_style(kind: OverlayLabelKind) -> LabelStyle {
+const fn label_style(kind: OverlayLabelKind) -> LabelStyle {
 	match kind {
 		OverlayLabelKind::SceneFooter => LabelStyle {
 			color: Color::from_rgb8(180, 190, 210),
@@ -689,7 +690,7 @@ fn label_style(kind: OverlayLabelKind) -> LabelStyle {
 	}
 }
 
-fn selection_palette() -> SelectionPalette {
+const fn selection_palette() -> SelectionPalette {
 	SelectionPalette {
 		selection_fill: Color::from_rgba(0.28, 0.74, 1.0, 0.18),
 		selection_stroke: Color::from_rgba(0.6, 0.9, 1.0, 0.66),

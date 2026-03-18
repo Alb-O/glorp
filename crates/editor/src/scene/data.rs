@@ -26,8 +26,8 @@ pub struct LayoutCluster {
 
 impl LayoutCluster {
 	#[must_use]
-	pub fn center_x(&self) -> f32 {
-		self.x + (self.width * 0.5)
+	pub const fn center_x(&self) -> f32 {
+		self.width.mul_add(0.5, self.x)
 	}
 }
 

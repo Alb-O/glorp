@@ -1,1 +1,1 @@
-pub(crate) use glorp_editor::{ScenePresentation, SessionSnapshot};
+pub use glorp_editor::{ScenePresentation, SessionSnapshot};

@@ -28,7 +28,7 @@ pub(super) struct CanvasDrawSample {
 }
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct CanvasPerfSink {
+pub struct CanvasPerfSink {
 	pending: Arc<Mutex<PendingSamples>>,
 }
 

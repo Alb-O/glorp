@@ -107,8 +107,11 @@ pub fn selection_rectangles(layout: &DocumentLayout, range: &Range<usize>) -> Ar
 	let mut span_end = span_start;
 
 	for cluster in selected {
-		let continues_span =
-			cluster.run_index == span_end.run_index && cluster.byte_range.start <= span_end.byte_range.end;
+		let continues_span = {
+			let same_run = cluster.run_index == span_end.run_index;
+			let touches_span = span_end.byte_range.end >= cluster.byte_range.start;
+			same_run && touches_span
+		};
 		if !continues_span {
 			rectangles.push(span_rectangle(span_start, span_end));
 			span_start = cluster;
@@ -228,8 +231,8 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 
 			(visual_line, offset, block_width)
 		});
-	let y = (visual_lines_offset(cursor.line, buffer) + count_as_f32(layout.iter().take(visual_line))) * line_height
-		- scroll.vertical;
+	let y = (visual_lines_offset(cursor.line, buffer) + count_as_f32(layout.iter().take(visual_line)))
+		.mul_add(line_height, -scroll.vertical);
 
 	Some(InsertCursorGeometry {
 		x: offset,

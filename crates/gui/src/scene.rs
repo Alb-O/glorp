@@ -1,1 +1,1 @@
-pub(crate) use glorp_editor::DocumentLayout;
+pub use glorp_editor::DocumentLayout;

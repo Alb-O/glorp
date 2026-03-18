@@ -11,12 +11,12 @@ use {
 };
 
 /// Props for the inspect tab.
-pub(crate) struct InspectTabProps {
-	pub(crate) warnings: Arc<[String]>,
-	pub(crate) interaction_details: Arc<str>,
+pub struct InspectTabProps {
+	pub warnings: Arc<[String]>,
+	pub interaction_details: Arc<str>,
 }
 
-pub(crate) fn view_inspect_tab(props: &InspectTabProps) -> Element<'static, Message> {
+pub fn view_inspect_tab(props: &InspectTabProps) -> Element<'static, Message> {
 	panel_scrollable(
 		column![
 			text("Warnings").size(18),

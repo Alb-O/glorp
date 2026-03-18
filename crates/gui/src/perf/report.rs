@@ -34,35 +34,35 @@ const RECENT_ACTIVITY_METRICS: [MetricKind; 9] = [
 ];
 
 #[derive(Debug, Clone)]
-pub(crate) struct PerfGraphSeries {
-	pub(crate) title: &'static str,
-	pub(crate) samples_ms: Arc<[f32]>,
-	pub(crate) ceiling_ms: f32,
-	pub(crate) latest_ms: f32,
-	pub(crate) avg_ms: f32,
-	pub(crate) p95_ms: f32,
-	pub(crate) warning_ms: Option<f32>,
-	pub(crate) severe_ms: Option<f32>,
+pub struct PerfGraphSeries {
+	pub title: &'static str,
+	pub samples_ms: Arc<[f32]>,
+	pub ceiling_ms: f32,
+	pub latest_ms: f32,
+	pub avg_ms: f32,
+	pub p95_ms: f32,
+	pub warning_ms: Option<f32>,
+	pub severe_ms: Option<f32>,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PerfOverview {
-	pub(crate) editor_mode: EditorMode,
-	pub(crate) editor_bytes: usize,
-	pub(crate) editor_chars: usize,
-	pub(crate) line_count: usize,
-	pub(crate) run_count: usize,
-	pub(crate) glyph_count: usize,
-	pub(crate) cluster_count: usize,
-	pub(crate) font_count: usize,
-	pub(crate) warning_count: usize,
-	pub(crate) scene_width: f32,
-	pub(crate) scene_height: f32,
-	pub(crate) layout_width: f32,
+pub struct PerfOverview {
+	pub editor_mode: EditorMode,
+	pub editor_bytes: usize,
+	pub editor_chars: usize,
+	pub line_count: usize,
+	pub run_count: usize,
+	pub glyph_count: usize,
+	pub cluster_count: usize,
+	pub font_count: usize,
+	pub warning_count: usize,
+	pub scene_width: f32,
+	pub scene_height: f32,
+	pub layout_width: f32,
 }
 
 impl PerfOverview {
-	pub(crate) fn text(&self) -> String {
+	pub fn text(&self) -> String {
 		format!(
 			"editor mode   {}\nbytes/chars   {} / {}\nlines         {}\nruns/glyphs   {} / {}\nclusters      {}\nfonts seen    {}\nwarnings      {}\nscene size    {:.1} x {:.1}\nlayout width  {:.1}",
 			self.editor_mode,
@@ -82,19 +82,19 @@ impl PerfOverview {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PerfMetricSummary {
-	pub(crate) label: &'static str,
-	pub(crate) last_ms: f32,
-	pub(crate) avg_ms: f32,
-	pub(crate) p95_ms: f32,
-	pub(crate) max_ms: f32,
-	pub(crate) total_samples: u64,
-	pub(crate) over_warning: u64,
-	pub(crate) over_budget: u64,
+pub struct PerfMetricSummary {
+	pub label: &'static str,
+	pub last_ms: f32,
+	pub avg_ms: f32,
+	pub p95_ms: f32,
+	pub max_ms: f32,
+	pub total_samples: u64,
+	pub over_warning: u64,
+	pub over_budget: u64,
 }
 
 impl PerfMetricSummary {
-	pub(crate) fn text(&self) -> String {
+	pub fn text(&self) -> String {
 		format!(
 			"{:<14} last {:>5.2} ms  avg {:>5.2}  p95 {:>5.2}  max {:>5.2}  n {:>4}  >8 {:>4}  >16 {:>4}",
 			self.label,
@@ -110,13 +110,13 @@ impl PerfMetricSummary {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PerfRecentActivity {
-	pub(crate) label: &'static str,
-	pub(crate) recent_ms: Arc<[f32]>,
+pub struct PerfRecentActivity {
+	pub label: &'static str,
+	pub recent_ms: Arc<[f32]>,
 }
 
 impl PerfRecentActivity {
-	pub(crate) fn text(&self) -> String {
+	pub fn text(&self) -> String {
 		if self.recent_ms.is_empty() {
 			return format!("{:<14} no samples", self.label);
 		}
@@ -133,21 +133,21 @@ impl PerfRecentActivity {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PerfFramePacingSummary {
-	pub(crate) fps: f32,
-	pub(crate) last_ms: f32,
-	pub(crate) avg_ms: f32,
-	pub(crate) max_ms: f32,
-	pub(crate) total_draws: u64,
-	pub(crate) over_budget: u64,
-	pub(crate) severe_jank: u64,
-	pub(crate) cache_hits: u64,
-	pub(crate) cache_misses: u64,
-	pub(crate) recent_ms: Arc<[f32]>,
+pub struct PerfFramePacingSummary {
+	pub fps: f32,
+	pub last_ms: f32,
+	pub avg_ms: f32,
+	pub max_ms: f32,
+	pub total_draws: u64,
+	pub over_budget: u64,
+	pub severe_jank: u64,
+	pub cache_hits: u64,
+	pub cache_misses: u64,
+	pub recent_ms: Arc<[f32]>,
 }
 
 impl PerfFramePacingSummary {
-	pub(crate) fn text(&self) -> String {
+	pub fn text(&self) -> String {
 		let total = self.cache_hits + self.cache_misses;
 		let miss_rate_tenths = (self.cache_misses.saturating_mul(1000) + total / 2)
 			.checked_div(total)
@@ -171,7 +171,7 @@ impl PerfFramePacingSummary {
 		)
 	}
 
-	pub(crate) fn recent_activity(&self) -> PerfRecentActivity {
+	pub fn recent_activity(&self) -> PerfRecentActivity {
 		PerfRecentActivity {
 			label: "frame delta",
 			recent_ms: self.recent_ms.clone(),
@@ -180,15 +180,15 @@ impl PerfFramePacingSummary {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct PerfDashboard {
-	pub(crate) overview: PerfOverview,
-	pub(crate) hot_paths: Vec<PerfMetricSummary>,
-	pub(crate) recent_activity: Vec<PerfRecentActivity>,
-	pub(crate) frame_pacing: PerfFramePacingSummary,
-	pub(crate) graphs: Vec<PerfGraphSeries>,
+pub struct PerfDashboard {
+	pub overview: PerfOverview,
+	pub hot_paths: Vec<PerfMetricSummary>,
+	pub recent_activity: Vec<PerfRecentActivity>,
+	pub frame_pacing: PerfFramePacingSummary,
+	pub graphs: Vec<PerfGraphSeries>,
 }
 
-pub(crate) fn unavailable_dashboard(editor_mode: EditorMode, editor_bytes: usize, layout_width: f32) -> PerfDashboard {
+pub fn unavailable_dashboard(editor_mode: EditorMode, editor_bytes: usize, layout_width: f32) -> PerfDashboard {
 	PerfDashboard {
 		overview: PerfOverview {
 			editor_mode,

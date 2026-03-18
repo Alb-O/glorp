@@ -23,10 +23,10 @@
 //! - `ui::components` holds composed views and props structs.
 //! - `ui::tokens` holds theme-aware style helpers and tiny primitives.
 
-pub(crate) mod components;
-pub(crate) mod tokens;
+pub mod components;
+pub mod tokens;
 
-pub(crate) use {
+pub use {
 	components::{
 		CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, default_sidebar_ratio,
 		is_stacked_shell, view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar,

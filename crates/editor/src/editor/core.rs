@@ -35,7 +35,7 @@ impl EditorEngine {
 		self.core.document.text()
 	}
 
-	pub fn mode(&self) -> EditorMode {
+	pub const fn mode(&self) -> EditorMode {
 		self.core.session.mode()
 	}
 
@@ -101,7 +101,7 @@ impl EditorEngine {
 		});
 	}
 
-	pub fn selection(&self) -> Option<&EditorSelection> {
+	pub const fn selection(&self) -> Option<&EditorSelection> {
 		self.core.session.selection()
 	}
 
@@ -109,11 +109,11 @@ impl EditorEngine {
 		self.selection().map(|selection| selection.range.clone())
 	}
 
-	pub fn set_selection(&mut self, selection: Option<EditorSelection>) {
+	pub const fn set_selection(&mut self, selection: Option<EditorSelection>) {
 		self.core.session.set_selection(selection);
 	}
 
-	pub fn set_mode(&mut self, mode: EditorMode) {
+	pub const fn set_mode(&mut self, mode: EditorMode) {
 		self.core.session.set_mode(mode);
 	}
 
@@ -121,23 +121,23 @@ impl EditorEngine {
 		self.core.session.caret()
 	}
 
-	pub fn preferred_x(&self) -> Option<f32> {
+	pub const fn preferred_x(&self) -> Option<f32> {
 		self.core.session.preferred_x()
 	}
 
-	pub fn set_preferred_x(&mut self, preferred_x: Option<f32>) {
+	pub const fn set_preferred_x(&mut self, preferred_x: Option<f32>) {
 		self.core.session.set_preferred_x(preferred_x);
 	}
 
-	pub fn pointer_anchor(&self) -> Option<usize> {
+	pub const fn pointer_anchor(&self) -> Option<usize> {
 		self.core.session.pointer_anchor()
 	}
 
-	pub fn set_pointer_anchor(&mut self, pointer_anchor: Option<usize>) {
+	pub const fn set_pointer_anchor(&mut self, pointer_anchor: Option<usize>) {
 		self.core.session.set_pointer_anchor(pointer_anchor);
 	}
 
-	pub fn clear_pointer_anchor(&mut self) {
+	pub const fn clear_pointer_anchor(&mut self) {
 		self.set_pointer_anchor(None);
 	}
 

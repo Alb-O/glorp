@@ -9,17 +9,17 @@ use {
 	std::{sync::Arc, time::Instant},
 	tracing::trace_span,
 };
-pub(crate) use {
+pub use {
 	geometry::{scene_origin, scene_viewport_size},
 	state::CanvasState,
 };
 
 #[derive(Debug, Clone)]
-pub(crate) struct GlyphCanvas {
-	pub(crate) snapshot: Arc<SessionSnapshot>,
-	pub(crate) layout_width: f32,
-	pub(crate) inspect_targets_active: bool,
-	pub(crate) perf: CanvasPerfSink,
+pub struct GlyphCanvas {
+	pub snapshot: Arc<SessionSnapshot>,
+	pub layout_width: f32,
+	pub inspect_targets_active: bool,
+	pub perf: CanvasPerfSink,
 }
 
 impl GlyphCanvas {

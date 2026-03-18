@@ -67,11 +67,12 @@ pub fn selection_view_from_state(state: &crate::state::RuntimeState) -> Selectio
 	let editor = &state.session.snapshot().editor;
 	let text = state.session.text();
 	let selection = editor.editor.selection.as_ref();
-	let range = state::selection_range(selection);
 	SelectionStateView {
 		mode: state::mode(editor.editor.mode),
-		selected_text: selection.and_then(|selection| text.get(selection.clone()).map(ToOwned::to_owned)),
-		range,
+		selected_text: selection
+			.and_then(|selection| text.get(selection.clone()))
+			.map(str::to_owned),
+		range: selection.map(state::text_range),
 		selection_head: state::selection_head(&editor.editor),
 		pointer_anchor: state::pointer_anchor(&editor.editor),
 		viewport_target: editor.editor.viewport_target.map(layout_rect_view),
@@ -89,8 +90,8 @@ pub fn inspect_details_view_from_state(
 			hovered_target: state.ui.hovered_target,
 			selected_target: state.ui.selected_target,
 			active_target,
-			warnings: Vec::new(),
-			interaction_details: "derived scene unavailable".to_owned(),
+			warnings: vec![],
+			interaction_details: "derived scene unavailable".into(),
 			scene: None,
 		};
 	};
@@ -177,7 +178,7 @@ fn editor_view(snapshot: &SessionSnapshot, text: &str) -> EditorStateView {
 	let editor = &snapshot.editor;
 	EditorStateView {
 		mode: state::mode(editor.editor.mode),
-		selection: state::selection_range(editor.editor.selection.as_ref()),
+		selection: editor.editor.selection.as_ref().map(state::text_range),
 		selection_head: state::selection_head(&editor.editor),
 		pointer_anchor: state::pointer_anchor(&editor.editor),
 		text_bytes: editor.editor_bytes,

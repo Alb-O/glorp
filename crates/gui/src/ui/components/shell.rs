@@ -21,51 +21,49 @@ const STACK_LAYOUT_BREAKPOINT: f32 = 1120.0;
 const MIN_CANVAS_WIDTH: f32 = 620.0;
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct CanvasDecorations {
+pub struct CanvasDecorations {
 	/// Draw run top and baseline guides over the scene.
-	pub(crate) show_baselines: bool,
+	pub show_baselines: bool,
 	/// Draw glyph hitbox overlays for inspect mode.
-	pub(crate) show_hitboxes: bool,
+	pub show_hitboxes: bool,
 }
 
 /// Immutable inputs for rendering the stacked canvas surface.
 ///
 /// The pane is driven from a single coherent session snapshot.
-pub(crate) struct CanvasPaneProps {
+pub struct CanvasPaneProps {
 	/// Shared session snapshot for all canvas sublayers.
-	pub(crate) snapshot: Arc<SessionSnapshot>,
+	pub snapshot: Arc<SessionSnapshot>,
 	/// Current visible layout width after shell sizing and padding.
-	pub(crate) layout_width: f32,
+	pub layout_width: f32,
 	/// Optional static scene decorations.
-	pub(crate) decorations: CanvasDecorations,
+	pub decorations: CanvasDecorations,
 	/// Transient inspect overlays derived from hover/selection state.
-	pub(crate) inspect_overlays: std::sync::Arc<[OverlayPrimitive]>,
+	pub inspect_overlays: std::sync::Arc<[OverlayPrimitive]>,
 	/// Whether inspect hit testing should be active on the canvas path.
-	pub(crate) inspect_targets_active: bool,
+	pub inspect_targets_active: bool,
 	/// Whether the canvas currently owns keyboard focus.
-	pub(crate) focused: bool,
+	pub focused: bool,
 	/// Viewport scroll offset in scene coordinates.
-	pub(crate) scroll: Vector,
+	pub scroll: Vector,
 	/// Metrics sink shared by the layered canvas widgets.
-	pub(crate) perf: CanvasPerfSink,
+	pub perf: CanvasPerfSink,
 	/// Whether the shell is in stacked mobile layout.
-	pub(crate) stacked: bool,
+	pub stacked: bool,
 }
 
 /// Returns whether the shell should collapse into a stacked layout.
-pub(crate) fn is_stacked_shell(size: Size) -> bool {
+pub fn is_stacked_shell(size: Size) -> bool {
 	size.width < STACK_LAYOUT_BREAKPOINT
 }
 
 /// The initial sidebar ratio for the wide `pane_grid` shell.
-pub(crate) fn default_sidebar_ratio() -> f32 {
+pub fn default_sidebar_ratio() -> f32 {
 	SIDEBAR_WIDTH / (SIDEBAR_WIDTH + MIN_CANVAS_WIDTH)
 }
 
 /// Builds the stacked shell used below the pane-grid breakpoint.
-pub(crate) fn view_stacked_shell<'a>(
-	sidebar: Element<'a, Message>, canvas: Element<'a, Message>,
-) -> Element<'a, Message> {
+pub fn view_stacked_shell<'a>(sidebar: Element<'a, Message>, canvas: Element<'a, Message>) -> Element<'a, Message> {
 	container(column![canvas, sidebar].spacing(12))
 		.padding(16)
 		.width(Length::Fill)
@@ -74,7 +72,7 @@ pub(crate) fn view_stacked_shell<'a>(
 }
 
 /// Renders the canvas pane inside the shared app surface.
-pub(crate) fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
+pub fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
 	let CanvasPaneProps {
 		snapshot,
 		layout_width,

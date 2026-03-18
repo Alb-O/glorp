@@ -392,21 +392,30 @@ impl GlorpHost for Host {
 }
 
 fn parse_value(input: &str) -> GlorpValue {
-	serde_json::from_str::<serde_json::Value>(input)
-		.map_or_else(|_| GlorpValue::String(input.to_owned()), GlorpValue::from)
+	serde_json::from_str::<serde_json::Value>(input).map_or_else(|_| GlorpValue::String(input.into()), GlorpValue::from)
 }
 
 fn flatten_patch(prefix: Option<&str>, value: &GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {
+	let mut assignments = Vec::new();
+	flatten_patch_into(&mut assignments, prefix, value)?;
+	Ok(assignments)
+}
+
+fn flatten_patch_into(
+	assignments: &mut Vec<ConfigAssignment>, prefix: Option<&str>, value: &GlorpValue,
+) -> Result<(), GlorpError> {
 	match value {
-		GlorpValue::Record(fields) => fields.iter().try_fold(Vec::new(), |mut assignments, (key, value)| {
+		GlorpValue::Record(fields) => fields.iter().try_for_each(|(key, value)| {
 			let path = prefix.map_or_else(|| key.clone(), |prefix| format!("{prefix}.{key}"));
-			assignments.extend(flatten_patch(Some(&path), value)?);
-			Ok(assignments)
+			flatten_patch_into(assignments, Some(&path), value)
 		}),
-		other => Ok(vec![ConfigAssignment {
-			path: prefix.unwrap_or_default().to_owned(),
-			value: other.clone(),
-		}]),
+		other => {
+			assignments.push(ConfigAssignment {
+				path: prefix.unwrap_or_default().to_owned(),
+				value: other.clone(),
+			});
+			Ok(())
+		}
 	}
 }
 

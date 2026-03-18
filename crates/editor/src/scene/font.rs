@@ -15,7 +15,7 @@ pub fn make_font_system() -> FontSystem {
 }
 
 #[must_use]
-pub fn scene_config(
+pub const fn scene_config(
 	font_choice: FontChoice, shaping: ShapingChoice, wrapping: WrapChoice, font_size: f32, line_height: f32,
 	max_width: f32,
 ) -> SceneConfig {
@@ -43,7 +43,7 @@ pub fn build_buffer(font_system: &mut FontSystem, text: &str, config: SceneConfi
 	buffer
 }
 
-fn to_attributes(font: Font) -> Attrs<'static> {
+const fn to_attributes(font: Font) -> Attrs<'static> {
 	Attrs::new()
 		.family(to_family(font.family))
 		.weight(to_weight(font.weight))
@@ -51,7 +51,7 @@ fn to_attributes(font: Font) -> Attrs<'static> {
 		.style(to_style(font.style))
 }
 
-fn to_family(family: iced::font::Family) -> cosmic_text::Family<'static> {
+const fn to_family(family: iced::font::Family) -> cosmic_text::Family<'static> {
 	match family {
 		iced::font::Family::Name(name) => cosmic_text::Family::Name(name),
 		iced::font::Family::SansSerif => cosmic_text::Family::SansSerif,
@@ -62,7 +62,7 @@ fn to_family(family: iced::font::Family) -> cosmic_text::Family<'static> {
 	}
 }
 
-fn to_weight(weight: iced::font::Weight) -> cosmic_text::Weight {
+const fn to_weight(weight: iced::font::Weight) -> cosmic_text::Weight {
 	match weight {
 		iced::font::Weight::Thin => cosmic_text::Weight::THIN,
 		iced::font::Weight::ExtraLight => cosmic_text::Weight::EXTRA_LIGHT,
@@ -76,7 +76,7 @@ fn to_weight(weight: iced::font::Weight) -> cosmic_text::Weight {
 	}
 }
 
-fn to_stretch(stretch: iced::font::Stretch) -> cosmic_text::Stretch {
+const fn to_stretch(stretch: iced::font::Stretch) -> cosmic_text::Stretch {
 	match stretch {
 		iced::font::Stretch::UltraCondensed => cosmic_text::Stretch::UltraCondensed,
 		iced::font::Stretch::ExtraCondensed => cosmic_text::Stretch::ExtraCondensed,
@@ -90,7 +90,7 @@ fn to_stretch(stretch: iced::font::Stretch) -> cosmic_text::Stretch {
 	}
 }
 
-fn to_style(style: iced::font::Style) -> cosmic_text::Style {
+const fn to_style(style: iced::font::Style) -> cosmic_text::Style {
 	match style {
 		iced::font::Style::Normal => cosmic_text::Style::Normal,
 		iced::font::Style::Italic => cosmic_text::Style::Italic,
