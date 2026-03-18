@@ -106,21 +106,21 @@ fn reduce_control(state: &mut AppState, message: ControlsMessage) -> Option<Sess
 				return None;
 			}
 			state.controls.font = font;
-			sync_config_effect(state)
+			Some(sync_config_effect(state))
 		}
 		ControlsMessage::ShapingSelected(shaping) => {
 			if state.controls.shaping == shaping {
 				return None;
 			}
 			state.controls.shaping = shaping;
-			sync_config_effect(state)
+			Some(sync_config_effect(state))
 		}
 		ControlsMessage::WrappingSelected(wrapping) => {
 			if state.controls.wrapping == wrapping {
 				return None;
 			}
 			state.controls.wrapping = wrapping;
-			sync_config_effect(state)
+			Some(sync_config_effect(state))
 		}
 		ControlsMessage::FontSizeChanged(font_size) => {
 			if (state.controls.font_size - font_size).abs() < f32::EPSILON {
@@ -128,14 +128,14 @@ fn reduce_control(state: &mut AppState, message: ControlsMessage) -> Option<Sess
 			}
 			state.controls.font_size = font_size;
 			state.controls.line_height = state.controls.line_height.max(state.controls.font_size);
-			sync_config_effect(state)
+			Some(sync_config_effect(state))
 		}
 		ControlsMessage::LineHeightChanged(line_height) => {
 			if (state.controls.line_height - line_height).abs() < f32::EPSILON {
 				return None;
 			}
 			state.controls.line_height = line_height;
-			sync_config_effect(state)
+			Some(sync_config_effect(state))
 		}
 		ControlsMessage::ShowBaselinesChanged(show_baselines) => {
 			if state.controls.show_baselines == show_baselines {
@@ -154,18 +154,18 @@ fn reduce_control(state: &mut AppState, message: ControlsMessage) -> Option<Sess
 	}
 }
 
-fn sync_config_effect(state: &AppState) -> Option<SessionEffect> {
-	Some(session_effect(
+fn sync_config_effect(state: &AppState) -> SessionEffect {
+	session_effect(
 		state,
 		SessionRequest::SyncConfig(state.scene_config()),
 		SessionUiPolicy::reset_scroll(SceneRefreshReason::ControlsChanged),
-	))
+	)
 }
 
 fn ensure_scene_effect(state: &AppState) -> Option<SessionEffect> {
 	match scene_demand(state) {
 		SceneDemand::HotPathOnly => None,
-		demand => Some(SessionEffect {
+		demand @ SceneDemand::DerivedScene => Some(SessionEffect {
 			request: SessionRequest::EnsureScene,
 			demand,
 			policy: SessionUiPolicy::keep(),

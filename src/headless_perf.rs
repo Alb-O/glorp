@@ -110,10 +110,11 @@ fn required_arg<'a>(args: &'a [String], index: usize, flag: &str) -> Result<&'a 
 }
 
 fn parse_count(flag: &str, value: &str) -> Result<usize, String> {
-	match value.parse::<usize>() {
-		Ok(count @ 1..) => Ok(count),
-		_ => Err(format!("{flag} expects a positive integer, got `{value}`")),
-	}
+	value
+		.parse::<usize>()
+		.ok()
+		.filter(|count| *count > 0)
+		.ok_or_else(|| format!("{flag} expects a positive integer, got `{value}`"))
 }
 
 fn usage() -> String {

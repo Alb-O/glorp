@@ -11,7 +11,7 @@ use {
 		scene::{DocumentLayout, debug_range},
 		types::CanvasTarget,
 	},
-	std::{cell::RefCell, ops::Range, sync::Arc},
+	std::{cell::RefCell, sync::Arc},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -167,34 +167,30 @@ fn editor_selection_details(text: &str, editor: &EditorPresentation) -> String {
 	let selection_rects = view.overlay_count(OverlayRectKind::EditorSelection);
 	let undo_redo = format!("{}/{}", editor.undo_depth, editor.redo_depth);
 	let Some(selection) = view.selection.as_ref() else {
-		return match view.mode {
-			EditorMode::Normal => format!("  mode: {}\n  selection: none", view.mode),
-			EditorMode::Insert => format!("  mode: {}\n  selection: none\n  undo/redo: {}", view.mode, undo_redo),
-		};
+		let undo_redo = matches!(view.mode, EditorMode::Insert)
+			.then(|| format!("\n  undo/redo: {undo_redo}"))
+			.unwrap_or_default();
+		return format!("  mode: {}\n  selection: none{undo_redo}", view.mode);
 	};
 	let head = view.selection_head.unwrap_or(selection.start);
-	let selected_text = preview_range(text, selection);
-
-	match view.mode {
+	let selection_details = match view.mode {
 		EditorMode::Normal => format!(
-			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}",
-			view.mode,
-			selection,
-			selected_text,
-			selection_rects,
+			"active byte: {}\n  anchor byte: {}",
 			head,
 			view.pointer_anchor.unwrap_or(selection.start),
-			undo_redo,
 		),
-		EditorMode::Insert => format!(
-			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  head byte: {}\n  undo/redo: {}",
-			view.mode, selection, selected_text, selection_rects, head, undo_redo,
-		),
-	}
-}
+		EditorMode::Insert => format!("head byte: {head}"),
+	};
 
-fn preview_range(text: &str, range: &Range<usize>) -> String {
-	debug_range(text, range)
+	format!(
+		"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  {}\n  undo/redo: {}",
+		view.mode,
+		selection,
+		debug_range(text, selection),
+		selection_rects,
+		selection_details,
+		undo_redo,
+	)
 }
 
 fn target_details_or_none(layout: &DocumentLayout, target: Option<CanvasTarget>) -> Arc<str> {

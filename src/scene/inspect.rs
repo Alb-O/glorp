@@ -43,9 +43,9 @@ impl DocumentLayout {
 
 	fn target_overlay_primitives(
 		&self, target: CanvasTarget, selected: bool, layout_width: f32, show_hitboxes: bool,
-	) -> Vec<OverlayPrimitive> {
+	) -> impl Iterator<Item = OverlayPrimitive> {
 		let Some(rect) = self.target_rect(target) else {
-			return Vec::new();
+			return [None, None].into_iter().flatten();
 		};
 		let (rect, kind, hitbox_kind) = match target {
 			CanvasTarget::Run(_) => (
@@ -75,10 +75,12 @@ impl DocumentLayout {
 			),
 		};
 
-		std::iter::once(kind)
-			.chain(hitbox_kind)
-			.map(|kind| OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText))
-			.collect()
+		[
+			Some(OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText)),
+			hitbox_kind.map(|kind| OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText)),
+		]
+		.into_iter()
+		.flatten()
 	}
 }
 

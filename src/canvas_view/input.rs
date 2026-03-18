@@ -80,22 +80,24 @@ fn key_intent(
 	}
 
 	match mode {
-		EditorMode::Normal => (!modifiers.alt())
-			.then(|| {
-				navigation_key_intent(key)
-					.or_else(|| normal_named_key_intent(key))
-					.or(match latin {
-						Some('h') => Some(EditorIntent::Motion(EditorMotion::Left)),
-						Some('l') => Some(EditorIntent::Motion(EditorMotion::Right)),
-						Some('k') => Some(EditorIntent::Motion(EditorMotion::Up)),
-						Some('j') => Some(EditorIntent::Motion(EditorMotion::Down)),
-						Some('i') => Some(EditorIntent::Mode(EditorModeIntent::EnterInsertBefore)),
-						Some('a') => Some(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
-						Some('x') => Some(EditorIntent::Edit(EditorEditIntent::DeleteSelection)),
-						_ => None,
-					})
-			})
-			.flatten(),
+		EditorMode::Normal => {
+			if modifiers.alt() {
+				return None;
+			}
+
+			navigation_key_intent(key)
+				.or_else(|| normal_named_key_intent(key))
+				.or(match latin {
+					Some('h') => Some(EditorIntent::Motion(EditorMotion::Left)),
+					Some('l') => Some(EditorIntent::Motion(EditorMotion::Right)),
+					Some('k') => Some(EditorIntent::Motion(EditorMotion::Up)),
+					Some('j') => Some(EditorIntent::Motion(EditorMotion::Down)),
+					Some('i') => Some(EditorIntent::Mode(EditorModeIntent::EnterInsertBefore)),
+					Some('a') => Some(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
+					Some('x') => Some(EditorIntent::Edit(EditorEditIntent::DeleteSelection)),
+					_ => None,
+				})
+		}
 		EditorMode::Insert => navigation_key_intent(key)
 			.or_else(|| insert_named_key_intent(key))
 			.or_else(|| {

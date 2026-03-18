@@ -192,12 +192,11 @@ impl EditorLayout {
 
 	#[cfg(test)]
 	pub(super) fn buffer_text(&self) -> String {
-		let mut text = String::new();
-		for line in &self.buffer.lines {
+		self.buffer.lines.iter().fold(String::new(), |mut text, line| {
 			text.push_str(line.text());
 			text.push_str(line.ending().as_str());
-		}
-		text
+			text
+		})
 	}
 
 	fn width_only_config_change(&self, config: SceneConfig) -> bool {
