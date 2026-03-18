@@ -44,7 +44,7 @@ fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome
 fn execute_config(runtime: &mut GlorpRuntime, command: ConfigCommand) -> Result<GlorpOutcome, GlorpError> {
 	let changed_paths = match command {
 		ConfigCommand::Set { path, value } => {
-			runtime.state.config.set_path(&path, value)?;
+			runtime.state.config.set_path(&path, &value)?;
 			vec![path]
 		}
 		ConfigCommand::Patch { values } => runtime.state.config.patch(&values)?,

@@ -91,6 +91,13 @@ impl SessionChange {
 }
 
 impl SessionChanges {
+	const ALL: Self = Self(
+		SessionChange::Text.bit()
+			| SessionChange::View.bit()
+			| SessionChange::Selection.bit()
+			| SessionChange::Mode.bit(),
+	);
+
 	const fn with(mut self, change: SessionChange) -> Self {
 		self.0 |= change.bit();
 		self
@@ -192,13 +199,7 @@ impl DocumentSession {
 		);
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		SessionDelta::with_changes(
-			SessionChanges::default()
-				.with(SessionChange::Text)
-				.with(SessionChange::View)
-				.with(SessionChange::Selection)
-				.with(SessionChange::Mode),
-		)
+		SessionDelta::with_changes(SessionChanges::ALL)
 	}
 
 	fn execute_sync_config(&mut self, config: &GlorpConfig, layout_width: f32) -> SessionDelta {

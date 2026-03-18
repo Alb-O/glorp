@@ -79,7 +79,7 @@ fn config_from_json(value: serde_json::Value) -> Result<GlorpConfig, GlorpError>
 	root.into_iter().try_for_each(|(namespace, value)| match value {
 		GlorpValue::Record(fields) => fields
 			.into_iter()
-			.try_for_each(|(field, value)| config.set_path(&format!("{namespace}.{field}"), value)),
+			.try_for_each(|(field, value)| config.set_path(&format!("{namespace}.{field}"), &value)),
 		other => Err(GlorpError::validation(
 			None,
 			format!("config namespace `{namespace}` must be a record, got {}", other.kind()),
@@ -105,11 +105,13 @@ pub fn render_config(config: &GlorpConfig) -> String {
 }
 
 fn render_optional_preset(preset: Option<glorp_api::SamplePreset>) -> String {
-	match preset {
-		Some(preset) => format!(
-			"\"{}\"",
-			<glorp_api::SamplePreset as glorp_api::EnumValue>::as_ref(preset)
-		),
-		None => "null".into(),
-	}
+	preset.map_or_else(
+		|| "null".into(),
+		|preset| {
+			format!(
+				"\"{}\"",
+				<glorp_api::SamplePreset as glorp_api::EnumValue>::as_ref(preset)
+			)
+		},
+	)
 }

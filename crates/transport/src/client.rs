@@ -58,38 +58,38 @@ where
 
 impl GlorpHost for IpcClient {
 	fn execute(&mut self, command: GlorpCommand) -> Result<GlorpOutcome, GlorpError> {
-		match self.response(&TransportRequest::Execute(command))? {
-			TransportResponse::Execute(result) => result,
-			_ => Err(GlorpError::transport("unexpected execute response")),
-		}
+		let TransportResponse::Execute(result) = self.response(&TransportRequest::Execute(command))? else {
+			return Err(unexpected_response("execute"));
+		};
+		result
 	}
 
 	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
-		match self.response(&TransportRequest::Query(query))? {
-			TransportResponse::Query(result) => *result,
-			_ => Err(GlorpError::transport("unexpected query response")),
-		}
+		let TransportResponse::Query(result) = self.response(&TransportRequest::Query(query))? else {
+			return Err(unexpected_response("query"));
+		};
+		*result
 	}
 
 	fn subscribe(&mut self, request: GlorpSubscription) -> Result<GlorpStreamToken, GlorpError> {
-		match self.response(&TransportRequest::Subscribe(request))? {
-			TransportResponse::Subscribe(result) => result,
-			_ => Err(GlorpError::transport("unexpected subscribe response")),
-		}
+		let TransportResponse::Subscribe(result) = self.response(&TransportRequest::Subscribe(request))? else {
+			return Err(unexpected_response("subscribe"));
+		};
+		result
 	}
 
 	fn next_event(&mut self, token: GlorpStreamToken) -> Result<Option<GlorpEvent>, GlorpError> {
-		match self.response(&TransportRequest::NextEvent(token))? {
-			TransportResponse::NextEvent(result) => result,
-			_ => Err(GlorpError::transport("unexpected next-event response")),
-		}
+		let TransportResponse::NextEvent(result) = self.response(&TransportRequest::NextEvent(token))? else {
+			return Err(unexpected_response("next-event"));
+		};
+		result
 	}
 
 	fn unsubscribe(&mut self, token: GlorpStreamToken) -> Result<(), GlorpError> {
-		match self.response(&TransportRequest::Unsubscribe(token))? {
-			TransportResponse::Unsubscribe(result) => result,
-			_ => Err(GlorpError::transport("unexpected unsubscribe response")),
-		}
+		let TransportResponse::Unsubscribe(result) = self.response(&TransportRequest::Unsubscribe(token))? else {
+			return Err(unexpected_response("unsubscribe"));
+		};
+		result
 	}
 }
 
@@ -97,4 +97,8 @@ impl IpcClient {
 	fn response(&self, request: &TransportRequest) -> Result<TransportResponse, GlorpError> {
 		transport_request(&self.socket_path, request)
 	}
+}
+
+fn unexpected_response(kind: &str) -> GlorpError {
+	GlorpError::transport(format!("unexpected {kind} response"))
 }

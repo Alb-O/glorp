@@ -47,12 +47,11 @@ impl GlorpRuntime {
 	}
 
 	pub fn gui_frame(&mut self) -> crate::GuiRuntimeFrame {
-		let snapshot = self.state.session.snapshot();
 		crate::GuiRuntimeFrame {
 			config: self.state.config.clone(),
 			ui: self.state.ui.clone(),
 			revisions: self.state.revisions,
-			snapshot: snapshot.clone(),
+			snapshot: self.state.session.snapshot().clone(),
 			document_text: self.state.session.text().into(),
 		}
 	}
@@ -64,34 +63,32 @@ impl GlorpHost for GlorpRuntime {
 	}
 
 	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
-		match query {
-			GlorpQuery::Schema => Ok(GlorpQueryResult::Schema(glorp_api::glorp_schema())),
-			GlorpQuery::Config => Ok(GlorpQueryResult::Config(self.state.config.clone())),
+		Ok(match query {
+			GlorpQuery::Schema => GlorpQueryResult::Schema(glorp_api::glorp_schema()),
+			GlorpQuery::Config => GlorpQueryResult::Config(self.state.config.clone()),
 			GlorpQuery::Snapshot {
 				scene,
 				include_document_text,
-			} => Ok(GlorpQueryResult::Snapshot(project::snapshot_from_state(
+			} => GlorpQueryResult::Snapshot(project::snapshot_from_state(
 				&mut self.state,
 				scene,
 				include_document_text,
-			))),
-			GlorpQuery::DocumentText => Ok(GlorpQueryResult::DocumentText(self.state.session.text().into())),
-			GlorpQuery::Selection => Ok(GlorpQueryResult::Selection(project::selection_view_from_state(
-				&self.state,
-			))),
-			GlorpQuery::InspectDetails { target } => Ok(GlorpQueryResult::InspectDetails(
-				project::inspect_details_view_from_state(&mut self.state, target),
 			)),
-			GlorpQuery::PerfDashboard => Ok(GlorpQueryResult::PerfDashboard(
-				project::perf_dashboard_view_from_state(&mut self.state),
-			)),
-			GlorpQuery::UiState => Ok(GlorpQueryResult::UiState(project::ui_state_view(&self.state))),
-			GlorpQuery::Capabilities => Ok(GlorpQueryResult::Capabilities(GlorpCapabilities {
+			GlorpQuery::DocumentText => GlorpQueryResult::DocumentText(self.state.session.text().into()),
+			GlorpQuery::Selection => GlorpQueryResult::Selection(project::selection_view_from_state(&self.state)),
+			GlorpQuery::InspectDetails { target } => {
+				GlorpQueryResult::InspectDetails(project::inspect_details_view_from_state(&mut self.state, target))
+			}
+			GlorpQuery::PerfDashboard => {
+				GlorpQueryResult::PerfDashboard(project::perf_dashboard_view_from_state(&mut self.state))
+			}
+			GlorpQuery::UiState => GlorpQueryResult::UiState(project::ui_state_view(&self.state)),
+			GlorpQuery::Capabilities => GlorpQueryResult::Capabilities(GlorpCapabilities {
 				transactions: true,
 				subscriptions: true,
 				transports: vec!["local".into(), "ipc".into()],
-			})),
-		}
+			}),
+		})
 	}
 
 	fn subscribe(&mut self, request: GlorpSubscription) -> Result<GlorpStreamToken, GlorpError> {

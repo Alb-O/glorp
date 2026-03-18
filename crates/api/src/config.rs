@@ -45,29 +45,23 @@ impl GlorpConfig {
 	pub fn patch(&mut self, values: &[ConfigAssignment]) -> Result<Vec<ConfigPath>, GlorpError> {
 		values
 			.iter()
-			.map(|assignment| {
-				self.set_path(&assignment.path, assignment.value.clone())?;
-				Ok(assignment.path.clone())
+			.try_fold(Vec::with_capacity(values.len()), |mut paths, assignment| {
+				self.set_path(&assignment.path, &assignment.value)?;
+				paths.push(assignment.path.clone());
+				Ok(paths)
 			})
-			.collect()
 	}
 
-	pub fn set_path(&mut self, path: &str, value: GlorpValue) -> Result<(), GlorpError> {
+	pub fn set_path(&mut self, path: &str, value: &GlorpValue) -> Result<(), GlorpError> {
 		match path {
-			"editor.preset" => {
-				self.editor.preset = match value {
-					GlorpValue::Null => None,
-					GlorpValue::String(value) => Some(parse_enum::<crate::SamplePreset>(path, &value)?),
-					other => return Err(type_error(path, "string or null", other.kind())),
-				};
-			}
+			"editor.preset" => self.editor.preset = parse_optional_string_enum(path, value)?,
 			"editor.font" => self.editor.font = parse_string_enum(path, value)?,
 			"editor.shaping" => self.editor.shaping = parse_string_enum(path, value)?,
 			"editor.wrapping" => self.editor.wrapping = parse_string_enum(path, value)?,
-			"editor.font_size" => self.editor.font_size = parse_f32(path, &value)?,
-			"editor.line_height" => self.editor.line_height = parse_f32(path, &value)?,
-			"inspect.show_baselines" => self.inspect.show_baselines = parse_bool(path, &value)?,
-			"inspect.show_hitboxes" => self.inspect.show_hitboxes = parse_bool(path, &value)?,
+			"editor.font_size" => self.editor.font_size = parse_f32(path, value)?,
+			"editor.line_height" => self.editor.line_height = parse_f32(path, value)?,
+			"inspect.show_baselines" => self.inspect.show_baselines = parse_bool(path, value)?,
+			"inspect.show_hitboxes" => self.inspect.show_hitboxes = parse_bool(path, value)?,
 			_ => return Err(unknown_path(path)),
 		}
 
@@ -75,21 +69,8 @@ impl GlorpConfig {
 	}
 
 	pub fn reset_path(&mut self, path: &str) -> Result<(), GlorpError> {
-		let default = Self::default();
-
-		match path {
-			"editor.preset" => self.editor.preset = default.editor.preset,
-			"editor.font" => self.editor.font = default.editor.font,
-			"editor.shaping" => self.editor.shaping = default.editor.shaping,
-			"editor.wrapping" => self.editor.wrapping = default.editor.wrapping,
-			"editor.font_size" => self.editor.font_size = default.editor.font_size,
-			"editor.line_height" => self.editor.line_height = default.editor.line_height,
-			"inspect.show_baselines" => self.inspect.show_baselines = default.inspect.show_baselines,
-			"inspect.show_hitboxes" => self.inspect.show_hitboxes = default.inspect.show_hitboxes,
-			_ => return Err(unknown_path(path)),
-		}
-
-		Ok(())
+		let value = Self::default().value(path)?;
+		self.set_path(path, &value)
 	}
 
 	pub fn value(&self, path: &str) -> Result<GlorpValue, GlorpError> {
@@ -108,7 +89,7 @@ impl GlorpConfig {
 
 	pub fn validate_path(path: &str, value: GlorpValue) -> Result<(), GlorpError> {
 		let mut config = Self::default();
-		config.set_path(path, value)
+		config.set_path(path, &value)
 	}
 
 	#[must_use]
@@ -127,118 +108,75 @@ pub trait EnumValue: Copy {
 	fn as_ref(self) -> &'static str;
 }
 
-impl EnumValue for crate::SamplePreset {
-	fn parse(value: &str) -> Option<Self> {
-		match value {
-			"tall" => Some(Self::Tall),
-			"mixed" => Some(Self::Mixed),
-			"rust" => Some(Self::Rust),
-			"ligatures" => Some(Self::Ligatures),
-			"arabic" => Some(Self::Arabic),
-			"cjk" => Some(Self::Cjk),
-			"emoji" => Some(Self::Emoji),
-			"custom" => Some(Self::Custom),
-			_ => None,
-		}
-	}
+macro_rules! impl_enum_value {
+	($ty:path { $($value:literal => $variant:path),+ $(,)? }) => {
+		impl EnumValue for $ty {
+			fn parse(value: &str) -> Option<Self> {
+				match value {
+					$($value => Some($variant),)+
+					_ => None,
+				}
+			}
 
-	fn allowed_values() -> &'static [&'static str] {
-		&["tall", "mixed", "rust", "ligatures", "arabic", "cjk", "emoji", "custom"]
-	}
+			fn allowed_values() -> &'static [&'static str] {
+				&[$($value),+]
+			}
 
-	fn as_ref(self) -> &'static str {
-		match self {
-			Self::Tall => "tall",
-			Self::Mixed => "mixed",
-			Self::Rust => "rust",
-			Self::Ligatures => "ligatures",
-			Self::Arabic => "arabic",
-			Self::Cjk => "cjk",
-			Self::Emoji => "emoji",
-			Self::Custom => "custom",
+			fn as_ref(self) -> &'static str {
+				match self {
+					$($variant => $value),+
+				}
+			}
 		}
-	}
+	};
 }
 
-impl EnumValue for crate::FontChoice {
-	fn parse(value: &str) -> Option<Self> {
-		match value {
-			"jetbrains-mono" => Some(Self::JetBrainsMono),
-			"monospace" => Some(Self::Monospace),
-			"noto-sans-cjk" => Some(Self::NotoSansCjk),
-			"sans-serif" => Some(Self::SansSerif),
-			_ => None,
-		}
-	}
+impl_enum_value!(crate::SamplePreset {
+	"tall" => crate::SamplePreset::Tall,
+	"mixed" => crate::SamplePreset::Mixed,
+	"rust" => crate::SamplePreset::Rust,
+	"ligatures" => crate::SamplePreset::Ligatures,
+	"arabic" => crate::SamplePreset::Arabic,
+	"cjk" => crate::SamplePreset::Cjk,
+	"emoji" => crate::SamplePreset::Emoji,
+	"custom" => crate::SamplePreset::Custom,
+});
 
-	fn allowed_values() -> &'static [&'static str] {
-		&["jetbrains-mono", "monospace", "noto-sans-cjk", "sans-serif"]
-	}
+impl_enum_value!(crate::FontChoice {
+	"jetbrains-mono" => crate::FontChoice::JetBrainsMono,
+	"monospace" => crate::FontChoice::Monospace,
+	"noto-sans-cjk" => crate::FontChoice::NotoSansCjk,
+	"sans-serif" => crate::FontChoice::SansSerif,
+});
 
-	fn as_ref(self) -> &'static str {
-		match self {
-			Self::JetBrainsMono => "jetbrains-mono",
-			Self::Monospace => "monospace",
-			Self::NotoSansCjk => "noto-sans-cjk",
-			Self::SansSerif => "sans-serif",
-		}
-	}
+impl_enum_value!(crate::ShapingChoice {
+	"auto" => crate::ShapingChoice::Auto,
+	"basic" => crate::ShapingChoice::Basic,
+	"advanced" => crate::ShapingChoice::Advanced,
+});
+
+impl_enum_value!(crate::WrapChoice {
+	"none" => crate::WrapChoice::None,
+	"word" => crate::WrapChoice::Word,
+	"glyph" => crate::WrapChoice::Glyph,
+	"word-or-glyph" => crate::WrapChoice::WordOrGlyph,
+});
+
+fn parse_string_enum<T>(path: &str, value: &GlorpValue) -> Result<T, GlorpError>
+where
+	T: EnumValue, {
+	value
+		.as_str()
+		.ok_or_else(|| type_error(path, "string", value.kind()))
+		.and_then(|value| parse_enum(path, value))
 }
 
-impl EnumValue for crate::ShapingChoice {
-	fn parse(value: &str) -> Option<Self> {
-		match value {
-			"auto" => Some(Self::Auto),
-			"basic" => Some(Self::Basic),
-			"advanced" => Some(Self::Advanced),
-			_ => None,
-		}
-	}
-
-	fn allowed_values() -> &'static [&'static str] {
-		&["auto", "basic", "advanced"]
-	}
-
-	fn as_ref(self) -> &'static str {
-		match self {
-			Self::Auto => "auto",
-			Self::Basic => "basic",
-			Self::Advanced => "advanced",
-		}
-	}
-}
-
-impl EnumValue for crate::WrapChoice {
-	fn parse(value: &str) -> Option<Self> {
-		match value {
-			"none" => Some(Self::None),
-			"word" => Some(Self::Word),
-			"glyph" => Some(Self::Glyph),
-			"word-or-glyph" => Some(Self::WordOrGlyph),
-			_ => None,
-		}
-	}
-
-	fn allowed_values() -> &'static [&'static str] {
-		&["none", "word", "glyph", "word-or-glyph"]
-	}
-
-	fn as_ref(self) -> &'static str {
-		match self {
-			Self::None => "none",
-			Self::Word => "word",
-			Self::Glyph => "glyph",
-			Self::WordOrGlyph => "word-or-glyph",
-		}
-	}
-}
-
-fn parse_string_enum<T>(path: &str, value: GlorpValue) -> Result<T, GlorpError>
+fn parse_optional_string_enum<T>(path: &str, value: &GlorpValue) -> Result<Option<T>, GlorpError>
 where
 	T: EnumValue, {
 	match value {
-		GlorpValue::String(value) => parse_enum(path, &value),
-		other => Err(type_error(path, "string", other.kind())),
+		GlorpValue::Null => Ok(None),
+		_ => parse_string_enum(path, value).map(Some),
 	}
 }
 
@@ -271,10 +209,10 @@ fn parse_bool(path: &str, value: &GlorpValue) -> Result<bool, GlorpError> {
 }
 
 fn parse_f32(path: &str, value: &GlorpValue) -> Result<f32, GlorpError> {
-	let Some(value) = value.as_f64() else {
-		return Err(type_error(path, "float", value.kind()));
-	};
-	Ok(value as f32)
+	value
+		.as_f64()
+		.map(|value| value as f32)
+		.ok_or_else(|| type_error(path, "float", value.kind()))
 }
 
 fn type_error(path: &str, expected: &str, actual: &str) -> GlorpError {
