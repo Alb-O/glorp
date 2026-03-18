@@ -3,8 +3,8 @@ use {
 	clap::{Parser, Subcommand},
 	glorp_api::*,
 	glorp_runtime::{RuntimeHost, RuntimeOptions, default_runtime_paths},
-	glorp_transport::IpcClient,
-	std::path::PathBuf,
+	glorp_transport::{IpcClient, default_socket_path, socket_is_live},
+	std::path::{Path, PathBuf},
 };
 
 #[derive(Debug, Parser)]
@@ -244,11 +244,19 @@ impl Cli {
 			std::env::current_dir()
 				.map_err(|error| GlorpError::transport(format!("failed to determine current directory: {error}")))?,
 		);
+		if let Some(socket) = autodetect_socket(&repo_root) {
+			return Ok(Host::Ipc(IpcClient::new(socket)));
+		}
 		let options = RuntimeOptions {
 			paths: default_runtime_paths(repo_root),
 		};
 		Ok(Host::Local(RuntimeHost::new(options)?))
 	}
+}
+
+fn autodetect_socket(repo_root: &Path) -> Option<PathBuf> {
+	let socket = default_socket_path(repo_root);
+	socket_is_live(&socket).then_some(socket)
 }
 
 impl GlorpHost for Host {

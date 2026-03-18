@@ -137,6 +137,8 @@ glorp/
 
     gui/
       src/lib.rs
+      src/launcher.rs
+      src/main.rs
       src/app.rs
       src/message.rs
       src/update.rs
@@ -232,12 +234,14 @@ It owns:
 ### `glorp_transport`
 
 The stable local protocol between runtime and clients.
+It owns the repo-local default socket contract: `glorp.sock`.
 
 ### `glorp_gui`
 
 A thin rendering client.
 
-It renders snapshots and translates widget-local events into public commands.
+It renders snapshots, hosts or joins the shared runtime over loopback IPC,
+and translates widget-local events into public commands.
 It does not define product semantics.
 
 ### `glorp_nu_plugin`
@@ -796,9 +800,9 @@ The first-class external shape should be a stable local host protocol.
 
 ### Preferred topology
 
-- GUI uses in-process client or loopback IPC
+- GUI uses loopback IPC on `glorp.sock`
 - Nu plugin uses IPC
-- CLI uses IPC
+- CLI uses IPC and auto-attaches to the repo-local socket when it is live
 - agents use CLI or direct IPC
 
 There is no separate “agent API.”

@@ -21,6 +21,18 @@ impl IpcClient {
 	}
 }
 
+pub fn socket_is_live(socket_path: &Path) -> bool {
+	if !socket_path.exists() {
+		return false;
+	}
+
+	let mut client = IpcClient::new(socket_path.to_path_buf());
+	matches!(
+		client.query(GlorpQuery::Capabilities),
+		Ok(GlorpQueryResult::Capabilities(_))
+	)
+}
+
 pub fn transport_request<T>(socket_path: &Path, request: TransportRequest) -> Result<T, GlorpError>
 where
 	T: for<'de> serde::Deserialize<'de>, {

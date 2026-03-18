@@ -1,9 +1,9 @@
 use {
 	glorp_api::*,
-	glorp_gui::{GlorpGui, GuiMessage},
+	glorp_gui::{GlorpGui, GuiLaunchOptions, GuiMessage, GuiRuntimeSession},
 	glorp_nu_plugin::GlorpPlugin,
 	glorp_runtime::{ConfigStorePaths, RuntimeHost, RuntimeOptions},
-	glorp_transport::{IpcClient, IpcServerHandle, start_server},
+	glorp_transport::{IpcClient, IpcServerHandle, default_socket_path, start_server},
 	nu_plugin_test_support::PluginTest,
 	nu_protocol::{Span, Value},
 	serde_json::Value as JsonValue,
@@ -132,6 +132,21 @@ fn cli_json(harness: &Harness, args: &[&str]) -> JsonValue {
 	let output = Command::new(env!("CARGO_BIN_EXE_glorp_cli"))
 		.arg("--socket")
 		.arg(&harness.socket_path)
+		.args(args)
+		.output()
+		.expect("CLI should run");
+	assert!(
+		output.status.success(),
+		"CLI stderr: {}",
+		String::from_utf8_lossy(&output.stderr)
+	);
+	serde_json::from_slice(&output.stdout).expect("CLI output should be valid JSON")
+}
+
+fn cli_json_repo_root(harness: &Harness, args: &[&str]) -> JsonValue {
+	let output = Command::new(env!("CARGO_BIN_EXE_glorp_cli"))
+		.current_dir(&harness.root)
+		.env_remove("GLORP_SOCKET")
 		.args(args)
 		.output()
 		.expect("CLI should run");
@@ -294,6 +309,36 @@ fn gui_runtime_snapshot_e2e() {
 }
 
 #[test]
+fn gui_launcher_socket_contract_e2e() {
+	let mut harness = Harness::new();
+	let options = GuiLaunchOptions {
+		repo_root: harness.root.clone(),
+		socket_path: default_socket_path(&harness.root),
+	};
+	let (mut launched, mut launched_client) =
+		GuiRuntimeSession::connect_or_start(options.clone()).expect("launcher should start runtime");
+	assert!(launched.owns_server());
+	launched_client
+		.execute(GlorpCommand::Document(DocumentCommand::Replace {
+			text: "launched".to_owned(),
+		}))
+		.expect("launched client should write");
+	assert_eq!(document_text(&mut launched_client), "launched");
+	launched.shutdown().expect("launcher shutdown should succeed");
+
+	harness.start_server();
+	let (attached, mut attached_client) =
+		GuiRuntimeSession::connect_or_start(options).expect("launcher should attach to existing runtime");
+	assert!(!attached.owns_server());
+	attached_client
+		.execute(GlorpCommand::Document(DocumentCommand::Replace {
+			text: "attached".to_owned(),
+		}))
+		.expect("attached client should write");
+	assert_eq!(document_text(&mut harness.ipc_client()), "attached");
+}
+
+#[test]
 fn editor_command_to_document_text_e2e() {
 	let mut host = Harness::new().runtime();
 	host.execute(GlorpCommand::Document(DocumentCommand::Replace {
@@ -444,6 +489,16 @@ fn ipc_client_parity_test() {
 	assert_eq!(ipc.config.editor.wrapping, direct.config.editor.wrapping);
 	assert_eq!(plugin_snapshot.config.editor.wrapping, direct.config.editor.wrapping);
 	assert_eq!(cli_snapshot.config.editor.wrapping, direct.config.editor.wrapping);
+}
+
+#[test]
+fn cli_autodetects_gui_socket_e2e() {
+	let mut harness = Harness::new();
+	harness.start_server();
+	let json = cli_json_repo_root(&harness, &["doc", "replace", "shared-socket"]);
+	let outcome: GlorpOutcome = serde_json::from_value(json).expect("CLI outcome should decode");
+	assert!(outcome.delta.text_changed);
+	assert_eq!(document_text(&mut harness.ipc_client()), "shared-socket");
 }
 
 #[test]

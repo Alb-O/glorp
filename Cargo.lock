@@ -1515,8 +1515,10 @@ dependencies = [
 name = "glorp_gui"
 version = "0.1.0"
 dependencies = [
+ "clap",
  "glorp_api",
  "glorp_runtime",
+ "glorp_transport",
  "iced",
 ]
 

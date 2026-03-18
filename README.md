@@ -32,6 +32,15 @@ devenv-run -C . cargo test --workspace
 ./target/debug/glorp_cli scene ensure
 ```
 
+## GUI
+
+```sh
+devenv-run -C . cargo run -p glorp_gui
+```
+
+The GUI hosts or joins the shared runtime on `./glorp.sock`. When that socket is live,
+`glorp_cli` auto-attaches to it from the repo root instead of creating a private local runtime.
+
 ## Nu
 
 - `nu/default-config.nu`: durable data-first config
@@ -43,4 +52,4 @@ devenv-run -C . cargo test --workspace
 The acceptance suite lives in [`crates/cli/tests/acceptance.rs`](/home/albert/polyrepo1/repos/glorp/crates/cli/tests/acceptance.rs).
 It proves schema export, Nu round-trip, invalid config rejection, transaction
 atomicity, GUI/runtime integration, scene materialization, IPC/client parity,
-persistence, event stream behavior, and a golden transcript.
+persistence, event stream behavior, the GUI socket contract, and a golden transcript.
