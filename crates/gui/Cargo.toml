@@ -1,0 +1,9 @@
+[package]
+name = "glorp_gui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+glorp_api = { path = "../api" }
+glorp_runtime = { path = "../runtime" }
+iced.workspace = true

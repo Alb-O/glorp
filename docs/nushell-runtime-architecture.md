@@ -84,7 +84,7 @@ glorp/
   Cargo.catalog.toml
 
   crates/
-    glorp-api/
+    api/
       src/lib.rs
       src/command.rs
       src/query.rs
@@ -96,7 +96,7 @@ glorp/
       src/revision.rs
       src/error.rs
 
-    glorp-editor/
+    editor/
       src/lib.rs
       src/document.rs
       src/selection.rs
@@ -108,7 +108,7 @@ glorp/
       src/session.rs
       src/types.rs
 
-    glorp-runtime/
+    runtime/
       src/lib.rs
       src/host.rs
       src/runtime.rs
@@ -128,14 +128,14 @@ glorp/
         script_host.rs
         schema_export.rs
 
-    glorp-transport/
+    transport/
       src/lib.rs
       src/local.rs
       src/ipc.rs
       src/client.rs
       src/server.rs
 
-    glorp-gui/
+    gui/
       src/lib.rs
       src/app.rs
       src/message.rs
@@ -146,14 +146,14 @@ glorp/
       src/canvas.rs
       src/theme.rs
 
-    glorp-nu-plugin/
+    nu-plugin/
       src/lib.rs
       src/main.rs
       src/plugin.rs
       src/commands.rs
       src/completions.rs
 
-    glorp-cli/
+    cli/
       src/main.rs
       src/commands.rs
       src/output.rs
@@ -177,7 +177,7 @@ ______________________________________________________________________
 
 ## Ownership Boundaries
 
-### `glorp-api`
+### `glorp_api`
 
 The canonical public contract.
 
@@ -190,7 +190,7 @@ It defines:
 - revisions/deltas/outcomes
 - the reflection schema used by Nushell, CLI, and agents
 
-### `glorp-editor`
+### `glorp_editor`
 
 Pure editing and layout semantics.
 
@@ -213,7 +213,7 @@ It does **not** know about:
 - sidebar tabs
 - transport concerns
 
-### `glorp-runtime`
+### `glorp_runtime`
 
 The single canonical state owner.
 
@@ -229,23 +229,23 @@ It owns:
 - subscriptions/events
 - embedded Nushell evaluation for config and automation
 
-### `glorp-transport`
+### `glorp_transport`
 
 The stable local protocol between runtime and clients.
 
-### `glorp-gui`
+### `glorp_gui`
 
 A thin rendering client.
 
 It renders snapshots and translates widget-local events into public commands.
 It does not define product semantics.
 
-### `glorp-nu-plugin`
+### `glorp_nu_plugin`
 
 Generated from schema.
 Not a hand-maintained parallel business-logic layer.
 
-### `glorp-cli`
+### `glorp_cli`
 
 A non-GUI operator/agent entrypoint using the same contract as all other clients.
 
@@ -263,9 +263,9 @@ Not:
 
 The current reducer/store/session split collapses into:
 
-- public semantic contract in `glorp-api`
-- private execution engine in `glorp-runtime`
-- thin client adapters in `glorp-gui`, `glorp-cli`, and `glorp-nu-plugin`
+- public semantic contract in `glorp_api`
+- private execution engine in `glorp_runtime`
+- thin client adapters in `glorp_gui`, `glorp_cli`, and `glorp_nu_plugin`
 
 The GUI may still have widget-local messages, but those are purely view plumbing.
 
@@ -775,7 +775,7 @@ ______________________________________________________________________
 
 ## Runtime Internals
 
-`glorp-runtime` should split cleanly:
+`glorp_runtime` should split cleanly:
 
 - `state.rs` — canonical runtime state
 - `execute.rs` — command execution and transactions

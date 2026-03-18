@@ -1,0 +1,11 @@
+[package]
+name = "glorp_editor"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cosmic-text.workspace = true
+glorp_api = { path = "../api" }
+iced.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

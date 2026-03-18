@@ -1,0 +1,14 @@
+[package]
+name = "glorp_nu_plugin"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+glorp_api = { path = "../api" }
+glorp_transport = { path = "../transport" }
+nu-plugin.workspace = true
+nu-protocol.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+nu-plugin-test-support.workspace = true

@@ -1476,7 +1476,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
-name = "glorp-api"
+name = "glorp_api"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -1485,15 +1485,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "glorp-cli"
+name = "glorp_cli"
 version = "0.1.0"
 dependencies = [
  "clap",
- "glorp-api",
- "glorp-gui",
- "glorp-nu-plugin",
- "glorp-runtime",
- "glorp-transport",
+ "glorp_api",
+ "glorp_gui",
+ "glorp_nu_plugin",
+ "glorp_runtime",
+ "glorp_transport",
  "nu-plugin-test-support",
  "nu-protocol",
  "serde",
@@ -1501,31 +1501,31 @@ dependencies = [
 ]
 
 [[package]]
-name = "glorp-editor"
+name = "glorp_editor"
 version = "0.1.0"
 dependencies = [
  "cosmic-text",
- "glorp-api",
+ "glorp_api",
  "iced",
  "tracing",
  "tracing-subscriber",
 ]
 
 [[package]]
-name = "glorp-gui"
+name = "glorp_gui"
 version = "0.1.0"
 dependencies = [
- "glorp-api",
- "glorp-runtime",
+ "glorp_api",
+ "glorp_runtime",
  "iced",
 ]
 
 [[package]]
-name = "glorp-nu-plugin"
+name = "glorp_nu_plugin"
 version = "0.1.0"
 dependencies = [
- "glorp-api",
- "glorp-transport",
+ "glorp_api",
+ "glorp_transport",
  "nu-plugin",
  "nu-plugin-test-support",
  "nu-protocol",
@@ -1533,12 +1533,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "glorp-runtime"
+name = "glorp_runtime"
 version = "0.1.0"
 dependencies = [
  "cosmic-text",
- "glorp-api",
- "glorp-editor",
+ "glorp_api",
+ "glorp_editor",
  "iced",
  "serde",
  "serde_json",
@@ -1547,11 +1547,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "glorp-transport"
+name = "glorp_transport"
 version = "0.1.0"
 dependencies = [
- "glorp-api",
- "glorp-runtime",
+ "glorp_api",
+ "glorp_runtime",
  "serde",
  "serde_json",
 ]

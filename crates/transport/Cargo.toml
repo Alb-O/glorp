@@ -1,0 +1,10 @@
+[package]
+name = "glorp_transport"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+glorp_api = { path = "../api" }
+glorp_runtime = { path = "../runtime" }
+serde.workspace = true
+serde_json.workspace = true
