@@ -134,13 +134,6 @@ fn run_standard_transcript(host: &mut impl GlorpHost) -> GlorpSnapshot {
 	snapshot(host, SceneLevel::Materialize)
 }
 
-fn invocation(path: &str, input: GlorpValue) -> GlorpInvocation {
-	GlorpInvocation {
-		path: path.to_owned(),
-		input: Some(input),
-	}
-}
-
 fn repo_root() -> PathBuf {
 	PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 		.parent()
@@ -272,27 +265,15 @@ fn transaction_atomicity_e2e() {
 	let error = host
 		.execute(GlorpCommand::Txn(GlorpTxn {
 			commands: vec![
-				invocation(
-					"glorp config set",
-					GlorpValue::Record(std::collections::BTreeMap::from([
-						("path".into(), GlorpValue::String("editor.wrapping".into())),
-						("value".into(), GlorpValue::String("glyph".into())),
-					])),
-				),
-				invocation(
-					"glorp doc replace",
-					GlorpValue::Record(std::collections::BTreeMap::from([(
-						"text".into(),
-						GlorpValue::String("changed".into()),
-					)])),
-				),
-				invocation(
-					"glorp config set",
-					GlorpValue::Record(std::collections::BTreeMap::from([
-						("path".into(), GlorpValue::String("editor.wrapping".into())),
-						("value".into(), GlorpValue::String("invalid-value".into())),
-					])),
-				),
+				GlorpCommand::Config(ConfigCommand::Set {
+					path: "editor.wrapping".into(),
+					value: GlorpValue::String("glyph".into()),
+				}),
+				GlorpCommand::Document(DocumentCommand::Replace { text: "changed".into() }),
+				GlorpCommand::Config(ConfigCommand::Set {
+					path: "editor.wrapping".into(),
+					value: GlorpValue::String("invalid-value".into()),
+				}),
 			],
 		}))
 		.expect_err("transaction should fail");
@@ -303,6 +284,23 @@ fn transaction_atomicity_e2e() {
 	assert_eq!(before.config, after.config);
 	assert_eq!(before.revisions, after.revisions);
 	assert!(host.next_event(token).expect("next event should succeed").is_none());
+}
+
+#[test]
+fn nested_transaction_rejection_e2e() {
+	let mut host = Harness::new().runtime();
+	let error = host
+		.execute(GlorpCommand::Txn(GlorpTxn {
+			commands: vec![GlorpCommand::Txn(GlorpTxn {
+				commands: vec![GlorpCommand::Scene(SceneCommand::Ensure)],
+			})],
+		}))
+		.expect_err("nested transaction should fail");
+
+	match error {
+		GlorpError::Validation { message, .. } => assert!(message.contains("nested transactions")),
+		other => panic!("unexpected error: {other:?}"),
+	}
 }
 
 #[test]
@@ -633,6 +631,36 @@ fn plugin_transcript_smoke_test() {
 		&mut plugin_test,
 		&format!(r#"glorp session shutdown --repo-root "{repo_root}""#),
 	);
+}
+
+#[test]
+fn typed_txn_builder_commands_e2e() {
+	let harness = Harness::new();
+	unsafe {
+		std::env::set_var("GLORP_HOST_BIN", host_bin());
+	}
+	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
+	let repo_root = harness.root.display();
+
+	let _ = eval_to_value(
+		&mut plugin_test,
+		&format!(
+			r#"
+			glorp txn [
+			  (glorp cmd config set editor.wrapping glyph)
+			  (glorp cmd doc replace "hello")
+			  (glorp cmd editor mode enter-insert-after)
+			  (glorp cmd editor motion line-end)
+			  (glorp cmd editor edit insert " world")
+			  (glorp cmd scene ensure)
+			] --repo-root "{repo_root}"
+			"#,
+		),
+	);
+
+	let snapshot = snapshot(&mut harness.ipc_client(), SceneLevel::Materialize);
+	assert_eq!(snapshot.config.editor.wrapping, WrapChoice::Glyph);
+	assert_eq!(snapshot.document_text.as_deref(), Some("hello world"));
 }
 
 #[test]

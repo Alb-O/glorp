@@ -1,4 +1,4 @@
-use crate::{ConfigPath, GlorpValue};
+use crate::{ConfigPath, EnumValue, GlorpValue};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct GlorpSchema {
@@ -111,97 +111,17 @@ pub struct EnumVariantSchema {
 #[must_use]
 pub fn glorp_schema() -> GlorpSchema {
 	GlorpSchema {
-		version: 1,
+		version: 2,
 		named_types: vec![
-			enum_type(
-				"SamplePreset",
-				"Built-in sample document presets.",
-				&[
-					("tall", "A tall multi-script sample."),
-					("mixed", "A short mixed-script sample."),
-					("rust", "A Rust source sample."),
-					("ligatures", "A ligature-heavy sample."),
-					("arabic", "An Arabic sample."),
-					("cjk", "A CJK sample."),
-					("emoji", "An emoji-heavy sample."),
-					("custom", "No built-in sample."),
-				],
-			),
-			enum_type(
-				"WrapChoice",
-				"Stable editor wrapping choices.",
-				&[
-					("none", "Do not wrap lines."),
-					("word", "Wrap at word boundaries."),
-					("glyph", "Wrap at glyph boundaries."),
-					(
-						"word-or-glyph",
-						"Prefer word boundaries, fall back to glyph boundaries.",
-					),
-				],
-			),
-			enum_type(
-				"FontChoice",
-				"Stable editor font families.",
-				&[
-					("jetbrains-mono", "JetBrains Mono."),
-					("monospace", "The platform monospace family."),
-					("noto-sans-cjk", "Noto Sans CJK."),
-					("sans-serif", "The platform sans-serif family."),
-				],
-			),
-			enum_type(
-				"ShapingChoice",
-				"Stable shaping choices.",
-				&[
-					("auto", "Choose shaping based on content."),
-					("basic", "Use basic shaping."),
-					("advanced", "Use advanced shaping."),
-				],
-			),
-			enum_type(
-				"SidebarTab",
-				"Stable sidebar tabs.",
-				&[
-					("controls", "Configuration controls."),
-					("inspect", "Scene inspection."),
-					("perf", "Performance projections."),
-				],
-			),
-			enum_type(
-				"EditorMotion",
-				"Typed editor motions.",
-				&[
-					("left", "Move left."),
-					("right", "Move right."),
-					("up", "Move up."),
-					("down", "Move down."),
-					("line-start", "Move to line start."),
-					("line-end", "Move to line end."),
-				],
-			),
-			enum_type(
-				"EditorModeCommand",
-				"Typed mode transitions.",
-				&[
-					("enter-insert-before", "Enter insert mode before the selection."),
-					("enter-insert-after", "Enter insert mode after the selection."),
-					("exit-insert", "Return to normal mode."),
-				],
-			),
-			enum_type(
-				"EditorHistoryCommand",
-				"Typed undo/redo operations.",
-				&[
-					("undo", "Undo the most recent edit."),
-					("redo", "Redo the most recent undone edit."),
-				],
-			),
-			enum_type(
-				"EditorMode",
-				"Stable editor modes.",
-				&[("normal", "Normal mode."), ("insert", "Insert mode.")],
-			),
+			enum_type_from::<crate::SamplePreset>("SamplePreset", "Built-in sample document presets."),
+			enum_type_from::<crate::WrapChoice>("WrapChoice", "Stable editor wrapping choices."),
+			enum_type_from::<crate::FontChoice>("FontChoice", "Stable editor font families."),
+			enum_type_from::<crate::ShapingChoice>("ShapingChoice", "Stable shaping choices."),
+			enum_type_from::<crate::SidebarTab>("SidebarTab", "Stable sidebar tabs."),
+			enum_type_from::<crate::EditorMotion>("EditorMotion", "Typed editor motions."),
+			enum_type_from::<crate::EditorModeCommand>("EditorModeCommand", "Typed mode transitions."),
+			enum_type_from::<crate::EditorHistoryCommand>("EditorHistoryCommand", "Typed undo/redo operations."),
+			enum_type_from::<crate::EditorMode>("EditorMode", "Stable editor modes."),
 			enum_type(
 				"GlorpCommand",
 				"Top-level command namespaces.",
@@ -310,26 +230,18 @@ pub fn glorp_schema() -> GlorpSchema {
 				"Subscription token input.",
 				vec![field("token", "Subscription token.", built(BuiltinType::Int), true)],
 			),
-			record_type(
-				"GlorpInvocation",
-				"One public command invocation.",
-				vec![
-					field("path", "Command path.", built(BuiltinType::String), true),
-					field("input", "Optional command input.", built(BuiltinType::Any), false),
-				],
-			),
 			list_type(
-				"GlorpInvocationList",
-				"List of public command invocations.",
-				TypeRef::Named("GlorpInvocation".to_owned()),
+				"GlorpCommandList",
+				"List of typed public commands.",
+				built(BuiltinType::Any),
 			),
 			record_type(
 				"GlorpTxn",
-				"Multiple public command invocations applied atomically.",
+				"Multiple typed public commands applied atomically.",
 				vec![field(
 					"commands",
-					"Ordered command invocations.",
-					TypeRef::Named("GlorpInvocationList".to_owned()),
+					"Ordered typed commands.",
+					TypeRef::Named("GlorpCommandList".to_owned()),
 					true,
 				)],
 			),
@@ -878,56 +790,7 @@ pub fn glorp_schema() -> GlorpSchema {
 				TypeRef::Named("PerfMetricSummaryView".to_owned()),
 			),
 		],
-		config: vec![
-			config_field(
-				"editor.preset",
-				"Optional sample preset.",
-				named("SamplePreset"),
-				GlorpValue::String("tall".into()),
-			),
-			config_field(
-				"editor.font",
-				"Editor font choice.",
-				named("FontChoice"),
-				"jetbrains-mono".into(),
-			),
-			config_field(
-				"editor.shaping",
-				"Editor shaping mode.",
-				named("ShapingChoice"),
-				"advanced".into(),
-			),
-			config_field(
-				"editor.wrapping",
-				"Editor wrapping mode.",
-				named("WrapChoice"),
-				"word".into(),
-			),
-			config_field(
-				"editor.font_size",
-				"Editor font size in logical pixels.",
-				built(BuiltinType::Float),
-				24.0.into(),
-			),
-			config_field(
-				"editor.line_height",
-				"Editor line height in logical pixels.",
-				built(BuiltinType::Float),
-				32.0.into(),
-			),
-			config_field(
-				"inspect.show_baselines",
-				"Show line baselines in inspect mode.",
-				built(BuiltinType::Bool),
-				false.into(),
-			),
-			config_field(
-				"inspect.show_hitboxes",
-				"Show glyph hitboxes in inspect mode.",
-				built(BuiltinType::Bool),
-				false.into(),
-			),
-		],
+		config: crate::config_schema_fields(),
 		commands: crate::command_schemas(),
 		queries: crate::query_schemas(),
 		helpers: crate::helper_schemas(),
@@ -938,14 +801,17 @@ pub fn glorp_schema() -> GlorpSchema {
 	}
 }
 
-fn config_field(path: &str, docs: &str, ty: TypeRef, default: GlorpValue) -> ConfigFieldSchema {
-	ConfigFieldSchema {
-		path: path.to_owned(),
-		docs: docs.to_owned(),
-		ty,
-		default,
-		mutable: true,
-	}
+fn enum_type_from<T>(name: &str, docs: &str) -> NamedTypeSchema
+where
+	T: EnumValue, {
+	enum_type(
+		name,
+		docs,
+		&T::allowed_values()
+			.iter()
+			.map(|value| (*value, T::docs(value).unwrap_or_default()))
+			.collect::<Vec<_>>(),
+	)
 }
 
 fn event(path: &str, docs: &str, payload: TypeRef) -> EventSchema {

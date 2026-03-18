@@ -10,7 +10,7 @@ IPC transport, GUI client, Nu plugin, and a minimal shared-runtime host.
 - `crates/runtime`: canonical state owner and persistence
 - `crates/transport`: in-process and IPC clients
 - `crates/gui`: thin GUI/client adapter
-- `crates/cli`: shared runtime host and surface export tool
+- `crates/cli`: shared runtime host, low-level typed JSON bridge, and surface export tool
 - `crates/nu-plugin`: Nu plugin commands over IPC
 
 ## Run Checks
@@ -39,8 +39,8 @@ when a shared runtime is not already live.
 ## Nu
 
 - `nu/default-config.nu`: durable data-first config
-- `nu/glorp.nu`: generated Nu helper module with txn builders and aliases
-- `crates/nu-plugin`: primary Nu command surface over the shared runtime
+- `nu/glorp.nu`: generated Nu module that loads plugin commands and exports aliases
+- `crates/nu-plugin`: primary Nu command surface over the shared runtime, including `glorp cmd *` typed txn builders
 
 ## Proof
 

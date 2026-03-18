@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "named_types": [
     {
       "name": "SamplePreset",
@@ -498,53 +498,27 @@
       }
     },
     {
-      "name": "GlorpInvocation",
-      "docs": "One public command invocation.",
-      "kind": {
-        "Record": {
-          "fields": [
-            {
-              "name": "path",
-              "docs": "Command path.",
-              "ty": {
-                "Builtin": "String"
-              },
-              "required": true
-            },
-            {
-              "name": "input",
-              "docs": "Optional command input.",
-              "ty": {
-                "Builtin": "Any"
-              },
-              "required": false
-            }
-          ]
-        }
-      }
-    },
-    {
-      "name": "GlorpInvocationList",
-      "docs": "List of public command invocations.",
+      "name": "GlorpCommandList",
+      "docs": "List of typed public commands.",
       "kind": {
         "List": {
           "item": {
-            "Named": "GlorpInvocation"
+            "Builtin": "Any"
           }
         }
       }
     },
     {
       "name": "GlorpTxn",
-      "docs": "Multiple public command invocations applied atomically.",
+      "docs": "Multiple typed public commands applied atomically.",
       "kind": {
         "Record": {
           "fields": [
             {
               "name": "commands",
-              "docs": "Ordered command invocations.",
+              "docs": "Ordered typed commands.",
               "ty": {
-                "Named": "GlorpInvocationList"
+                "Named": "GlorpCommandList"
               },
               "required": true
             }

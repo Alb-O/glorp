@@ -1,8 +1,9 @@
 use {
 	crate::plugin::GlorpPlugin,
 	glorp_api::{
-		GlorpError, GlorpEventStreamView, GlorpHost, GlorpOutcome, GlorpQueryResult, GlorpSessionView, GlorpValue,
-		HelperKind, SurfaceArgKind, SurfaceKind, SurfaceSpec, query_invocation, surface_specs,
+		CommandSpec, GlorpError, GlorpEventStreamView, GlorpHost, GlorpOutcome, GlorpQueryResult, GlorpSessionView,
+		GlorpValue, HelperKind, HelperSpec, QuerySpec, SurfaceArgKind, SurfaceSpec, command_specs, helper_specs,
+		query_specs,
 	},
 	glorp_transport::{
 		IpcClient, TransportRequest, TransportResponse, default_socket_path, socket_is_live, transport_request,
@@ -19,29 +20,154 @@ use {
 };
 
 pub fn all_commands() -> Vec<Box<dyn PluginCommand<Plugin = GlorpPlugin>>> {
-	surface_specs()
+	command_specs()
 		.into_iter()
-		.map(|spec| Box::new(SurfaceCommand { spec }) as Box<dyn PluginCommand<Plugin = GlorpPlugin>>)
+		.flat_map(command_plugin_commands)
+		.chain(query_specs().into_iter().map(query_plugin_command))
+		.chain(helper_specs().into_iter().map(helper_plugin_command))
 		.collect()
 }
 
-struct SurfaceCommand {
-	spec: SurfaceSpec,
+fn command_plugin_commands(spec: CommandSpec) -> Vec<Box<dyn PluginCommand<Plugin = GlorpPlugin>>> {
+	let primary_name = spec.surface.path.to_owned();
+	let builder_name = spec.surface.path.replacen("glorp ", "glorp cmd ", 1);
+	let mut commands: Vec<Box<dyn PluginCommand<Plugin = GlorpPlugin>>> = vec![Box::new(CommandSurfaceCommand {
+		name: primary_name,
+		spec: spec.clone(),
+		builder: false,
+	})];
+	if spec.builder {
+		commands.push(Box::new(CommandSurfaceCommand {
+			name: builder_name,
+			spec,
+			builder: true,
+		}));
+	}
+	commands
 }
 
-impl PluginCommand for SurfaceCommand {
+fn query_plugin_command(spec: QuerySpec) -> Box<dyn PluginCommand<Plugin = GlorpPlugin>> {
+	Box::new(QuerySurfaceCommand {
+		name: spec.surface.path.to_owned(),
+		spec,
+	})
+}
+
+fn helper_plugin_command(spec: HelperSpec) -> Box<dyn PluginCommand<Plugin = GlorpPlugin>> {
+	Box::new(HelperSurfaceCommand {
+		name: spec.surface.path.to_owned(),
+		spec,
+	})
+}
+
+struct CommandSurfaceCommand {
+	name: String,
+	spec: CommandSpec,
+	builder: bool,
+}
+
+impl PluginCommand for CommandSurfaceCommand {
 	type Plugin = GlorpPlugin;
 
 	fn name(&self) -> &str {
-		self.spec.path
+		&self.name
 	}
 
 	fn description(&self) -> &str {
-		self.spec.docs
+		self.spec.surface.docs
 	}
 
 	fn signature(&self) -> Signature {
-		let mut signature = Signature::build(self.spec.path)
+		signature_for_spec(&self.name, &self.spec.surface)
+	}
+
+	fn run(
+		&self, _plugin: &Self::Plugin, _engine: &nu_plugin::EngineInterface, call: &EvaluatedCall, _input: PipelineData,
+	) -> Result<PipelineData, LabeledError> {
+		let span = call.head;
+		let input = call_input(call, &self.spec.surface)?;
+		let command = (self.spec.build)(input.as_ref()).map_err(to_labeled_error)?;
+		if self.builder {
+			return Ok(value_pipeline(json_to_nu_value(
+				serde_json::to_value(command).unwrap_or(JsonValue::Null),
+				span,
+			)));
+		}
+
+		let mut client = resolve_session(call)?.client;
+		let outcome = client.execute(command).map_err(to_labeled_error)?;
+		Ok(value_pipeline(outcome_to_value(outcome, span)))
+	}
+}
+
+struct QuerySurfaceCommand {
+	name: String,
+	spec: QuerySpec,
+}
+
+impl PluginCommand for QuerySurfaceCommand {
+	type Plugin = GlorpPlugin;
+
+	fn name(&self) -> &str {
+		&self.name
+	}
+
+	fn description(&self) -> &str {
+		self.spec.surface.docs
+	}
+
+	fn signature(&self) -> Signature {
+		signature_for_spec(&self.name, &self.spec.surface)
+	}
+
+	fn run(
+		&self, _plugin: &Self::Plugin, _engine: &nu_plugin::EngineInterface, call: &EvaluatedCall, _input: PipelineData,
+	) -> Result<PipelineData, LabeledError> {
+		let span = call.head;
+		let input = call_input(call, &self.spec.surface)?;
+		let mut client = resolve_session(call)?.client;
+		let result = client
+			.query((self.spec.build)(input.as_ref()).map_err(to_labeled_error)?)
+			.map_err(to_labeled_error)?;
+		Ok(value_pipeline(query_to_value(result, span)))
+	}
+}
+
+struct HelperSurfaceCommand {
+	name: String,
+	spec: HelperSpec,
+}
+
+impl PluginCommand for HelperSurfaceCommand {
+	type Plugin = GlorpPlugin;
+
+	fn name(&self) -> &str {
+		&self.name
+	}
+
+	fn description(&self) -> &str {
+		self.spec.surface.docs
+	}
+
+	fn signature(&self) -> Signature {
+		signature_for_spec(&self.name, &self.spec.surface)
+	}
+
+	fn run(
+		&self, _plugin: &Self::Plugin, _engine: &nu_plugin::EngineInterface, call: &EvaluatedCall, _input: PipelineData,
+	) -> Result<PipelineData, LabeledError> {
+		run_helper(
+			self.spec.kind,
+			call,
+			call_input(call, &self.spec.surface)?.as_ref(),
+			call.head,
+		)
+	}
+}
+
+fn signature_for_spec(name: &str, spec: &SurfaceSpec) -> Signature {
+	spec.args.iter().fold(
+		Signature::build(name)
 			.named("socket", SyntaxShape::String, "Runtime Unix socket path.", Some('s'))
 			.named("session", SyntaxShape::Any, "Resolved Glorp session record.", None)
 			.named(
@@ -51,43 +177,16 @@ impl PluginCommand for SurfaceCommand {
 				Some('r'),
 			)
 			.input_output_types(vec![(Type::Nothing, Type::Any)])
-			.category(Category::Custom("glorp".to_owned()));
-
-		for arg in &self.spec.args {
+			.category(Category::Custom("glorp".to_owned())),
+		|signature, arg| {
 			let shape = syntax_shape(arg.kind);
-			signature = if arg.required {
+			if arg.required {
 				signature.required(arg.name, shape, arg.docs)
 			} else {
 				signature.optional(arg.name, shape, arg.docs)
-			};
-		}
-
-		signature
-	}
-
-	fn run(
-		&self, _plugin: &Self::Plugin, _engine: &nu_plugin::EngineInterface, call: &EvaluatedCall, _input: PipelineData,
-	) -> Result<PipelineData, LabeledError> {
-		let span = call.head;
-		let input = call_input(call, &self.spec)?;
-		match self.spec.kind {
-			SurfaceKind::Command => {
-				let mut client = resolve_session(call)?.client;
-				let outcome = client
-					.execute(glorp_api::command_invocation(self.spec.path, input.as_ref()).map_err(to_labeled_error)?)
-					.map_err(to_labeled_error)?;
-				Ok(value_pipeline(outcome_to_value(outcome, span)))
 			}
-			SurfaceKind::Query => {
-				let mut client = resolve_session(call)?.client;
-				let result = client
-					.query(query_invocation(self.spec.path, input.as_ref()).map_err(to_labeled_error)?)
-					.map_err(to_labeled_error)?;
-				Ok(value_pipeline(query_to_value(result, span)))
-			}
-			SurfaceKind::Helper(kind) => run_helper(kind, call, input.as_ref(), span),
-		}
-	}
+		},
+	)
 }
 
 fn run_helper(
@@ -95,17 +194,15 @@ fn run_helper(
 ) -> Result<PipelineData, LabeledError> {
 	match kind {
 		HelperKind::ConfigValidate => {
-			let mut fields = input
+			let fields = input
 				.and_then(GlorpValue::as_record)
-				.ok_or_else(|| LabeledError::new("config validate requires record input"))?
-				.iter();
+				.ok_or_else(|| LabeledError::new("config validate requires record input"))?;
 			let path = fields
-				.find_map(|(key, value)| (key == "path").then_some(value))
+				.get("path")
 				.and_then(GlorpValue::as_str)
 				.ok_or_else(|| LabeledError::new("config validate path must be a string"))?;
-			let value = input
-				.and_then(GlorpValue::as_record)
-				.and_then(|fields| fields.get("value"))
+			let value = fields
+				.get("value")
 				.cloned()
 				.ok_or_else(|| LabeledError::new("config validate value is required"))?;
 			glorp_api::GlorpConfig::validate_path(path, value).map_err(to_labeled_error)?;

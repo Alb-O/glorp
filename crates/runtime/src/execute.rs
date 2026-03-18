@@ -31,8 +31,10 @@ fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome
 
 	txn.commands
 		.into_iter()
-		.try_fold(GlorpOutcome::default(), |mut accumulated, invocation| {
-			let command = glorp_api::command_invocation(&invocation.path, invocation.input.as_ref())?;
+		.try_fold(GlorpOutcome::default(), |mut accumulated, command| {
+			if matches!(command, GlorpCommand::Txn(_)) {
+				return Err(GlorpError::validation(None, "nested transactions are not supported"));
+			}
 			merge_outcome(&mut accumulated, execute(runtime, command)?);
 			Ok(accumulated)
 		})

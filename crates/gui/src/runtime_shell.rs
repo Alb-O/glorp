@@ -12,8 +12,8 @@ use {
 		},
 	},
 	glorp_api::{
-		ConfigCommand, DocumentCommand, EditorCommand, EnumValue, GlorpCommand, GlorpError, GlorpHost, GlorpInvocation,
-		GlorpTxn, GlorpValue, SceneCommand, SidebarTab, UiCommand, WrapChoice,
+		ConfigCommand, DocumentCommand, EditorCommand, EnumValue, GlorpCommand, GlorpError, GlorpHost, GlorpTxn,
+		GlorpValue, SceneCommand, SidebarTab, UiCommand, WrapChoice,
 	},
 	glorp_editor::{
 		EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion, EditorPointerIntent,
@@ -255,8 +255,7 @@ impl RuntimeShell {
 						(preset != glorp_api::SamplePreset::Custom)
 							.then_some(GlorpCommand::Ui(UiCommand::ViewportScrollTo { x: 0.0, y: 0.0 })),
 					)
-					.map(command_invocation)
-					.collect::<Result<Vec<_>, _>>()?;
+					.collect::<Vec<_>>();
 				self.execute(GlorpCommand::Txn(GlorpTxn { commands }))
 			}
 			ControlsMessage::FontSelected(font) => self.execute(config_set("editor.font", enum_string_value(font))),
@@ -427,35 +426,6 @@ fn clamp_scroll(scroll: Vector, metrics: EditorViewportMetrics, layout_width: f3
 	};
 	let max_y = (metrics.measured_height - viewport.height).max(0.0);
 	Vector::new(scroll.x.clamp(0.0, max_x), scroll.y.clamp(0.0, max_y))
-}
-
-fn command_invocation(command: GlorpCommand) -> Result<GlorpInvocation, GlorpError> {
-	match command {
-		GlorpCommand::Config(ConfigCommand::Set { path, value }) => Ok(GlorpInvocation {
-			path: "glorp config set".into(),
-			input: Some(GlorpValue::Record(std::collections::BTreeMap::from([
-				("path".into(), GlorpValue::String(path)),
-				("value".into(), value),
-			]))),
-		}),
-		GlorpCommand::Document(DocumentCommand::Replace { text }) => Ok(GlorpInvocation {
-			path: "glorp doc replace".into(),
-			input: Some(GlorpValue::Record(std::collections::BTreeMap::from([(
-				"text".into(),
-				GlorpValue::String(text),
-			)]))),
-		}),
-		GlorpCommand::Ui(UiCommand::ViewportScrollTo { x, y }) => Ok(GlorpInvocation {
-			path: "glorp ui viewport scroll-to".into(),
-			input: Some(GlorpValue::Record(std::collections::BTreeMap::from([
-				("x".into(), GlorpValue::Float(f64::from(x))),
-				("y".into(), GlorpValue::Float(f64::from(y))),
-			]))),
-		}),
-		other => Err(GlorpError::internal(format!(
-			"unsupported GUI transaction command: {other:?}",
-		))),
-	}
 }
 
 fn editor_intent_command(intent: EditorIntent) -> GlorpCommand {

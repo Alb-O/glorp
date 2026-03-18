@@ -2,8 +2,8 @@
 
 Two Nu-facing surfaces exist:
 
-- ../nu/glorp.nu: generated Nu helper module with txn builders and aliases
-- `glorp_nu_plugin`: primary Nu command surface over the shared runtime
+- ../nu/glorp.nu: generated Nu module that loads the plugin and exports aliases
+- `glorp_nu_plugin`: primary Nu command surface over the shared runtime, including `glorp cmd *` typed txn builders
 
 Example transcript:
 

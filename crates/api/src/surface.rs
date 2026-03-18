@@ -1,18 +1,14 @@
 use {
 	crate::{
 		BuiltinType, CanvasTarget, CommandSchema, ConfigAssignment, ConfigCommand, DocumentCommand, EditorCommand,
-		EditorEditCommand, GlorpCommand, GlorpError, GlorpInvocation, GlorpQuery, GlorpTxn, GlorpValue, HelperKind,
-		HelperSchema, QuerySchema, SceneCommand, TypeRef, UiCommand,
+		EditorEditCommand, GlorpCommand, GlorpError, GlorpQuery, GlorpTxn, GlorpValue, HelperKind, HelperSchema,
+		QuerySchema, SceneCommand, TypeRef, UiCommand,
 	},
 	std::collections::BTreeMap,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SurfaceKind {
-	Command,
-	Query,
-	Helper(HelperKind),
-}
+pub type CommandBuilder = fn(Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError>;
+pub type QueryBuilder = fn(Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SurfaceArgKind {
@@ -36,13 +32,228 @@ pub struct SurfaceArg {
 pub struct SurfaceSpec {
 	pub path: &'static str,
 	pub docs: &'static str,
-	pub kind: SurfaceKind,
 	pub args: Vec<SurfaceArg>,
 	pub input: Option<TypeRef>,
 	pub output: TypeRef,
 }
 
-pub fn surface_specs() -> Vec<SurfaceSpec> {
+#[derive(Debug, Clone)]
+pub struct CommandSpec {
+	pub surface: SurfaceSpec,
+	pub build: CommandBuilder,
+	pub builder: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct QuerySpec {
+	pub surface: SurfaceSpec,
+	pub build: QueryBuilder,
+}
+
+#[derive(Debug, Clone)]
+pub struct HelperSpec {
+	pub surface: SurfaceSpec,
+	pub kind: HelperKind,
+}
+
+pub fn command_specs() -> Vec<CommandSpec> {
+	vec![
+		command(
+			"glorp config set",
+			"Set one config field.",
+			Some(named("ConfigAssignment")),
+			vec![
+				arg("path", "Config path.", SurfaceArgKind::String, true, None),
+				arg("value", "Config value.", SurfaceArgKind::Any, true, None),
+			],
+			named("GlorpOutcome"),
+			decode_config_set,
+			true,
+		),
+		command(
+			"glorp config reset",
+			"Reset one config field to its default.",
+			Some(named("ConfigPathInput")),
+			vec![arg("path", "Config path.", SurfaceArgKind::String, true, None)],
+			named("GlorpOutcome"),
+			decode_config_reset,
+			true,
+		),
+		command(
+			"glorp config patch",
+			"Patch config with a record.",
+			Some(named("ConfigPatch")),
+			vec![arg(
+				"patch",
+				"Nested config patch record.",
+				SurfaceArgKind::Any,
+				true,
+				None,
+			)],
+			named("GlorpOutcome"),
+			decode_config_patch,
+			true,
+		),
+		command(
+			"glorp config reload",
+			"Reload the durable config file.",
+			None,
+			vec![],
+			named("GlorpOutcome"),
+			decode_config_reload,
+			true,
+		),
+		command(
+			"glorp config persist",
+			"Persist the effective config to the durable config file.",
+			None,
+			vec![],
+			named("GlorpOutcome"),
+			decode_config_persist,
+			true,
+		),
+		command(
+			"glorp doc replace",
+			"Replace the document text.",
+			Some(named("TextInput")),
+			vec![arg("text", "Document text.", SurfaceArgKind::String, true, None)],
+			named("GlorpOutcome"),
+			decode_document_replace,
+			true,
+		),
+		command(
+			"glorp editor motion",
+			"Apply a typed motion command.",
+			Some(named("EditorMotionInput")),
+			vec![arg(
+				"motion",
+				"Motion name.",
+				SurfaceArgKind::String,
+				true,
+				Some("motion"),
+			)],
+			named("GlorpOutcome"),
+			decode_editor_motion,
+			true,
+		),
+		command(
+			"glorp editor mode",
+			"Apply a typed mode command.",
+			Some(named("EditorModeInput")),
+			vec![arg("mode", "Mode command.", SurfaceArgKind::String, true, Some("mode"))],
+			named("GlorpOutcome"),
+			decode_editor_mode,
+			true,
+		),
+		command(
+			"glorp editor edit insert",
+			"Insert text.",
+			Some(named("TextInput")),
+			vec![arg("text", "Text to insert.", SurfaceArgKind::String, true, None)],
+			named("GlorpOutcome"),
+			decode_editor_edit_insert,
+			true,
+		),
+		command(
+			"glorp editor edit backspace",
+			"Delete backward.",
+			None,
+			vec![],
+			named("GlorpOutcome"),
+			decode_editor_edit_backspace,
+			true,
+		),
+		command(
+			"glorp editor edit delete-forward",
+			"Delete forward.",
+			None,
+			vec![],
+			named("GlorpOutcome"),
+			decode_editor_edit_delete_forward,
+			true,
+		),
+		command(
+			"glorp editor edit delete-selection",
+			"Delete the current selection.",
+			None,
+			vec![],
+			named("GlorpOutcome"),
+			decode_editor_edit_delete_selection,
+			true,
+		),
+		command(
+			"glorp editor history",
+			"Apply history navigation.",
+			Some(named("EditorHistoryInput")),
+			vec![arg(
+				"action",
+				"History action.",
+				SurfaceArgKind::String,
+				true,
+				Some("history"),
+			)],
+			named("GlorpOutcome"),
+			decode_editor_history,
+			true,
+		),
+		command(
+			"glorp ui sidebar select",
+			"Select a sidebar tab.",
+			Some(named("SidebarTabInput")),
+			vec![arg("tab", "Sidebar tab.", SurfaceArgKind::String, true, Some("tab"))],
+			named("GlorpOutcome"),
+			decode_ui_sidebar_select,
+			true,
+		),
+		command(
+			"glorp ui viewport scroll-to",
+			"Set runtime viewport scroll position.",
+			Some(named("ScrollTarget")),
+			vec![
+				arg("x", "X scroll.", SurfaceArgKind::Float, true, None),
+				arg("y", "Y scroll.", SurfaceArgKind::Float, true, None),
+			],
+			named("GlorpOutcome"),
+			decode_ui_viewport_scroll_to,
+			true,
+		),
+		command(
+			"glorp ui pane-ratio-set",
+			"Set the sidebar/canvas split ratio.",
+			Some(named("PaneRatioInput")),
+			vec![arg("ratio", "Pane ratio.", SurfaceArgKind::Float, true, None)],
+			named("GlorpOutcome"),
+			decode_ui_pane_ratio_set,
+			true,
+		),
+		command(
+			"glorp scene ensure",
+			"Materialize scene state.",
+			None,
+			vec![],
+			named("GlorpOutcome"),
+			decode_scene_ensure,
+			true,
+		),
+		command(
+			"glorp txn",
+			"Apply a transaction atomically.",
+			Some(named("GlorpTxn")),
+			vec![arg(
+				"commands",
+				"Ordered typed command values.",
+				SurfaceArgKind::Any,
+				true,
+				None,
+			)],
+			named("GlorpOutcome"),
+			decode_txn_command,
+			false,
+		),
+	]
+}
+
+pub fn query_specs() -> Vec<QuerySpec> {
 	vec![
 		query(
 			"glorp schema",
@@ -50,6 +261,7 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 			None,
 			vec![],
 			named("GlorpSchema"),
+			decode_schema_query,
 		),
 		query(
 			"glorp get config",
@@ -57,6 +269,7 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 			None,
 			vec![],
 			named("GlorpConfig"),
+			decode_get_config,
 		),
 		query(
 			"glorp get state",
@@ -64,6 +277,7 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 			None,
 			vec![],
 			named("GlorpSnapshot"),
+			decode_get_state,
 		),
 		query(
 			"glorp get document-text",
@@ -71,6 +285,7 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 			None,
 			vec![],
 			built(BuiltinType::String),
+			decode_get_document_text,
 		),
 		query(
 			"glorp get selection",
@@ -78,6 +293,7 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 			None,
 			vec![],
 			named("SelectionStateView"),
+			decode_get_selection,
 		),
 		query(
 			"glorp get inspect-details",
@@ -91,6 +307,7 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 				None,
 			)],
 			named("InspectDetailsView"),
+			decode_get_inspect_details,
 		),
 		query(
 			"glorp get perf",
@@ -98,6 +315,7 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 			None,
 			vec![],
 			named("PerfDashboardView"),
+			decode_get_perf,
 		),
 		query(
 			"glorp get ui",
@@ -105,6 +323,7 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 			None,
 			vec![],
 			named("UiStateView"),
+			decode_get_ui,
 		),
 		query(
 			"glorp get capabilities",
@@ -112,7 +331,13 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 			None,
 			vec![],
 			named("GlorpCapabilities"),
+			decode_get_capabilities,
 		),
+	]
+}
+
+pub fn helper_specs() -> Vec<HelperSpec> {
+	vec![
 		helper(
 			"glorp session attach",
 			"Resolve and validate a live Glorp session.",
@@ -129,36 +354,6 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 			vec![],
 			named("OkView"),
 		),
-		command(
-			"glorp config set",
-			"Set one config field.",
-			Some(named("ConfigAssignment")),
-			vec![
-				arg("path", "Config path.", SurfaceArgKind::String, true, None),
-				arg("value", "Config value.", SurfaceArgKind::Any, true, None),
-			],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp config reset",
-			"Reset one config field to its default.",
-			Some(named("ConfigPathInput")),
-			vec![arg("path", "Config path.", SurfaceArgKind::String, true, None)],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp config patch",
-			"Patch config with a record.",
-			Some(named("ConfigPatch")),
-			vec![arg(
-				"patch",
-				"Nested config patch record.",
-				SurfaceArgKind::Any,
-				true,
-				None,
-			)],
-			named("GlorpOutcome"),
-		),
 		helper(
 			"glorp config validate",
 			"Validate a config value without mutating runtime state.",
@@ -169,119 +364,6 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 				arg("value", "Candidate value.", SurfaceArgKind::Any, true, None),
 			],
 			named("OkView"),
-		),
-		command(
-			"glorp config reload",
-			"Reload the durable config file.",
-			None,
-			vec![],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp config persist",
-			"Persist the effective config to the durable config file.",
-			None,
-			vec![],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp doc replace",
-			"Replace the document text.",
-			Some(named("TextInput")),
-			vec![arg("text", "Document text.", SurfaceArgKind::String, true, None)],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp editor motion",
-			"Apply a typed motion command.",
-			Some(named("EditorMotionInput")),
-			vec![arg(
-				"motion",
-				"Motion name.",
-				SurfaceArgKind::String,
-				true,
-				Some("motion"),
-			)],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp editor mode",
-			"Apply a typed mode command.",
-			Some(named("EditorModeInput")),
-			vec![arg("mode", "Mode command.", SurfaceArgKind::String, true, Some("mode"))],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp editor edit insert",
-			"Insert text.",
-			Some(named("TextInput")),
-			vec![arg("text", "Text to insert.", SurfaceArgKind::String, true, None)],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp editor edit backspace",
-			"Delete backward.",
-			None,
-			vec![],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp editor edit delete-forward",
-			"Delete forward.",
-			None,
-			vec![],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp editor edit delete-selection",
-			"Delete the current selection.",
-			None,
-			vec![],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp editor history",
-			"Apply history navigation.",
-			Some(named("EditorHistoryInput")),
-			vec![arg(
-				"action",
-				"History action.",
-				SurfaceArgKind::String,
-				true,
-				Some("history"),
-			)],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp ui sidebar select",
-			"Select a sidebar tab.",
-			Some(named("SidebarTabInput")),
-			vec![arg("tab", "Sidebar tab.", SurfaceArgKind::String, true, Some("tab"))],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp ui viewport scroll-to",
-			"Set runtime viewport scroll position.",
-			Some(named("ScrollTarget")),
-			vec![
-				arg("x", "X scroll.", SurfaceArgKind::Float, true, None),
-				arg("y", "Y scroll.", SurfaceArgKind::Float, true, None),
-			],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp ui pane-ratio-set",
-			"Set the sidebar/canvas split ratio.",
-			Some(named("PaneRatioInput")),
-			vec![arg("ratio", "Pane ratio.", SurfaceArgKind::Float, true, None)],
-			named("GlorpOutcome"),
-		),
-		command(
-			"glorp scene ensure",
-			"Materialize scene state.",
-			None,
-			vec![],
-			named("GlorpOutcome"),
 		),
 		helper(
 			"glorp events subscribe",
@@ -307,111 +389,44 @@ pub fn surface_specs() -> Vec<SurfaceSpec> {
 			vec![arg("token", "Subscription token.", SurfaceArgKind::Int, true, None)],
 			named("TokenAckView"),
 		),
-		command(
-			"glorp txn",
-			"Apply a transaction atomically.",
-			Some(named("GlorpTxn")),
-			vec![arg(
-				"commands",
-				"Ordered command invocations.",
-				SurfaceArgKind::Any,
-				true,
-				None,
-			)],
-			named("GlorpOutcome"),
-		),
 	]
 }
 
 pub fn command_schemas() -> Vec<CommandSchema> {
-	surface_specs()
+	command_specs()
 		.into_iter()
-		.filter_map(|spec| match spec.kind {
-			SurfaceKind::Command => Some(CommandSchema {
-				path: spec.path.to_owned(),
-				docs: spec.docs.to_owned(),
-				input: spec.input.unwrap_or_else(|| built(BuiltinType::Null)),
-				output: spec.output,
-			}),
-			_ => None,
+		.map(|spec| CommandSchema {
+			path: spec.surface.path.to_owned(),
+			docs: spec.surface.docs.to_owned(),
+			input: spec.surface.input.unwrap_or_else(|| built(BuiltinType::Null)),
+			output: spec.surface.output,
 		})
 		.collect()
 }
 
 pub fn query_schemas() -> Vec<QuerySchema> {
-	surface_specs()
+	query_specs()
 		.into_iter()
-		.filter_map(|spec| match spec.kind {
-			SurfaceKind::Query => Some(QuerySchema {
-				path: spec.path.to_owned(),
-				docs: spec.docs.to_owned(),
-				input: spec.input,
-				output: spec.output,
-			}),
-			_ => None,
+		.map(|spec| QuerySchema {
+			path: spec.surface.path.to_owned(),
+			docs: spec.surface.docs.to_owned(),
+			input: spec.surface.input,
+			output: spec.surface.output,
 		})
 		.collect()
 }
 
 pub fn helper_schemas() -> Vec<HelperSchema> {
-	surface_specs()
+	helper_specs()
 		.into_iter()
-		.filter_map(|spec| match spec.kind {
-			SurfaceKind::Helper(kind) => Some(HelperSchema {
-				path: spec.path.to_owned(),
-				docs: spec.docs.to_owned(),
-				kind,
-				input: spec.input,
-				output: spec.output,
-			}),
-			_ => None,
+		.map(|spec| HelperSchema {
+			path: spec.surface.path.to_owned(),
+			docs: spec.surface.docs.to_owned(),
+			kind: spec.kind,
+			input: spec.surface.input,
+			output: spec.surface.output,
 		})
 		.collect()
-}
-
-pub fn command_invocation(path: &str, input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
-	match path {
-		"glorp config set" => decode_config_set(input),
-		"glorp config reset" => decode_config_reset(input),
-		"glorp config patch" => decode_config_patch(input),
-		"glorp config reload" => ensure_no_input(path, input).map(|()| GlorpCommand::Config(ConfigCommand::Reload)),
-		"glorp config persist" => ensure_no_input(path, input).map(|()| GlorpCommand::Config(ConfigCommand::Persist)),
-		"glorp doc replace" => decode_document_replace(input),
-		"glorp editor motion" => decode_editor_motion(input),
-		"glorp editor mode" => decode_editor_mode(input),
-		"glorp editor edit insert" => decode_editor_edit_insert(input),
-		"glorp editor edit backspace" => ensure_no_input(path, input)
-			.map(|()| GlorpCommand::Editor(EditorCommand::Edit(EditorEditCommand::Backspace))),
-		"glorp editor edit delete-forward" => ensure_no_input(path, input)
-			.map(|()| GlorpCommand::Editor(EditorCommand::Edit(EditorEditCommand::DeleteForward))),
-		"glorp editor edit delete-selection" => ensure_no_input(path, input)
-			.map(|()| GlorpCommand::Editor(EditorCommand::Edit(EditorEditCommand::DeleteSelection))),
-		"glorp editor history" => decode_editor_history(input),
-		"glorp ui sidebar select" => decode_ui_sidebar_select(input),
-		"glorp ui viewport scroll-to" => decode_ui_viewport_scroll_to(input),
-		"glorp ui pane-ratio-set" => decode_ui_pane_ratio_set(input),
-		"glorp scene ensure" => ensure_no_input(path, input).map(|()| GlorpCommand::Scene(SceneCommand::Ensure)),
-		"glorp txn" => decode_txn(input).map(GlorpCommand::Txn),
-		_ => Err(GlorpError::validation(None, format!("unknown command path `{path}`"))),
-	}
-}
-
-pub fn query_invocation(path: &str, input: Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError> {
-	match path {
-		"glorp schema" => ensure_no_input(path, input).map(|()| GlorpQuery::Schema),
-		"glorp get config" => ensure_no_input(path, input).map(|()| GlorpQuery::Config),
-		"glorp get state" => ensure_no_input(path, input).map(|()| GlorpQuery::Snapshot {
-			scene: crate::SceneLevel::Materialize,
-			include_document_text: true,
-		}),
-		"glorp get document-text" => ensure_no_input(path, input).map(|()| GlorpQuery::DocumentText),
-		"glorp get selection" => ensure_no_input(path, input).map(|()| GlorpQuery::Selection),
-		"glorp get inspect-details" => decode_get_inspect_details(input),
-		"glorp get perf" => ensure_no_input(path, input).map(|()| GlorpQuery::PerfDashboard),
-		"glorp get ui" => ensure_no_input(path, input).map(|()| GlorpQuery::UiState),
-		"glorp get capabilities" => ensure_no_input(path, input).map(|()| GlorpQuery::Capabilities),
-		_ => Err(GlorpError::validation(None, format!("unknown query path `{path}`"))),
-	}
 }
 
 pub fn completion_values(name: &str) -> Option<&'static [&'static str]> {
@@ -441,57 +456,8 @@ pub fn render_nu_completions() -> String {
 
 pub fn render_nu_module() -> String {
 	let mut module = String::from("plugin use glorp\nuse ./completions.nu *\n\n");
-	module.push_str(&render_nu_command_helpers());
-	module.push('\n');
 	module.push_str(&render_nu_aliases());
 	module
-}
-
-fn render_nu_command_helpers() -> String {
-	surface_specs()
-		.into_iter()
-		.filter(|spec| matches!(spec.kind, SurfaceKind::Command) && spec.path != "glorp txn")
-		.map(render_nu_command_helper)
-		.collect::<Vec<_>>()
-		.join("\n")
-}
-
-fn render_nu_command_helper(spec: SurfaceSpec) -> String {
-	let helper_name = spec.path.replacen("glorp ", "glorp cmd ", 1);
-	let signature = spec
-		.args
-		.iter()
-		.map(|arg| {
-			let mut shape = match arg.kind {
-				SurfaceArgKind::String => "string".to_owned(),
-				SurfaceArgKind::Int => "int".to_owned(),
-				SurfaceArgKind::Float => "number".to_owned(),
-				SurfaceArgKind::Bool => "bool".to_owned(),
-				SurfaceArgKind::Any => "any".to_owned(),
-			};
-			if let Some(completion) = arg.completion {
-				shape.push_str(&format!("@\"nu-complete glorp {completion}\""));
-			}
-			let suffix = if arg.required { "" } else { "?" };
-			format!("{}{}: {shape}", arg.name, suffix)
-		})
-		.collect::<Vec<_>>()
-		.join(" ");
-	let input = if spec.args.is_empty() {
-		"null".to_owned()
-	} else {
-		let fields = spec
-			.args
-			.iter()
-			.map(|arg| format!("{}: ${}", arg.name, arg.name))
-			.collect::<Vec<_>>()
-			.join(" ");
-		format!("{{{fields}}}")
-	};
-	format!(
-		"export def \"{helper_name}\" [{signature}] {{\n  {{path: \"{}\" input: {input}}}\n}}\n",
-		spec.path
-	)
 }
 
 fn render_nu_aliases() -> String {
@@ -509,25 +475,54 @@ fn render_alias(name: &str, target: &str) -> String {
 	format!("export def \"{name}\" [] {{\n  {target}\n}}\n")
 }
 
+fn decode_schema_query(input: Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError> {
+	ensure_no_input("glorp schema", input).map(|()| GlorpQuery::Schema)
+}
+
+fn decode_get_config(input: Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError> {
+	ensure_no_input("glorp get config", input).map(|()| GlorpQuery::Config)
+}
+
+fn decode_get_state(input: Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError> {
+	ensure_no_input("glorp get state", input).map(|()| GlorpQuery::Snapshot {
+		scene: crate::SceneLevel::Materialize,
+		include_document_text: true,
+	})
+}
+
+fn decode_get_document_text(input: Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError> {
+	ensure_no_input("glorp get document-text", input).map(|()| GlorpQuery::DocumentText)
+}
+
+fn decode_get_selection(input: Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError> {
+	ensure_no_input("glorp get selection", input).map(|()| GlorpQuery::Selection)
+}
+
+fn decode_get_perf(input: Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError> {
+	ensure_no_input("glorp get perf", input).map(|()| GlorpQuery::PerfDashboard)
+}
+
+fn decode_get_ui(input: Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError> {
+	ensure_no_input("glorp get ui", input).map(|()| GlorpQuery::UiState)
+}
+
+fn decode_get_capabilities(input: Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError> {
+	ensure_no_input("glorp get capabilities", input).map(|()| GlorpQuery::Capabilities)
+}
+
+fn decode_txn_command(input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
+	decode_txn(input).map(GlorpCommand::Txn)
+}
+
 fn decode_txn(input: Option<&GlorpValue>) -> Result<GlorpTxn, GlorpError> {
 	let fields = record_fields("glorp txn", input)?;
 	let commands = list_field(fields, "commands")?
-		.into_iter()
-		.map(invocation_from_value)
-		.collect::<Result<Vec<_>, _>>()?;
+		.iter()
+		.cloned()
+		.map(|value| serde_json::from_value::<GlorpCommand>(value.into()))
+		.collect::<Result<Vec<_>, _>>()
+		.map_err(|error| GlorpError::validation(None, format!("invalid typed transaction command: {error}")))?;
 	Ok(GlorpTxn { commands })
-}
-
-fn invocation_from_value(value: &GlorpValue) -> Result<GlorpInvocation, GlorpError> {
-	let fields = value.as_record().ok_or_else(|| {
-		GlorpError::validation(
-			None,
-			format!("transaction command must be a record, got {}", value.kind()),
-		)
-	})?;
-	let path = string_field(fields, "path")?.to_owned();
-	let input = fields.get("input").cloned();
-	Ok(GlorpInvocation { path, input })
 }
 
 fn decode_config_set(input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
@@ -551,6 +546,14 @@ fn decode_config_patch(input: Option<&GlorpValue>) -> Result<GlorpCommand, Glorp
 	Ok(GlorpCommand::Config(ConfigCommand::Patch {
 		values: flatten_patch(patch)?,
 	}))
+}
+
+fn decode_config_reload(input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
+	ensure_no_input("glorp config reload", input).map(|()| GlorpCommand::Config(ConfigCommand::Reload))
+}
+
+fn decode_config_persist(input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
+	ensure_no_input("glorp config persist", input).map(|()| GlorpCommand::Config(ConfigCommand::Persist))
 }
 
 fn decode_document_replace(input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
@@ -579,6 +582,21 @@ fn decode_editor_edit_insert(input: Option<&GlorpValue>) -> Result<GlorpCommand,
 	Ok(GlorpCommand::Editor(EditorCommand::Edit(EditorEditCommand::Insert {
 		text: string_field(fields, "text")?.to_owned(),
 	})))
+}
+
+fn decode_editor_edit_backspace(input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
+	ensure_no_input("glorp editor edit backspace", input)
+		.map(|()| GlorpCommand::Editor(EditorCommand::Edit(EditorEditCommand::Backspace)))
+}
+
+fn decode_editor_edit_delete_forward(input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
+	ensure_no_input("glorp editor edit delete-forward", input)
+		.map(|()| GlorpCommand::Editor(EditorCommand::Edit(EditorEditCommand::DeleteForward)))
+}
+
+fn decode_editor_edit_delete_selection(input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
+	ensure_no_input("glorp editor edit delete-selection", input)
+		.map(|()| GlorpCommand::Editor(EditorCommand::Edit(EditorEditCommand::DeleteSelection)))
 }
 
 fn decode_editor_history(input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
@@ -610,6 +628,10 @@ fn decode_ui_pane_ratio_set(input: Option<&GlorpValue>) -> Result<GlorpCommand, 
 	}))
 }
 
+fn decode_scene_ensure(input: Option<&GlorpValue>) -> Result<GlorpCommand, GlorpError> {
+	ensure_no_input("glorp scene ensure", input).map(|()| GlorpCommand::Scene(SceneCommand::Ensure))
+}
+
 fn decode_get_inspect_details(input: Option<&GlorpValue>) -> Result<GlorpQuery, GlorpError> {
 	let target = input.and_then(|value| {
 		value
@@ -622,7 +644,7 @@ fn decode_get_inspect_details(input: Option<&GlorpValue>) -> Result<GlorpQuery, 
 	})
 }
 
-fn flatten_patch(value: &GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {
+pub fn flatten_patch(value: &GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {
 	let mut assignments = Vec::new();
 	let mut path = String::new();
 	flatten_patch_into(&mut assignments, &mut path, value)?;
@@ -653,7 +675,7 @@ fn flatten_patch_into(
 	}
 }
 
-fn parse_canvas_target(value: &str) -> Result<CanvasTarget, GlorpError> {
+pub fn parse_canvas_target(value: &str) -> Result<CanvasTarget, GlorpError> {
 	let (kind, index) = value
 		.split_once(':')
 		.ok_or_else(|| GlorpError::validation(None, format!("invalid canvas target `{value}`")))?;
@@ -702,17 +724,17 @@ fn string_field<'a>(fields: &'a BTreeMap<String, GlorpValue>, name: &str) -> Res
 		.ok_or_else(|| GlorpError::validation(None, format!("field `{name}` must be a string")))
 }
 
-fn list_field<'a>(fields: &'a BTreeMap<String, GlorpValue>, name: &str) -> Result<&'a [GlorpValue], GlorpError> {
-	match value_field(fields, name)? {
-		GlorpValue::List(values) => Ok(values.as_slice()),
-		_ => Err(GlorpError::validation(None, format!("field `{name}` must be a list"))),
-	}
-}
-
 fn float_field(fields: &BTreeMap<String, GlorpValue>, name: &str) -> Result<f64, GlorpError> {
 	value_field(fields, name)?
 		.as_f64()
-		.ok_or_else(|| GlorpError::validation(None, format!("field `{name}` must be numeric")))
+		.ok_or_else(|| GlorpError::validation(None, format!("field `{name}` must be a float")))
+}
+
+fn list_field<'a>(fields: &'a BTreeMap<String, GlorpValue>, name: &str) -> Result<&'a [GlorpValue], GlorpError> {
+	match value_field(fields, name)? {
+		GlorpValue::List(values) => Ok(values),
+		_ => Err(GlorpError::validation(None, format!("field `{name}` must be a list"))),
+	}
 }
 
 fn parse_enum_field<T>(fields: &BTreeMap<String, GlorpValue>, name: &str) -> Result<T, GlorpError>
@@ -722,13 +744,62 @@ where
 	T::parse(value).ok_or_else(|| {
 		GlorpError::validation_with_allowed(
 			None,
-			format!("invalid value `{value}` for `{name}`"),
+			format!("invalid value `{value}` for field `{name}`"),
 			T::allowed_values().iter().copied().map(str::to_owned).collect(),
 		)
 	})
 }
 
-fn arg(
+fn command(
+	path: &'static str, docs: &'static str, input: Option<TypeRef>, args: Vec<SurfaceArg>, output: TypeRef,
+	build: CommandBuilder, builder: bool,
+) -> CommandSpec {
+	CommandSpec {
+		surface: SurfaceSpec {
+			path,
+			docs,
+			args,
+			input,
+			output,
+		},
+		build,
+		builder,
+	}
+}
+
+fn query(
+	path: &'static str, docs: &'static str, input: Option<TypeRef>, args: Vec<SurfaceArg>, output: TypeRef,
+	build: QueryBuilder,
+) -> QuerySpec {
+	QuerySpec {
+		surface: SurfaceSpec {
+			path,
+			docs,
+			args,
+			input,
+			output,
+		},
+		build,
+	}
+}
+
+fn helper(
+	path: &'static str, docs: &'static str, kind: HelperKind, input: Option<TypeRef>, args: Vec<SurfaceArg>,
+	output: TypeRef,
+) -> HelperSpec {
+	HelperSpec {
+		surface: SurfaceSpec {
+			path,
+			docs,
+			args,
+			input,
+			output,
+		},
+		kind,
+	}
+}
+
+const fn arg(
 	name: &'static str, docs: &'static str, kind: SurfaceArgKind, required: bool, completion: Option<&'static str>,
 ) -> SurfaceArg {
 	SurfaceArg {
@@ -740,48 +811,8 @@ fn arg(
 	}
 }
 
-fn command(
-	path: &'static str, docs: &'static str, input: Option<TypeRef>, args: Vec<SurfaceArg>, output: TypeRef,
-) -> SurfaceSpec {
-	SurfaceSpec {
-		path,
-		docs,
-		kind: SurfaceKind::Command,
-		input,
-		args,
-		output,
-	}
-}
-
-fn query(
-	path: &'static str, docs: &'static str, input: Option<TypeRef>, args: Vec<SurfaceArg>, output: TypeRef,
-) -> SurfaceSpec {
-	SurfaceSpec {
-		path,
-		docs,
-		kind: SurfaceKind::Query,
-		input,
-		args,
-		output,
-	}
-}
-
-fn helper(
-	path: &'static str, docs: &'static str, kind: HelperKind, input: Option<TypeRef>, args: Vec<SurfaceArg>,
-	output: TypeRef,
-) -> SurfaceSpec {
-	SurfaceSpec {
-		path,
-		docs,
-		kind: SurfaceKind::Helper(kind),
-		input,
-		args,
-		output,
-	}
-}
-
-const fn built(kind: BuiltinType) -> TypeRef {
-	TypeRef::Builtin(kind)
+fn built(ty: BuiltinType) -> TypeRef {
+	TypeRef::Builtin(ty)
 }
 
 fn named(name: &str) -> TypeRef {
