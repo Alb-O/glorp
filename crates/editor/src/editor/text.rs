@@ -29,8 +29,7 @@ pub fn previous_char(text: &str, byte: usize) -> Option<(usize, char)> {
 
 pub fn next_char(text: &str, byte: usize) -> Option<(usize, char)> {
 	let byte = clamp_char_boundary(text, byte);
-	let (_, ch) = text[byte..].char_indices().next()?;
-	Some((byte + ch.len_utf8(), ch))
+	text[byte..].chars().next().map(|ch| (byte + ch.len_utf8(), ch))
 }
 
 pub fn is_word_char(ch: char) -> bool {

@@ -88,17 +88,16 @@ pub fn start_server_shared(
 }
 
 fn handle_connection(stream: UnixStream, host: &Arc<Mutex<RuntimeHost>>) -> Result<(), GlorpError> {
-	let mut line = String::new();
-	let mut reader = BufReader::new(
-		stream
-			.try_clone()
-			.map_err(|error| GlorpError::transport(format!("failed to clone stream: {error}")))?,
-	);
-	reader
-		.read_line(&mut line)
-		.map_err(|error| GlorpError::transport(format!("failed to read request: {error}")))?;
-	let request: TransportRequest = serde_json::from_str(&line)
-		.map_err(|error| GlorpError::internal(format!("failed to decode request: {error}")))?;
+	let mut stream = stream;
+	let request = {
+		let mut line = String::new();
+		let mut reader = BufReader::new(&stream);
+		reader
+			.read_line(&mut line)
+			.map_err(|error| GlorpError::transport(format!("failed to read request: {error}")))?;
+		serde_json::from_str(&line)
+			.map_err(|error| GlorpError::internal(format!("failed to decode request: {error}")))?
+	};
 
 	let response = {
 		let mut host = host
@@ -116,9 +115,5 @@ fn handle_connection(stream: UnixStream, host: &Arc<Mutex<RuntimeHost>>) -> Resu
 
 	let payload = serde_json::to_string(&response)
 		.map_err(|error| GlorpError::internal(format!("failed to encode response: {error}")))?;
-	let mut writer = stream;
-	writer
-		.write_all(payload.as_bytes())
-		.and_then(|()| writer.write_all(b"\n"))
-		.map_err(|error| GlorpError::transport(format!("failed to write response: {error}")))
+	writeln!(stream, "{payload}").map_err(|error| GlorpError::transport(format!("failed to write response: {error}")))
 }

@@ -1,5 +1,5 @@
 use {
-	glorp_api::*,
+	glorp_api::{GlorpError, GlorpEvent, GlorpOutcome, GlorpStreamToken, GlorpSubscription},
 	std::collections::{BTreeMap, VecDeque},
 };
 

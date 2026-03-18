@@ -305,12 +305,7 @@ impl Cli {
 	fn attach_session(&self) -> Result<GlorpSessionView, GlorpError> {
 		let (socket, repo_root) = self.live_socket()?;
 		let mut client = IpcClient::new(socket.clone());
-		let Some(capabilities) = query_capabilities(&mut client)? else {
-			return Err(GlorpError::transport(format!(
-				"unexpected capabilities response from {}",
-				socket.display()
-			)));
-		};
+		let capabilities = query_capabilities(&mut client, &socket)?;
 		Ok(GlorpSessionView {
 			socket: socket.display().to_string(),
 			repo_root: repo_root.map(|repo_root| repo_root.display().to_string()),
@@ -354,47 +349,45 @@ fn autodetect_socket(repo_root: &Path) -> Option<PathBuf> {
 	socket_is_live(&socket).then_some(socket)
 }
 
-fn query_capabilities(host: &mut impl GlorpHost) -> Result<Option<GlorpCapabilities>, GlorpError> {
-	Ok(match host.query(GlorpQuery::Capabilities)? {
-		GlorpQueryResult::Capabilities(capabilities) => Some(capabilities),
-		_ => None,
-	})
+fn query_capabilities(host: &mut impl GlorpHost, socket: &Path) -> Result<GlorpCapabilities, GlorpError> {
+	let GlorpQueryResult::Capabilities(capabilities) = host.query(GlorpQuery::Capabilities)? else {
+		return Err(GlorpError::transport(format!(
+			"unexpected capabilities response from {}",
+			socket.display()
+		)));
+	};
+
+	Ok(capabilities)
+}
+
+impl Host {
+	fn as_glorp_host(&mut self) -> &mut dyn GlorpHost {
+		match self {
+			Self::Local(host) => host.as_mut(),
+			Self::Ipc(host) => host,
+		}
+	}
 }
 
 impl GlorpHost for Host {
 	fn execute(&mut self, command: GlorpCommand) -> Result<GlorpOutcome, GlorpError> {
-		match self {
-			Self::Local(host) => host.execute(command),
-			Self::Ipc(host) => host.execute(command),
-		}
+		self.as_glorp_host().execute(command)
 	}
 
 	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
-		match self {
-			Self::Local(host) => host.query(query),
-			Self::Ipc(host) => host.query(query),
-		}
+		self.as_glorp_host().query(query)
 	}
 
 	fn subscribe(&mut self, request: GlorpSubscription) -> Result<GlorpStreamToken, GlorpError> {
-		match self {
-			Self::Local(host) => host.subscribe(request),
-			Self::Ipc(host) => host.subscribe(request),
-		}
+		self.as_glorp_host().subscribe(request)
 	}
 
 	fn next_event(&mut self, token: GlorpStreamToken) -> Result<Option<GlorpEvent>, GlorpError> {
-		match self {
-			Self::Local(host) => host.next_event(token),
-			Self::Ipc(host) => host.next_event(token),
-		}
+		self.as_glorp_host().next_event(token)
 	}
 
 	fn unsubscribe(&mut self, token: GlorpStreamToken) -> Result<(), GlorpError> {
-		match self {
-			Self::Local(host) => host.unsubscribe(token),
-			Self::Ipc(host) => host.unsubscribe(token),
-		}
+		self.as_glorp_host().unsubscribe(token)
 	}
 }
 

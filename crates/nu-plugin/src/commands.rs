@@ -560,7 +560,10 @@ fn flatten_record(prefix: Option<&str>, value: GlorpValue) -> Result<Vec<ConfigA
 		GlorpValue::Record(fields) => fields
 			.into_iter()
 			.try_fold(Vec::new(), |mut assignments, (key, value)| {
-				let path = prefix.map_or(key.clone(), |prefix| format!("{prefix}.{key}"));
+				let path = match prefix {
+					Some(prefix) => format!("{prefix}.{key}"),
+					None => key,
+				};
 				assignments.extend(flatten_record(Some(&path), value)?);
 				Ok(assignments)
 			}),
@@ -624,16 +627,16 @@ fn parse_canvas_target(value: &str) -> Result<CanvasTarget, LabeledError> {
 }
 
 fn session_socket(value: &Value) -> Result<String, LabeledError> {
-	match value {
-		Value::Record { val, .. } => val
-			.get("socket")
-			.and_then(|value| match value {
-				Value::String { val, .. } => Some(val.clone()),
-				_ => None,
-			})
-			.ok_or_else(|| LabeledError::new("session record does not contain a string `socket` field")),
-		_ => Err(LabeledError::new(
+	let Value::Record { val, .. } = value else {
+		return Err(LabeledError::new(
 			"session flag must be a record returned by glorp session attach",
+		));
+	};
+
+	match val.get("socket") {
+		Some(Value::String { val, .. }) => Ok(val.clone()),
+		_ => Err(LabeledError::new(
+			"session record does not contain a string `socket` field",
 		)),
 	}
 }

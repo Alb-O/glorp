@@ -130,40 +130,34 @@ fn ensure_runtime_capabilities(client: &mut impl GlorpHost, error: &'static str)
 	Ok(())
 }
 
+impl GuiRuntimeClient {
+	fn as_glorp_host(&mut self) -> &mut dyn GlorpHost {
+		match self {
+			Self::Local(client) => client,
+			Self::Ipc(client) => client,
+		}
+	}
+}
+
 impl GlorpHost for GuiRuntimeClient {
 	fn execute(&mut self, command: glorp_api::GlorpCommand) -> Result<glorp_api::GlorpOutcome, GlorpError> {
-		match self {
-			Self::Local(client) => client.execute(command),
-			Self::Ipc(client) => client.execute(command),
-		}
+		self.as_glorp_host().execute(command)
 	}
 
 	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
-		match self {
-			Self::Local(client) => client.query(query),
-			Self::Ipc(client) => client.query(query),
-		}
+		self.as_glorp_host().query(query)
 	}
 
 	fn subscribe(&mut self, request: glorp_api::GlorpSubscription) -> Result<glorp_api::GlorpStreamToken, GlorpError> {
-		match self {
-			Self::Local(client) => client.subscribe(request),
-			Self::Ipc(client) => client.subscribe(request),
-		}
+		self.as_glorp_host().subscribe(request)
 	}
 
 	fn next_event(&mut self, token: glorp_api::GlorpStreamToken) -> Result<Option<glorp_api::GlorpEvent>, GlorpError> {
-		match self {
-			Self::Local(client) => client.next_event(token),
-			Self::Ipc(client) => client.next_event(token),
-		}
+		self.as_glorp_host().next_event(token)
 	}
 
 	fn unsubscribe(&mut self, token: glorp_api::GlorpStreamToken) -> Result<(), GlorpError> {
-		match self {
-			Self::Local(client) => client.unsubscribe(token),
-			Self::Ipc(client) => client.unsubscribe(token),
-		}
+		self.as_glorp_host().unsubscribe(token)
 	}
 }
 

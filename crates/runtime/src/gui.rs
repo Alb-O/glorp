@@ -1,4 +1,8 @@
-use {crate::state::UiRuntimeState, glorp_api::*, glorp_editor::SessionSnapshot};
+use {
+	crate::state::UiRuntimeState,
+	glorp_api::{GlorpConfig, GlorpRevisions},
+	glorp_editor::SessionSnapshot,
+};
 
 #[derive(Debug, Clone)]
 pub struct GuiRuntimeFrame {
