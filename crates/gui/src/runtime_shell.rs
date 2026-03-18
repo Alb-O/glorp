@@ -100,11 +100,11 @@ impl RuntimeShell {
 		self.last_error = result.err().map(|error| error.to_string());
 	}
 
-	pub(crate) fn subscription(&self) -> Subscription<Message> {
+	pub(crate) fn subscription(_: &Self) -> Subscription<Message> {
 		iced::time::every(std::time::Duration::from_millis(100)).map(|now| Message::Perf(PerfMessage::Tick(now)))
 	}
 
-	pub(crate) const fn theme(&self) -> Theme {
+	pub(crate) const fn theme(_: &Self) -> Theme {
 		Theme::TokyoNightStorm
 	}
 
@@ -113,13 +113,13 @@ impl RuntimeShell {
 			let snapshot = Arc::new(self.frame.snapshot.clone());
 			if is_stacked_shell(size) {
 				view_stacked_shell(
-					self.view_sidebar(Arc::clone(&snapshot), true),
+					self.view_sidebar(snapshot.as_ref(), true),
 					self.view_canvas(Arc::clone(&snapshot), true),
 				)
 			} else {
 				let grid = pane_grid(&self.shell, move |_, pane, _| {
 					let content = match pane {
-						ShellPane::Sidebar => self.view_sidebar(Arc::clone(&snapshot), false),
+						ShellPane::Sidebar => self.view_sidebar(snapshot.as_ref(), false),
 						ShellPane::Canvas => self.view_canvas(Arc::clone(&snapshot), false),
 					};
 					pane_grid::Content::new(content)
@@ -178,7 +178,7 @@ impl RuntimeShell {
 		})
 	}
 
-	fn view_sidebar(&self, snapshot: Arc<SessionSnapshot>, stacked: bool) -> Element<'static, Message> {
+	fn view_sidebar(&self, snapshot: &SessionSnapshot, stacked: bool) -> Element<'static, Message> {
 		let body = match self.frame.ui.active_tab {
 			SidebarTab::Controls => view_controls_tab(ControlsTabProps {
 				preset: self

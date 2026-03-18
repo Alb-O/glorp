@@ -22,7 +22,7 @@ impl GlorpRuntime {
 		let config_store = ConfigStore::new(options.paths);
 		let config = config_store.load()?;
 		let text = sample_text(config.editor.preset);
-		let state = RuntimeState::new(config, text);
+		let state = RuntimeState::new(config, &text);
 		persistence::persist_schema(&config_store)?;
 		Ok(Self {
 			config_store,
@@ -40,7 +40,7 @@ impl GlorpRuntime {
 	}
 
 	pub fn publish_changed(&mut self, outcome: &GlorpOutcome) {
-		self.subscriptions.publish_changed(outcome.clone());
+		self.subscriptions.publish_changed(outcome);
 	}
 
 	pub fn gui_frame(&mut self) -> crate::GuiRuntimeFrame {

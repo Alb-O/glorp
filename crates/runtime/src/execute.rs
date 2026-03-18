@@ -1,5 +1,8 @@
 use {
-	crate::{runtime::GlorpRuntime, state::SessionRequest},
+	crate::{
+		runtime::GlorpRuntime,
+		state::{SessionDelta, SessionRequest},
+	},
 	glorp_api::*,
 	glorp_editor::{
 		EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion as EngineMotion,
@@ -11,10 +14,10 @@ pub fn execute(runtime: &mut GlorpRuntime, command: GlorpCommand) -> Result<Glor
 	match command {
 		GlorpCommand::Txn(txn) => execute_txn(runtime, txn),
 		GlorpCommand::Config(command) => execute_config(runtime, command),
-		GlorpCommand::Document(command) => execute_document(runtime, command),
-		GlorpCommand::Editor(command) => execute_editor(runtime, command),
-		GlorpCommand::Ui(command) => execute_ui(runtime, command),
-		GlorpCommand::Scene(command) => execute_scene(runtime, command),
+		GlorpCommand::Document(command) => Ok(execute_document(runtime, command)),
+		GlorpCommand::Editor(command) => Ok(execute_editor(runtime, command)),
+		GlorpCommand::Ui(command) => Ok(execute_ui(runtime, &command)),
+		GlorpCommand::Scene(command) => Ok(execute_scene(runtime, command)),
 	}
 }
 
@@ -24,25 +27,15 @@ fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome
 	let mut accumulated = GlorpOutcome::default();
 
 	for command in txn.commands {
-		match execute(runtime, command) {
-			Ok(outcome) => {
-				accumulated.delta.text_changed |= outcome.delta.text_changed;
-				accumulated.delta.view_changed |= outcome.delta.view_changed;
-				accumulated.delta.selection_changed |= outcome.delta.selection_changed;
-				accumulated.delta.mode_changed |= outcome.delta.mode_changed;
-				accumulated.delta.config_changed |= outcome.delta.config_changed;
-				accumulated.delta.ui_changed |= outcome.delta.ui_changed;
-				accumulated.delta.scene_changed |= outcome.delta.scene_changed;
-				accumulated.changed_config_paths.extend(outcome.changed_config_paths);
-				accumulated.warnings.extend(outcome.warnings);
-				accumulated.revisions = outcome.revisions;
-			}
+		let outcome = match execute(runtime, command) {
+			Ok(outcome) => outcome,
 			Err(error) => {
 				runtime.state.restore(checkpoint);
 				runtime.restore_subscriptions(previous_events);
 				return Err(error);
 			}
-		}
+		};
+		merge_outcome(&mut accumulated, outcome);
 	}
 
 	Ok(accumulated)
@@ -72,12 +65,7 @@ fn execute_config(runtime: &mut GlorpRuntime, command: ConfigCommand) -> Result<
 		}
 		ConfigCommand::Persist => {
 			runtime.config_store.save(&runtime.state.config)?;
-			return Ok(GlorpOutcome {
-				delta: GlorpDelta::default(),
-				revisions: runtime.state.revisions,
-				changed_config_paths: Vec::new(),
-				warnings: Vec::new(),
-			});
+			return Ok(outcome(runtime.state.revisions, GlorpDelta::default(), Vec::new()));
 		}
 	}
 
@@ -87,20 +75,16 @@ fn execute_config(runtime: &mut GlorpRuntime, command: ConfigCommand) -> Result<
 		runtime.state.ui.layout_width,
 	);
 
+	let mut outcome = session_outcome(runtime, &session.delta);
 	runtime.state.revisions.config += 1;
-	let mut delta = runtime.state.delta_from_session(&session.delta);
-	delta.config_changed = !changed_paths.is_empty();
-	let outcome = GlorpOutcome {
-		delta,
-		revisions: runtime.state.revisions,
-		changed_config_paths: changed_paths,
-		warnings: Vec::new(),
-	};
+	outcome.revisions = runtime.state.revisions;
+	outcome.delta.config_changed = !changed_paths.is_empty();
+	outcome.changed_config_paths = changed_paths;
 	runtime.publish_changed(&outcome);
 	Ok(outcome)
 }
 
-fn execute_document(runtime: &mut GlorpRuntime, command: DocumentCommand) -> Result<GlorpOutcome, GlorpError> {
+fn execute_document(runtime: &mut GlorpRuntime, command: DocumentCommand) -> GlorpOutcome {
 	match command {
 		DocumentCommand::Replace { text } => {
 			let session = runtime.state.session.execute(
@@ -108,19 +92,13 @@ fn execute_document(runtime: &mut GlorpRuntime, command: DocumentCommand) -> Res
 				&runtime.state.config,
 				runtime.state.ui.layout_width,
 			);
-			let outcome = GlorpOutcome {
-				delta: runtime.state.delta_from_session(&session.delta),
-				revisions: runtime.state.revisions,
-				changed_config_paths: Vec::new(),
-				warnings: Vec::new(),
-			};
-			runtime.publish_changed(&outcome);
-			Ok(outcome)
+			let outcome = session_outcome(runtime, &session.delta);
+			publish(runtime, outcome)
 		}
 	}
 }
 
-fn execute_editor(runtime: &mut GlorpRuntime, command: EditorCommand) -> Result<GlorpOutcome, GlorpError> {
+fn execute_editor(runtime: &mut GlorpRuntime, command: EditorCommand) -> GlorpOutcome {
 	let intent = match command {
 		EditorCommand::Motion(motion) => EditorIntent::Motion(match motion {
 			EditorMotion::Left => EngineMotion::Left,
@@ -160,22 +138,16 @@ fn execute_editor(runtime: &mut GlorpRuntime, command: EditorCommand) -> Result<
 		&runtime.state.config,
 		runtime.state.ui.layout_width,
 	);
-	let outcome = GlorpOutcome {
-		delta: runtime.state.delta_from_session(&session.delta),
-		revisions: runtime.state.revisions,
-		changed_config_paths: Vec::new(),
-		warnings: Vec::new(),
-	};
-	runtime.publish_changed(&outcome);
-	Ok(outcome)
+	let outcome = session_outcome(runtime, &session.delta);
+	publish(runtime, outcome)
 }
 
-fn execute_ui(runtime: &mut GlorpRuntime, command: UiCommand) -> Result<GlorpOutcome, GlorpError> {
+fn execute_ui(runtime: &mut GlorpRuntime, command: &UiCommand) -> GlorpOutcome {
 	match command {
-		UiCommand::SidebarSelect { tab } => runtime.state.ui.active_tab = tab,
-		UiCommand::InspectTargetHover { target } => runtime.state.ui.hovered_target = target,
-		UiCommand::InspectTargetSelect { target } => runtime.state.ui.selected_target = target,
-		UiCommand::CanvasFocusSet { focused } => runtime.state.ui.canvas_focused = focused,
+		UiCommand::SidebarSelect { tab } => runtime.state.ui.active_tab = *tab,
+		UiCommand::InspectTargetHover { target } => runtime.state.ui.hovered_target = *target,
+		UiCommand::InspectTargetSelect { target } => runtime.state.ui.selected_target = *target,
+		UiCommand::CanvasFocusSet { focused } => runtime.state.ui.canvas_focused = *focused,
 		UiCommand::ViewportScrollTo { x, y } => {
 			runtime.state.ui.canvas_scroll_x = x.max(0.0);
 			runtime.state.ui.canvas_scroll_y = y.max(0.0);
@@ -193,34 +165,27 @@ fn execute_ui(runtime: &mut GlorpRuntime, command: UiCommand) -> Result<GlorpOut
 				&runtime.state.config,
 				runtime.state.ui.layout_width,
 			);
-			let mut delta = runtime.state.delta_from_session(&session.delta);
-			delta.ui_changed = true;
-			let outcome = GlorpOutcome {
-				delta,
-				revisions: runtime.state.revisions,
-				changed_config_paths: Vec::new(),
-				warnings: Vec::new(),
-			};
-			runtime.publish_changed(&outcome);
-			return Ok(outcome);
+			let mut outcome = session_outcome(runtime, &session.delta);
+			outcome.delta.ui_changed = true;
+			return publish(runtime, outcome);
 		}
 		UiCommand::PaneRatioSet { ratio } => runtime.state.ui.pane_ratio = ratio.clamp(0.1, 0.9),
 	}
 
-	let outcome = GlorpOutcome {
-		delta: GlorpDelta {
-			ui_changed: true,
-			..GlorpDelta::default()
-		},
-		revisions: runtime.state.revisions,
-		changed_config_paths: Vec::new(),
-		warnings: Vec::new(),
-	};
-	runtime.publish_changed(&outcome);
-	Ok(outcome)
+	publish(
+		runtime,
+		outcome(
+			runtime.state.revisions,
+			GlorpDelta {
+				ui_changed: true,
+				..GlorpDelta::default()
+			},
+			Vec::new(),
+		),
+	)
 }
 
-fn execute_scene(runtime: &mut GlorpRuntime, command: SceneCommand) -> Result<GlorpOutcome, GlorpError> {
+fn execute_scene(runtime: &mut GlorpRuntime, command: SceneCommand) -> GlorpOutcome {
 	match command {
 		SceneCommand::Ensure => {
 			let session = runtime.state.session.execute(
@@ -228,16 +193,48 @@ fn execute_scene(runtime: &mut GlorpRuntime, command: SceneCommand) -> Result<Gl
 				&runtime.state.config,
 				runtime.state.ui.layout_width,
 			);
-			let outcome = GlorpOutcome {
-				delta: runtime.state.delta_from_session(&session.delta),
-				revisions: runtime.state.revisions,
-				changed_config_paths: Vec::new(),
-				warnings: Vec::new(),
-			};
+			let outcome = session_outcome(runtime, &session.delta);
 			if outcome.delta.scene_changed {
-				runtime.publish_changed(&outcome);
+				publish(runtime, outcome)
+			} else {
+				outcome
 			}
-			Ok(outcome)
 		}
+	}
+}
+
+fn merge_outcome(accumulated: &mut GlorpOutcome, outcome: GlorpOutcome) {
+	merge_delta(&mut accumulated.delta, &outcome.delta);
+	accumulated.changed_config_paths.extend(outcome.changed_config_paths);
+	accumulated.warnings.extend(outcome.warnings);
+	accumulated.revisions = outcome.revisions;
+}
+
+fn merge_delta(accumulated: &mut GlorpDelta, delta: &GlorpDelta) {
+	accumulated.text_changed |= delta.text_changed;
+	accumulated.view_changed |= delta.view_changed;
+	accumulated.selection_changed |= delta.selection_changed;
+	accumulated.mode_changed |= delta.mode_changed;
+	accumulated.config_changed |= delta.config_changed;
+	accumulated.ui_changed |= delta.ui_changed;
+	accumulated.scene_changed |= delta.scene_changed;
+}
+
+fn session_outcome(runtime: &mut GlorpRuntime, session_delta: &SessionDelta) -> GlorpOutcome {
+	let delta = runtime.state.delta_from_session(session_delta);
+	outcome(runtime.state.revisions, delta, Vec::new())
+}
+
+fn publish(runtime: &mut GlorpRuntime, outcome: GlorpOutcome) -> GlorpOutcome {
+	runtime.publish_changed(&outcome);
+	outcome
+}
+
+fn outcome(revisions: GlorpRevisions, delta: GlorpDelta, changed_config_paths: Vec<ConfigPath>) -> GlorpOutcome {
+	GlorpOutcome {
+		delta,
+		revisions,
+		changed_config_paths,
+		warnings: Vec::new(),
 	}
 }

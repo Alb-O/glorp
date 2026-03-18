@@ -4,5 +4,5 @@ use {
 };
 
 fn main() {
-	serve_plugin(&GlorpPlugin, JsonSerializer)
+	serve_plugin(&GlorpPlugin, JsonSerializer);
 }

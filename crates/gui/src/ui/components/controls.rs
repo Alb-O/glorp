@@ -36,8 +36,10 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 		column![
 			control_row(
 				"Document",
-				pick_list(Some(props.preset), SAMPLE_PRESETS, |preset| sample_preset_label(preset)
-					.to_owned())
+				pick_list(Some(props.preset), SAMPLE_PRESETS, |preset| sample_preset_label(
+					*preset
+				)
+				.to_owned())
 				.on_select(|preset| Message::Controls(ControlsMessage::LoadPreset(preset)))
 				.padding(PICK_LIST_PADDING)
 				.style(rounded_pick_list_style)
@@ -47,7 +49,7 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 			),
 			control_row(
 				"Font",
-				pick_list(Some(props.font), FONT_CHOICES, |font| font_choice_label(font)
+				pick_list(Some(props.font), FONT_CHOICES, |font| font_choice_label(*font)
 					.to_owned())
 				.on_select(|font| Message::Controls(ControlsMessage::FontSelected(font)))
 				.padding(PICK_LIST_PADDING)
@@ -59,7 +61,7 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 			control_row(
 				"Shaping",
 				pick_list(Some(props.shaping), SHAPING_CHOICES, |shaping| shaping_choice_label(
-					shaping
+					*shaping
 				)
 				.to_owned())
 				.on_select(|shaping| Message::Controls(ControlsMessage::ShapingSelected(shaping)))
@@ -72,7 +74,7 @@ pub(crate) fn view_controls_tab(props: ControlsTabProps) -> Element<'static, Mes
 			control_row(
 				"Wrap",
 				pick_list(Some(props.wrapping), WRAP_CHOICES, |wrapping| wrap_choice_label(
-					wrapping
+					*wrapping
 				)
 				.to_owned())
 				.on_select(|wrapping| Message::Controls(ControlsMessage::WrappingSelected(wrapping)))

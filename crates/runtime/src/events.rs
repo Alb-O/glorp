@@ -16,7 +16,7 @@ impl SubscriptionSet {
 		self.next_token
 	}
 
-	pub fn publish_changed(&mut self, outcome: GlorpOutcome) {
+	pub fn publish_changed(&mut self, outcome: &GlorpOutcome) {
 		for queue in self.queues.values_mut() {
 			queue.push_back(GlorpEvent::Changed(outcome.clone()));
 		}

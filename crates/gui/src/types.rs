@@ -88,7 +88,7 @@ pub(crate) enum ShellMessage {
 	PaneResized(pane_grid::ResizeEvent),
 }
 
-pub(crate) fn sample_preset_label(preset: &SamplePreset) -> &'static str {
+pub(crate) fn sample_preset_label(preset: SamplePreset) -> &'static str {
 	match preset {
 		SamplePreset::Tall => "Tall",
 		SamplePreset::Mixed => "Mixed",
@@ -135,7 +135,7 @@ pub(crate) fn sample_preset_text(preset: SamplePreset) -> &'static str {
 	}
 }
 
-pub(crate) fn font_choice_label(font: &FontChoice) -> &'static str {
+pub(crate) fn font_choice_label(font: FontChoice) -> &'static str {
 	match font {
 		FontChoice::JetBrainsMono => "JetBrains Mono",
 		FontChoice::Monospace => "Monospace family",
@@ -144,7 +144,7 @@ pub(crate) fn font_choice_label(font: &FontChoice) -> &'static str {
 	}
 }
 
-pub(crate) fn shaping_choice_label(shaping: &ShapingChoice) -> &'static str {
+pub(crate) fn shaping_choice_label(shaping: ShapingChoice) -> &'static str {
 	match shaping {
 		ShapingChoice::Auto => "Auto",
 		ShapingChoice::Basic => "Basic",
@@ -152,7 +152,7 @@ pub(crate) fn shaping_choice_label(shaping: &ShapingChoice) -> &'static str {
 	}
 }
 
-pub(crate) fn wrap_choice_label(wrapping: &WrapChoice) -> &'static str {
+pub(crate) fn wrap_choice_label(wrapping: WrapChoice) -> &'static str {
 	match wrapping {
 		WrapChoice::None => "None",
 		WrapChoice::Word => "Word",
@@ -161,7 +161,7 @@ pub(crate) fn wrap_choice_label(wrapping: &WrapChoice) -> &'static str {
 	}
 }
 
-pub(crate) fn sidebar_tab_label(tab: &SidebarTab) -> &'static str {
+pub(crate) fn sidebar_tab_label(tab: SidebarTab) -> &'static str {
 	match tab {
 		SidebarTab::Controls => "Controls",
 		SidebarTab::Inspect => "Inspect",

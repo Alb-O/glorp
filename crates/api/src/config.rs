@@ -64,10 +64,10 @@ impl GlorpConfig {
 			"editor.font" => self.editor.font = parse_string_enum(path, value)?,
 			"editor.shaping" => self.editor.shaping = parse_string_enum(path, value)?,
 			"editor.wrapping" => self.editor.wrapping = parse_string_enum(path, value)?,
-			"editor.font_size" => self.editor.font_size = parse_f32(path, value)?,
-			"editor.line_height" => self.editor.line_height = parse_f32(path, value)?,
-			"inspect.show_baselines" => self.inspect.show_baselines = parse_bool(path, value)?,
-			"inspect.show_hitboxes" => self.inspect.show_hitboxes = parse_bool(path, value)?,
+			"editor.font_size" => self.editor.font_size = parse_f32(path, &value)?,
+			"editor.line_height" => self.editor.line_height = parse_f32(path, &value)?,
+			"inspect.show_baselines" => self.inspect.show_baselines = parse_bool(path, &value)?,
+			"inspect.show_hitboxes" => self.inspect.show_hitboxes = parse_bool(path, &value)?,
 			_ => return Err(unknown_path(path)),
 		}
 
@@ -257,11 +257,11 @@ where
 	})
 }
 
-fn parse_bool(path: &str, value: GlorpValue) -> Result<bool, GlorpError> {
+fn parse_bool(path: &str, value: &GlorpValue) -> Result<bool, GlorpError> {
 	value.as_bool().ok_or_else(|| type_error(path, "bool", value.kind()))
 }
 
-fn parse_f32(path: &str, value: GlorpValue) -> Result<f32, GlorpError> {
+fn parse_f32(path: &str, value: &GlorpValue) -> Result<f32, GlorpError> {
 	let Some(value) = value.as_f64() else {
 		return Err(type_error(path, "float", value.kind()));
 	};

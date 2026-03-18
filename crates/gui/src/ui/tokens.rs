@@ -141,7 +141,7 @@ pub(crate) fn rounded_slider_style(theme: &Theme, status: iced::widget::slider::
 }
 
 pub(crate) fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'static, Message> {
-	let label_text = text(sidebar_tab_label(&tab)).size(14).style(move |theme: &Theme| {
+	let label_text = text(sidebar_tab_label(tab)).size(14).style(move |theme: &Theme| {
 		let palette = theme.palette();
 		iced::widget::text::Style {
 			color: Some(if is_active {

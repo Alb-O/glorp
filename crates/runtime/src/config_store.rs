@@ -98,14 +98,13 @@ fn config_from_json(value: serde_json::Value) -> Result<GlorpConfig, GlorpError>
 pub fn render_config(config: &GlorpConfig) -> String {
 	format!(
 		"export const config = {{\n  editor: {{\n    preset: {}\n    font: \"{}\"\n    shaping: \"{}\"\n    wrapping: \"{}\"\n    font_size: {}\n    line_height: {}\n  }}\n\n  inspect: {{\n    show_baselines: {}\n    show_hitboxes: {}\n  }}\n}}\n",
-		config
-			.editor
-			.preset
-			.map(|preset| format!(
+		config.editor.preset.map_or_else(
+			|| "null".to_owned(),
+			|preset| format!(
 				"\"{}\"",
 				<glorp_api::SamplePreset as glorp_api::EnumValue>::as_ref(preset)
-			))
-			.unwrap_or_else(|| "null".to_owned()),
+			),
+		),
 		<glorp_api::FontChoice as glorp_api::EnumValue>::as_ref(config.editor.font),
 		<glorp_api::ShapingChoice as glorp_api::EnumValue>::as_ref(config.editor.shaping),
 		<glorp_api::WrapChoice as glorp_api::EnumValue>::as_ref(config.editor.wrapping),

@@ -281,9 +281,9 @@ impl UiRuntimeState {
 }
 
 impl RuntimeState {
-	pub fn new(config: GlorpConfig, text: String) -> Self {
+	pub fn new(config: GlorpConfig, text: &str) -> Self {
 		let ui = UiRuntimeState::new();
-		let session = DocumentSession::new(&text, &config, ui.layout_width);
+		let session = DocumentSession::new(text, &config, ui.layout_width);
 
 		Self {
 			config,

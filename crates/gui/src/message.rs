@@ -1,6 +1,6 @@
 use glorp_api::{CanvasTarget, SidebarTab};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum GuiMessage {
 	SidebarSelect(SidebarTab),
 	InspectTargetSelect(Option<CanvasTarget>),

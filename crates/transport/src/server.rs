@@ -28,7 +28,7 @@ impl IpcServerHandle {
 
 	pub fn shutdown(mut self) -> Result<(), GlorpError> {
 		self.stop.store(true, Ordering::SeqCst);
-		let _ = super::transport_request::<TransportResponse>(&self.socket_path, TransportRequest::Shutdown);
+		let _ = super::transport_request::<TransportResponse>(&self.socket_path, &TransportRequest::Shutdown);
 		if let Some(thread) = self.thread.take() {
 			thread
 				.join()
@@ -67,7 +67,7 @@ pub fn start_server_shared(
 				Ok((stream, _)) => {
 					let host = Arc::clone(&host);
 					thread::spawn(move || {
-						let _ = handle_connection(stream, host);
+						let _ = handle_connection(stream, &host);
 					});
 				}
 				Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
@@ -86,7 +86,7 @@ pub fn start_server_shared(
 	})
 }
 
-fn handle_connection(stream: UnixStream, host: Arc<Mutex<RuntimeHost>>) -> Result<(), GlorpError> {
+fn handle_connection(stream: UnixStream, host: &Arc<Mutex<RuntimeHost>>) -> Result<(), GlorpError> {
 	let mut line = String::new();
 	let mut reader = BufReader::new(
 		stream

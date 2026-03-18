@@ -450,8 +450,9 @@ impl_simple_command!(
 	base_signature("glorp events next").required("token", SyntaxShape::Int, "Subscription token."),
 	|call, span, _input| {
 		let mut client = client_from_call(call)?;
-		let token: i64 = call.req(0)?;
-		let event = client.next_event(token as u64).map_err(to_labeled_error)?;
+		let token = u64::try_from(call.req::<i64>(0)?)
+			.map_err(|_| LabeledError::new("subscription token must be non-negative"))?;
+		let event = client.next_event(token).map_err(to_labeled_error)?;
 		Ok(value_pipeline(json_to_nu_value(
 			serde_json::to_value(event).unwrap_or(JsonValue::Null),
 			span,
@@ -466,8 +467,9 @@ impl_simple_command!(
 	base_signature("glorp events unsubscribe").required("token", SyntaxShape::Int, "Subscription token."),
 	|call, span, _input| {
 		let mut client = client_from_call(call)?;
-		let token: i64 = call.req(0)?;
-		client.unsubscribe(token as u64).map_err(to_labeled_error)?;
+		let token = u64::try_from(call.req::<i64>(0)?)
+			.map_err(|_| LabeledError::new("subscription token must be non-negative"))?;
+		client.unsubscribe(token).map_err(to_labeled_error)?;
 		Ok(value_pipeline(json_to_nu_value(
 			serde_json::json!({"ok": true, "token": token}),
 			span,
