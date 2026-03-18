@@ -1,8 +1,13 @@
 use {
 	glorp_api::{GlorpError, GlorpHost, GlorpQuery, GlorpQueryResult},
 	glorp_runtime::{RuntimeHost, RuntimeOptions, default_runtime_paths},
-	glorp_transport::{IpcClient, IpcServerHandle, default_socket_path, socket_is_live, start_server},
-	std::path::{Path, PathBuf},
+	glorp_transport::{
+		IpcClient, IpcServerHandle, LocalClient, default_socket_path, socket_is_live, start_server_shared,
+	},
+	std::{
+		path::{Path, PathBuf},
+		sync::{Arc, Mutex},
+	},
 };
 
 #[derive(Debug, Clone)]
@@ -23,20 +28,23 @@ impl GuiLaunchOptions {
 
 pub struct GuiRuntimeSession {
 	socket_path: PathBuf,
+	host: Option<Arc<Mutex<RuntimeHost>>>,
 	server: Option<IpcServerHandle>,
 }
 
+#[derive(Clone)]
+pub enum GuiRuntimeClient {
+	Local(LocalClient),
+	Ipc(IpcClient),
+}
+
 impl GuiRuntimeSession {
-	pub fn connect_or_start(options: GuiLaunchOptions) -> Result<(Self, IpcClient), GlorpError> {
+	pub fn start_owned(options: GuiLaunchOptions) -> Result<(Self, LocalClient), GlorpError> {
 		if socket_is_live(&options.socket_path) {
-			let client = IpcClient::new(options.socket_path.clone());
-			return Ok((
-				Self {
-					socket_path: options.socket_path,
-					server: None,
-				},
-				client,
-			));
+			return Err(GlorpError::transport(format!(
+				"shared GUI socket already active at {}",
+				options.socket_path.display()
+			)));
 		}
 
 		if let Some(parent) = options.socket_path.parent() {
@@ -45,16 +53,17 @@ impl GuiRuntimeSession {
 			})?;
 		}
 
-		let host = RuntimeHost::new(RuntimeOptions {
+		let host = Arc::new(Mutex::new(RuntimeHost::new(RuntimeOptions {
 			paths: default_runtime_paths(&options.repo_root),
-		})?;
-		let server = start_server(options.socket_path.clone(), host)?;
-		let client = IpcClient::new(options.socket_path.clone());
+		})?));
+		let server = start_server_shared(options.socket_path.clone(), Arc::clone(&host))?;
+		let mut client = LocalClient::shared(Arc::clone(&host));
 
-		match client.clone().query(GlorpQuery::Capabilities)? {
+		match client.query(GlorpQuery::Capabilities)? {
 			GlorpQueryResult::Capabilities(_) => Ok((
 				Self {
 					socket_path: options.socket_path,
+					host: Some(Arc::clone(&host)),
 					server: Some(server),
 				},
 				client,
@@ -65,8 +74,38 @@ impl GuiRuntimeSession {
 		}
 	}
 
+	pub fn connect_or_start(options: GuiLaunchOptions) -> Result<(Self, GuiRuntimeClient), GlorpError> {
+		if socket_is_live(&options.socket_path) {
+			let mut client = IpcClient::new(options.socket_path.clone());
+			match client.query(GlorpQuery::Capabilities)? {
+				GlorpQueryResult::Capabilities(_) => Ok((
+					Self {
+						socket_path: options.socket_path,
+						host: None,
+						server: None,
+					},
+					GuiRuntimeClient::Ipc(client),
+				)),
+				_ => Err(GlorpError::transport(
+					"unexpected capabilities response from shared GUI runtime",
+				)),
+			}
+		} else {
+			let (session, client) = Self::start_owned(options)?;
+			Ok((session, GuiRuntimeClient::Local(client)))
+		}
+	}
+
 	pub fn socket_path(&self) -> &Path {
 		&self.socket_path
+	}
+
+	pub fn host(&self) -> Arc<Mutex<RuntimeHost>> {
+		Arc::clone(
+			self.host
+				.as_ref()
+				.expect("GUI runtime session does not own a local host"),
+		)
 	}
 
 	pub fn owns_server(&self) -> bool {
@@ -78,6 +117,43 @@ impl GuiRuntimeSession {
 			server.shutdown()?;
 		}
 		Ok(())
+	}
+}
+
+impl GlorpHost for GuiRuntimeClient {
+	fn execute(&mut self, command: glorp_api::GlorpCommand) -> Result<glorp_api::GlorpOutcome, GlorpError> {
+		match self {
+			Self::Local(client) => client.execute(command),
+			Self::Ipc(client) => client.execute(command),
+		}
+	}
+
+	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
+		match self {
+			Self::Local(client) => client.query(query),
+			Self::Ipc(client) => client.query(query),
+		}
+	}
+
+	fn subscribe(&mut self, request: glorp_api::GlorpSubscription) -> Result<glorp_api::GlorpStreamToken, GlorpError> {
+		match self {
+			Self::Local(client) => client.subscribe(request),
+			Self::Ipc(client) => client.subscribe(request),
+		}
+	}
+
+	fn next_event(&mut self, token: glorp_api::GlorpStreamToken) -> Result<Option<glorp_api::GlorpEvent>, GlorpError> {
+		match self {
+			Self::Local(client) => client.next_event(token),
+			Self::Ipc(client) => client.next_event(token),
+		}
+	}
+
+	fn unsubscribe(&mut self, token: glorp_api::GlorpStreamToken) -> Result<(), GlorpError> {
+		match self {
+			Self::Local(client) => client.unsubscribe(token),
+			Self::Ipc(client) => client.unsubscribe(token),
+		}
 	}
 }
 

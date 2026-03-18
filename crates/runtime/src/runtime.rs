@@ -42,6 +42,16 @@ impl GlorpRuntime {
 	pub fn publish_changed(&mut self, outcome: &GlorpOutcome) {
 		self.subscriptions.publish_changed(outcome.clone());
 	}
+
+	pub fn gui_frame(&mut self) -> crate::GuiRuntimeFrame {
+		crate::GuiRuntimeFrame {
+			config: self.state.config.clone(),
+			ui: self.state.ui.clone(),
+			revisions: self.state.revisions,
+			snapshot: self.state.session.snapshot().clone(),
+			document_text: self.state.session.text().to_owned(),
+		}
+	}
 }
 
 impl GlorpHost for GlorpRuntime {

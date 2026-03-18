@@ -76,10 +76,30 @@ pub enum EditorPointerCommand {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub enum UiCommand {
-	SidebarSelect { tab: SidebarTab },
-	InspectTargetSelect { target: Option<CanvasTarget> },
-	ViewportScrollTo { x: f32, y: f32 },
-	PaneRatioSet { ratio: f32 },
+	SidebarSelect {
+		tab: SidebarTab,
+	},
+	InspectTargetHover {
+		target: Option<CanvasTarget>,
+	},
+	InspectTargetSelect {
+		target: Option<CanvasTarget>,
+	},
+	CanvasFocusSet {
+		focused: bool,
+	},
+	ViewportScrollTo {
+		x: f32,
+		y: f32,
+	},
+	ViewportMetricsSet {
+		layout_width: f32,
+		viewport_width: f32,
+		viewport_height: f32,
+	},
+	PaneRatioSet {
+		ratio: f32,
+	},
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

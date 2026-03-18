@@ -173,10 +173,36 @@ fn execute_editor(runtime: &mut GlorpRuntime, command: EditorCommand) -> Result<
 fn execute_ui(runtime: &mut GlorpRuntime, command: UiCommand) -> Result<GlorpOutcome, GlorpError> {
 	match command {
 		UiCommand::SidebarSelect { tab } => runtime.state.ui.active_tab = tab,
+		UiCommand::InspectTargetHover { target } => runtime.state.ui.hovered_target = target,
 		UiCommand::InspectTargetSelect { target } => runtime.state.ui.selected_target = target,
+		UiCommand::CanvasFocusSet { focused } => runtime.state.ui.canvas_focused = focused,
 		UiCommand::ViewportScrollTo { x, y } => {
 			runtime.state.ui.canvas_scroll_x = x.max(0.0);
 			runtime.state.ui.canvas_scroll_y = y.max(0.0);
+		}
+		UiCommand::ViewportMetricsSet {
+			layout_width,
+			viewport_width,
+			viewport_height,
+		} => {
+			runtime.state.ui.layout_width = layout_width.max(1.0);
+			runtime.state.ui.viewport_width = viewport_width.max(1.0);
+			runtime.state.ui.viewport_height = viewport_height.max(1.0);
+			let session = runtime.state.session.execute(
+				SessionRequest::SyncConfig,
+				&runtime.state.config,
+				runtime.state.ui.layout_width,
+			);
+			let mut delta = runtime.state.delta_from_session(&session.delta);
+			delta.ui_changed = true;
+			let outcome = GlorpOutcome {
+				delta,
+				revisions: runtime.state.revisions,
+				changed_config_paths: Vec::new(),
+				warnings: Vec::new(),
+			};
+			runtime.publish_changed(&outcome);
+			return Ok(outcome);
 		}
 		UiCommand::PaneRatioSet { ratio } => runtime.state.ui.pane_ratio = ratio.clamp(0.1, 0.9),
 	}

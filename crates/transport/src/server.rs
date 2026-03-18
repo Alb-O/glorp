@@ -40,6 +40,12 @@ impl IpcServerHandle {
 }
 
 pub fn start_server(socket_path: impl Into<PathBuf>, host: RuntimeHost) -> Result<IpcServerHandle, GlorpError> {
+	start_server_shared(socket_path, Arc::new(Mutex::new(host)))
+}
+
+pub fn start_server_shared(
+	socket_path: impl Into<PathBuf>, host: Arc<Mutex<RuntimeHost>>,
+) -> Result<IpcServerHandle, GlorpError> {
 	let socket_path = socket_path.into();
 	if socket_path.exists() {
 		std::fs::remove_file(&socket_path)
@@ -53,7 +59,6 @@ pub fn start_server(socket_path: impl Into<PathBuf>, host: RuntimeHost) -> Resul
 		.map_err(|error| GlorpError::transport(format!("failed to mark socket nonblocking: {error}")))?;
 
 	let stop = Arc::new(AtomicBool::new(false));
-	let host = Arc::new(Mutex::new(host));
 	let stop_thread = Arc::clone(&stop);
 	let socket_path_thread = socket_path.clone();
 	let thread = thread::spawn(move || {

@@ -6,6 +6,9 @@ edition.workspace = true
 [dependencies]
 clap.workspace = true
 glorp_api = { path = "../api" }
+glorp_editor = { path = "../editor" }
 glorp_runtime = { path = "../runtime" }
 glorp_transport = { path = "../transport" }
 iced.workspace = true
+serde_json.workspace = true
+tracing.workspace = true

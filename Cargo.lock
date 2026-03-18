@@ -1517,9 +1517,12 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "glorp_api",
+ "glorp_editor",
  "glorp_runtime",
  "glorp_transport",
  "iced",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]

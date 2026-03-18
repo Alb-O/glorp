@@ -240,8 +240,13 @@ It owns the repo-local default socket contract: `glorp.sock`.
 
 A thin rendering client.
 
-It renders snapshots, hosts or joins the shared runtime over loopback IPC,
-and translates widget-local events into public commands.
+It renders the canonical runtime/editor state, translates widget-local events
+into public commands, and exposes the shared repo-local socket contract.
+
+The interactive editor window owns the shared runtime so it can render rich
+editor/layout projections directly from the canonical host. The launcher/client
+surface may still attach to an already-running socket for non-rendering flows
+and acceptance coverage.
 It does not define product semantics.
 
 ### `glorp_nu_plugin`

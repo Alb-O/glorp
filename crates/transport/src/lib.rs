@@ -9,7 +9,7 @@ pub use self::{
 	client::{IpcClient, socket_is_live, transport_request},
 	ipc::{TransportRequest, TransportResponse},
 	local::LocalClient,
-	server::{IpcServerHandle, start_server},
+	server::{IpcServerHandle, start_server, start_server_shared},
 };
 
 pub fn default_socket_path(repo_root: impl Into<PathBuf>) -> PathBuf {
