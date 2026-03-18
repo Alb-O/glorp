@@ -4,6 +4,7 @@ use {
 		GlorpCommand, GlorpError, GlorpEvent, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
 		GlorpSubscription,
 	},
+	serde::de::DeserializeOwned,
 	std::{
 		io::{BufRead, BufReader, Write},
 		os::unix::net::UnixStream,
@@ -39,7 +40,7 @@ pub fn socket_is_live(socket_path: &Path) -> bool {
 
 pub fn transport_request<T>(socket_path: &Path, request: &TransportRequest) -> Result<T, GlorpError>
 where
-	T: for<'de> serde::Deserialize<'de>, {
+	T: DeserializeOwned, {
 	let mut stream = UnixStream::connect(socket_path)
 		.map_err(|error| GlorpError::transport(format!("failed to connect to {}: {error}", socket_path.display())))?;
 	let payload = serde_json::to_string(request)

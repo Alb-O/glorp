@@ -1,6 +1,11 @@
 use {
 	crate::plugin::GlorpPlugin,
-	glorp_api::*,
+	glorp_api::{
+		CanvasTarget, ConfigAssignment, ConfigCommand, DocumentCommand, EditorCommand, EditorEditCommand,
+		EditorHistoryCommand, EditorModeCommand, EditorMotion, GlorpCommand, GlorpConfig, GlorpError,
+		GlorpEventStreamView, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpSessionView,
+		GlorpSubscription, GlorpValue, SceneCommand, SceneLevel, SidebarTab, UiCommand,
+	},
 	glorp_transport::IpcClient,
 	nu_plugin::{EvaluatedCall, PluginCommand},
 	nu_protocol::{Category, LabeledError, PipelineData, Record, Signature, Span, SyntaxShape, Type, Value},
@@ -402,8 +407,8 @@ impl_simple_command!(
 		let y: f64 = call.req(1)?;
 		let outcome = client
 			.execute(GlorpCommand::Ui(UiCommand::ViewportScrollTo {
-				x: x as f32,
-				y: y as f32,
+				x: viewport_scroll_component(x, "x")?,
+				y: viewport_scroll_component(y, "y")?,
 			}))
 			.map_err(to_labeled_error)?;
 		Ok(value_pipeline(outcome_to_value(outcome, span)))
@@ -506,8 +511,20 @@ fn socket_from_call(call: &EvaluatedCall) -> Result<String, LabeledError> {
 		.ok_or_else(|| LabeledError::new("GLORP_SOCKET is not set and neither --socket nor --session was provided"))
 }
 
-fn value_pipeline(value: Value) -> PipelineData {
+const fn value_pipeline(value: Value) -> PipelineData {
 	PipelineData::Value(value, None)
+}
+
+fn viewport_scroll_component(value: f64, axis: &str) -> Result<f32, LabeledError> {
+	if !value.is_finite() || !(f64::from(f32::MIN)..=f64::from(f32::MAX)).contains(&value) {
+		return Err(LabeledError::new(format!(
+			"{axis} scroll `{value}` is out of range for f32",
+		)));
+	}
+
+	#[allow(clippy::cast_possible_truncation)]
+	let value = value as f32;
+	Ok(value)
 }
 
 fn outcome_to_value(outcome: GlorpOutcome, span: Span) -> Value {

@@ -381,7 +381,8 @@ fn reveal_scroll(frame: &GuiRuntimeFrame) -> Option<Vector> {
 	let viewport = Size::new(frame.ui.viewport_width.max(1.0), frame.ui.viewport_height.max(1.0));
 	let current = Vector::new(frame.ui.canvas_scroll_x, frame.ui.canvas_scroll_y);
 	let next = reveal_target_scroll(current, target, metrics, frame.ui.layout_width, viewport);
-	((next - current).x.abs() > 0.5 || (next - current).y.abs() > 0.5).then_some(next)
+	let delta = next - current;
+	(delta.x.abs() > 0.5 || delta.y.abs() > 0.5).then_some(next)
 }
 
 fn reveal_target_scroll(

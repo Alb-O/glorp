@@ -1,7 +1,13 @@
 use {
 	crate::output,
 	clap::{Parser, Subcommand},
-	glorp_api::*,
+	glorp_api::{
+		CanvasTarget, ConfigAssignment, ConfigCommand, DocumentCommand, EditorCommand, EditorEditCommand,
+		EditorHistoryCommand, EditorModeCommand, EditorMotion, GlorpCapabilities, GlorpCommand, GlorpConfig,
+		GlorpError, GlorpEvent, GlorpEventStreamView, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult,
+		GlorpSessionView, GlorpStreamToken, GlorpSubscription, GlorpTxn, GlorpValue, SceneCommand, SceneLevel,
+		SidebarTab, UiCommand,
+	},
 	glorp_runtime::{RuntimeHost, RuntimeOptions, default_runtime_paths},
 	glorp_transport::{IpcClient, default_socket_path, socket_is_live},
 	std::path::{Path, PathBuf},
@@ -315,16 +321,18 @@ impl Cli {
 
 	fn live_socket(&self) -> Result<(PathBuf, Option<PathBuf>), GlorpError> {
 		if let Some(socket) = self.requested_socket() {
+			let display = socket.display().to_string();
 			return socket_is_live(&socket)
-				.then_some((socket.clone(), None))
-				.ok_or_else(|| GlorpError::transport(format!("no live runtime at {}", socket.display())));
+				.then_some((socket, None))
+				.ok_or_else(|| GlorpError::transport(format!("no live runtime at {display}")));
 		}
 
 		let repo_root = self.repo_root_or_cwd()?;
 		let socket = default_socket_path(&repo_root);
+		let display = socket.display().to_string();
 		socket_is_live(&socket)
-			.then_some((socket.clone(), Some(repo_root)))
-			.ok_or_else(|| GlorpError::transport(format!("no live runtime at {}", socket.display())))
+			.then_some((socket, Some(repo_root)))
+			.ok_or_else(|| GlorpError::transport(format!("no live runtime at {display}")))
 	}
 
 	fn requested_socket(&self) -> Option<PathBuf> {

@@ -614,7 +614,7 @@ fn merge_segments<T: Copy>(segments: Vec<T>, can_merge: impl Fn(&T, &T) -> bool,
 	merged
 }
 
-fn rect_style(kind: OverlayRectKind) -> RectStyle {
+const fn rect_style(kind: OverlayRectKind) -> RectStyle {
 	match kind {
 		OverlayRectKind::EditorSelection => RectStyle {
 			fill: Some(Color::from_rgba(0.28, 0.74, 1.0, 0.18)),

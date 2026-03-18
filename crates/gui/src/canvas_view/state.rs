@@ -36,7 +36,7 @@ impl DecodedEvent {
 		}
 	}
 
-	pub(super) fn canvas(canvas_intent: CanvasIntent) -> Self {
+	pub(super) const fn canvas(canvas_intent: CanvasIntent) -> Self {
 		Self::new(canvas_intent, None)
 	}
 }
@@ -95,7 +95,7 @@ impl CanvasState {
 		self.scroll
 	}
 
-	pub(super) fn clamp_to_bounds(&mut self, max_scroll: Vector) {
+	pub(super) const fn clamp_to_bounds(&mut self, max_scroll: Vector) {
 		self.target_scroll = clamp_scroll(self.target_scroll, max_scroll);
 		self.scroll = clamp_scroll(self.scroll, max_scroll);
 	}

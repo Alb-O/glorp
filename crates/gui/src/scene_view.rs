@@ -42,7 +42,7 @@ pub struct StaticSceneLayer {
 }
 
 impl StaticSceneLayer {
-	pub fn new(
+	pub const fn new(
 		scene: ScenePresentation, layout_width: f32, show_baselines: bool, show_hitboxes: bool, scroll: Vector,
 		perf: CanvasPerfSink,
 	) -> Self {
@@ -67,7 +67,7 @@ impl StaticSceneLayer {
 		self.height = height.into();
 		self
 	}
-	fn cache_key(&self) -> StaticSceneKey {
+	const fn cache_key(&self) -> StaticSceneKey {
 		StaticSceneKey {
 			scene_revision: self.scene.revision,
 			show_baselines: self.show_baselines,
@@ -197,7 +197,7 @@ fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 	}
 }
 
-fn scene_content_width(layout: &crate::scene::DocumentLayout, layout_width: f32) -> f32 {
+const fn scene_content_width(layout: &crate::scene::DocumentLayout, layout_width: f32) -> f32 {
 	if matches!(layout.wrapping, WrapChoice::None) {
 		layout.measured_width.max(layout_width).max(1.0)
 	} else {

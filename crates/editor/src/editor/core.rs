@@ -106,7 +106,7 @@ impl EditorEngine {
 	}
 
 	pub fn selection_range(&self) -> Option<Range<usize>> {
-		self.selection().map(|selection| selection.range.clone())
+		self.selection().map(EditorSelection::range).cloned()
 	}
 
 	pub const fn set_selection(&mut self, selection: Option<EditorSelection>) {

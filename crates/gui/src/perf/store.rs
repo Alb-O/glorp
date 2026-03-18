@@ -45,7 +45,7 @@ impl MetricKind {
 		Self::CanvasDraw,
 	];
 
-	pub(super) fn label(self) -> &'static str {
+	pub(super) const fn label(self) -> &'static str {
 		match self {
 			Self::EditorCommand => "editor.command",
 			Self::EditorApply => "editor.apply",
@@ -62,7 +62,7 @@ impl MetricKind {
 		}
 	}
 
-	pub(super) fn index(self) -> usize {
+	pub(super) const fn index(self) -> usize {
 		self as usize
 	}
 }

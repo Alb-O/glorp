@@ -54,7 +54,7 @@ pub fn snapshot_from_state(
 		editor: editor_view(&snapshot, state.session.text()),
 		scene: match level {
 			SceneLevel::Omit => None,
-			SceneLevel::IfReady | SceneLevel::Materialize => scene_view(snapshot.scene.as_ref()),
+			SceneLevel::IfReady | SceneLevel::Materialize => snapshot.scene.as_ref().map(scene_state_view),
 		},
 		inspect: inspect_state(state.ui.hovered_target, state.ui.selected_target),
 		perf: perf_state_view(state),
@@ -140,7 +140,7 @@ pub fn perf_dashboard_view_from_state(state: &mut crate::state::RuntimeState) ->
 	}
 }
 
-pub fn ui_state_view(state: &crate::state::RuntimeState) -> UiStateView {
+pub const fn ui_state_view(state: &crate::state::RuntimeState) -> UiStateView {
 	UiStateView {
 		active_tab: state.ui.active_tab,
 		canvas_focused: state.ui.canvas_focused,
@@ -194,10 +194,6 @@ fn editor_view(snapshot: &SessionSnapshot, text: &str) -> EditorStateView {
 	}
 }
 
-fn scene_view(scene: Option<&glorp_editor::ScenePresentation>) -> Option<SceneStateView> {
-	scene.map(scene_state_view)
-}
-
 fn scene_state_view(scene: &glorp_editor::ScenePresentation) -> SceneStateView {
 	SceneStateView {
 		revision: scene.revision,
@@ -216,7 +212,7 @@ fn inspect_scene_view(scene: &glorp_editor::ScenePresentation) -> InspectSceneVi
 	}
 }
 
-fn layout_rect_view(target: glorp_editor::LayoutRect) -> LayoutRectView {
+const fn layout_rect_view(target: glorp_editor::LayoutRect) -> LayoutRectView {
 	LayoutRectView {
 		x: target.x,
 		y: target.y,

@@ -4,7 +4,7 @@ use {
 };
 
 #[must_use]
-pub fn scene_config_from_runtime(config: &GlorpConfig, layout_width: f32) -> SceneConfig {
+pub const fn scene_config_from_runtime(config: &GlorpConfig, layout_width: f32) -> SceneConfig {
 	scene_config(
 		config.editor.font,
 		config.editor.shaping,

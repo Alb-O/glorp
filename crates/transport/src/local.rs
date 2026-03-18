@@ -21,7 +21,7 @@ impl LocalClient {
 	}
 
 	#[must_use]
-	pub fn shared(host: Arc<Mutex<RuntimeHost>>) -> Self {
+	pub const fn shared(host: Arc<Mutex<RuntimeHost>>) -> Self {
 		Self { host }
 	}
 

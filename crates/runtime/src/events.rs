@@ -32,7 +32,8 @@ impl SubscriptionSet {
 	pub fn unsubscribe(&mut self, token: GlorpStreamToken) -> Result<(), GlorpError> {
 		self.queues
 			.remove(&token)
-			.map(|_| ())
+			.is_some()
+			.then_some(())
 			.ok_or_else(|| GlorpError::not_found(format!("unknown subscription token `{token}`")))
 	}
 }

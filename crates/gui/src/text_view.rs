@@ -26,7 +26,7 @@ pub struct SceneTextLayer {
 }
 
 impl SceneTextLayer {
-	pub fn new(snapshot: Arc<SessionSnapshot>, layout_width: f32, scroll: Vector) -> Self {
+	pub const fn new(snapshot: Arc<SessionSnapshot>, layout_width: f32, scroll: Vector) -> Self {
 		Self {
 			snapshot,
 			layout_width,
@@ -38,13 +38,13 @@ impl SceneTextLayer {
 		}
 	}
 
-	pub fn backdrop_only(mut self) -> Self {
+	pub const fn backdrop_only(mut self) -> Self {
 		self.draw_backdrop = true;
 		self.draw_text = false;
 		self
 	}
 
-	pub fn text_only(mut self) -> Self {
+	pub const fn text_only(mut self) -> Self {
 		self.draw_backdrop = false;
 		self.draw_text = true;
 		self
@@ -137,13 +137,14 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 		}
 
 		if self.draw_text {
-			let buffer = self.snapshot.editor.text_layer.buffer.clone();
 			match insert_repaint_clip(
 				origin,
 				self.snapshot.editor.editor.mode,
 				self.snapshot.editor.editor.viewport_target,
 			) {
 				Some(clip) => {
+					let buffer = self.snapshot.editor.text_layer.buffer.clone();
+
 					// Draw once in the normal color, then repaint only the active insert
 					// cell with the inverted glyph color.
 					renderer.fill_raw(iced::advanced::graphics::text::Raw {
@@ -161,7 +162,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 				}
 				None => {
 					renderer.fill_raw(iced::advanced::graphics::text::Raw {
-						buffer,
+						buffer: self.snapshot.editor.text_layer.buffer.clone(),
 						position: origin,
 						color: TEXT_COLOR,
 						clip_bounds: bounds,

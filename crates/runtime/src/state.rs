@@ -370,7 +370,7 @@ fn build_editor_presentation(editor: &EditorEngine, revision: u64) -> EditorPres
 	)
 }
 
-pub fn text_range(range: &Range<usize>) -> glorp_api::TextRange {
+pub const fn text_range(range: &Range<usize>) -> glorp_api::TextRange {
 	glorp_api::TextRange {
 		start: range.start as u64,
 		end: range.end as u64,

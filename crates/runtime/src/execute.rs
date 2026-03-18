@@ -68,13 +68,7 @@ fn execute_config(runtime: &mut GlorpRuntime, command: ConfigCommand) -> Result<
 		}
 	};
 
-	let session = runtime.state.session.execute(
-		SessionRequest::SyncConfig,
-		&runtime.state.config,
-		runtime.state.ui.layout_width,
-	);
-
-	let mut outcome = session_outcome(runtime, &session.delta);
+	let mut outcome = run_session(runtime, SessionRequest::SyncConfig);
 	runtime.state.revisions.config += 1;
 	outcome.revisions = runtime.state.revisions;
 	outcome.delta.config_changed = !changed_paths.is_empty();
@@ -85,15 +79,7 @@ fn execute_config(runtime: &mut GlorpRuntime, command: ConfigCommand) -> Result<
 
 fn execute_document(runtime: &mut GlorpRuntime, command: DocumentCommand) -> GlorpOutcome {
 	match command {
-		DocumentCommand::Replace { text } => {
-			let session = runtime.state.session.execute(
-				SessionRequest::ReplaceDocument(text),
-				&runtime.state.config,
-				runtime.state.ui.layout_width,
-			);
-			let outcome = session_outcome(runtime, &session.delta);
-			publish(runtime, outcome)
-		}
+		DocumentCommand::Replace { text } => publish_session(runtime, SessionRequest::ReplaceDocument(text)),
 	}
 }
 
@@ -132,13 +118,7 @@ fn execute_editor(runtime: &mut GlorpRuntime, command: EditorCommand) -> GlorpOu
 		}),
 	};
 
-	let session = runtime.state.session.execute(
-		SessionRequest::ApplyEditorIntent(intent),
-		&runtime.state.config,
-		runtime.state.ui.layout_width,
-	);
-	let outcome = session_outcome(runtime, &session.delta);
-	publish(runtime, outcome)
+	publish_session(runtime, SessionRequest::ApplyEditorIntent(intent))
 }
 
 fn execute_ui(runtime: &mut GlorpRuntime, command: &UiCommand) -> GlorpOutcome {
@@ -159,12 +139,7 @@ fn execute_ui(runtime: &mut GlorpRuntime, command: &UiCommand) -> GlorpOutcome {
 			runtime.state.ui.layout_width = layout_width.max(1.0);
 			runtime.state.ui.viewport_width = viewport_width.max(1.0);
 			runtime.state.ui.viewport_height = viewport_height.max(1.0);
-			let session = runtime.state.session.execute(
-				SessionRequest::SyncConfig,
-				&runtime.state.config,
-				runtime.state.ui.layout_width,
-			);
-			let mut outcome = session_outcome(runtime, &session.delta);
+			let mut outcome = run_session(runtime, SessionRequest::SyncConfig);
 			outcome.delta.ui_changed = true;
 			return publish(runtime, outcome);
 		}
@@ -187,12 +162,7 @@ fn execute_ui(runtime: &mut GlorpRuntime, command: &UiCommand) -> GlorpOutcome {
 fn execute_scene(runtime: &mut GlorpRuntime, command: SceneCommand) -> GlorpOutcome {
 	match command {
 		SceneCommand::Ensure => {
-			let session = runtime.state.session.execute(
-				SessionRequest::EnsureScene,
-				&runtime.state.config,
-				runtime.state.ui.layout_width,
-			);
-			let outcome = session_outcome(runtime, &session.delta);
+			let outcome = run_session(runtime, SessionRequest::EnsureScene);
 			if outcome.delta.scene_changed {
 				publish(runtime, outcome)
 			} else {
@@ -217,6 +187,20 @@ const fn merge_delta(accumulated: &mut GlorpDelta, delta: &GlorpDelta) {
 	accumulated.config_changed |= delta.config_changed;
 	accumulated.ui_changed |= delta.ui_changed;
 	accumulated.scene_changed |= delta.scene_changed;
+}
+
+fn run_session(runtime: &mut GlorpRuntime, request: SessionRequest) -> GlorpOutcome {
+	let delta = runtime
+		.state
+		.session
+		.execute(request, &runtime.state.config, runtime.state.ui.layout_width)
+		.delta;
+	session_outcome(runtime, &delta)
+}
+
+fn publish_session(runtime: &mut GlorpRuntime, request: SessionRequest) -> GlorpOutcome {
+	let outcome = run_session(runtime, request);
+	publish(runtime, outcome)
 }
 
 fn session_outcome(runtime: &mut GlorpRuntime, session_delta: &SessionDelta) -> GlorpOutcome {

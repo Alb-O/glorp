@@ -104,6 +104,10 @@ fn document_text(host: &mut impl GlorpHost) -> String {
 	}
 }
 
+fn assert_f32_eq(actual: f32, expected: f32) {
+	assert!((actual - expected).abs() <= f32::EPSILON);
+}
+
 fn repo_root() -> PathBuf {
 	PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 		.parent()
@@ -324,12 +328,12 @@ fn gui_runtime_snapshot_e2e() {
 	let mut client = harness.ipc_client();
 	let gui_snapshot = snapshot(&mut client, SceneLevel::IfReady);
 	assert_eq!(gui_snapshot.ui.active_tab, SidebarTab::Inspect);
-	assert_eq!(gui_snapshot.ui.canvas_scroll_y, 120.0);
+	assert_f32_eq(gui_snapshot.ui.canvas_scroll_y, 120.0);
 
 	drop(gui);
 	let reconnect = snapshot(&mut harness.ipc_client(), SceneLevel::IfReady);
 	assert_eq!(reconnect.ui.active_tab, SidebarTab::Inspect);
-	assert_eq!(reconnect.ui.canvas_scroll_y, 120.0);
+	assert_f32_eq(reconnect.ui.canvas_scroll_y, 120.0);
 }
 
 #[test]
@@ -587,7 +591,7 @@ fn event_stream_conformance_test() {
 	};
 
 	assert!(host.next_event(token).expect("stream read should succeed").is_none());
-	assert!(first.revisions.config < second.revisions.editor || first.revisions.editor < second.revisions.editor);
+	assert!(first.revisions.config < second.revisions.config || first.revisions.editor < second.revisions.editor);
 	assert!(second.revisions.scene <= third.revisions.scene);
 	assert_eq!(first.changed_config_paths, vec!["inspect.show_hitboxes".to_owned()]);
 	assert!(first.delta.config_changed);
@@ -615,7 +619,7 @@ fn golden_transcript_smoke_test() {
 	assert!(snapshot.revisions.scene.is_some());
 	assert!(snapshot.editor.undo_depth > 0);
 	assert_eq!(snapshot.ui.active_tab, SidebarTab::Controls);
-	assert_eq!(snapshot.ui.canvas_scroll_y, 0.0);
+	assert_f32_eq(snapshot.ui.canvas_scroll_y, 0.0);
 }
 
 #[test]

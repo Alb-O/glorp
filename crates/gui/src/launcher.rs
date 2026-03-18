@@ -60,7 +60,7 @@ impl GuiRuntimeSession {
 		Ok((
 			Self {
 				socket_path: options.socket_path,
-				host: Some(Arc::clone(&host)),
+				host: Some(host),
 				server: Some(server),
 			},
 			client,

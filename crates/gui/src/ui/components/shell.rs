@@ -134,17 +134,11 @@ pub fn view_canvas_pane(props: CanvasPaneProps) -> Element<'static, Message> {
 			.height(Length::Fill)
 			.into()
 		});
-	let children = [
-		Some(backdrop.into()),
-		Some(underlay.into()),
-		Some(text_layer.into()),
-		static_layer,
-		Some(canvas_view.into()),
-		Some(overlay.into()),
-	]
-	.into_iter()
-	.flatten()
-	.collect::<Vec<_>>();
+	let children = [backdrop.into(), underlay.into(), text_layer.into()]
+		.into_iter()
+		.chain(static_layer)
+		.chain([canvas_view.into(), overlay.into()])
+		.collect::<Vec<_>>();
 
 	container(
 		sensor(Stack::with_children(children).width(Length::Fill).height(Length::Fill))
