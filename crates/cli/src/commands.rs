@@ -109,7 +109,7 @@ impl Cli {
 
 	fn attach_session(&self) -> Result<GlorpSessionView, GlorpError> {
 		let (socket, repo_root) = self.live_socket()?;
-		let mut client = IpcClient::new(socket.clone());
+		let mut client = IpcClient::new(socket.as_path());
 		let capabilities = query_capabilities(&mut client, &socket)?;
 		Ok(GlorpSessionView {
 			socket: socket.display().to_string(),

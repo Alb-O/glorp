@@ -25,7 +25,7 @@ fn run() -> Result<(), GlorpError> {
 		},
 		Ok,
 	)?;
-	let socket_path = cli.socket.clone().unwrap_or_else(|| default_socket_path(&repo_root));
+	let socket_path = cli.socket.unwrap_or_else(|| default_socket_path(&repo_root));
 	let paths = default_runtime_paths(&repo_root);
 
 	match cli.command.unwrap_or(Command::Serve) {
@@ -45,12 +45,10 @@ fn export(paths: glorp_runtime::ConfigStorePaths) -> Result<(), GlorpError> {
 }
 
 fn ensure_parent(path: &std::path::Path, label: &str) -> Result<(), GlorpError> {
-	let Some(parent) = path.parent() else {
-		return Ok(());
-	};
-
-	std::fs::create_dir_all(parent)
-		.map_err(|error| GlorpError::transport(format!("failed to create {label} {}: {error}", parent.display())))
+	path.parent().map_or(Ok(()), |parent| {
+		std::fs::create_dir_all(parent)
+			.map_err(|error| GlorpError::transport(format!("failed to create {label} {}: {error}", parent.display())))
+	})
 }
 
 #[derive(Debug, Parser)]

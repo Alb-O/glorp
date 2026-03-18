@@ -30,7 +30,7 @@ pub struct PerfSnapshotKey {
 #[allow(dead_code)]
 impl PerfMonitor {
 	pub fn sink(&self) -> CanvasPerfSink {
-		Clone::clone(&self.sink)
+		self.sink.clone()
 	}
 
 	pub fn key(&self) -> PerfSnapshotKey {

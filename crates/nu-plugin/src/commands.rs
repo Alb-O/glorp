@@ -303,7 +303,7 @@ fn ensure_session(repo_root: PathBuf, socket: PathBuf) -> Result<ResolvedSession
 		wait_for_socket(&socket)?;
 	}
 
-	let mut client = IpcClient::new(socket.clone());
+	let mut client = IpcClient::new(socket.as_path());
 	let _ = capabilities(&mut client)?;
 	Ok(ResolvedSession {
 		repo_root,

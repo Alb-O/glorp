@@ -53,7 +53,7 @@ impl GuiRuntimeSession {
 		let host = Arc::new(Mutex::new(RuntimeHost::new(RuntimeOptions {
 			paths: default_runtime_paths(&options.repo_root),
 		})?));
-		let server = start_server_shared(options.socket_path.clone(), Arc::clone(&host))?;
+		let server = start_server_shared(options.socket_path.as_path(), Arc::clone(&host))?;
 		let mut client = LocalClient::shared(Arc::clone(&host));
 		ensure_runtime_capabilities(&mut client, "unexpected capabilities response from GUI runtime")?;
 
@@ -73,7 +73,7 @@ impl GuiRuntimeSession {
 			return Ok((session, GuiRuntimeClient::Local(client)));
 		}
 
-		let mut client = IpcClient::new(options.socket_path.clone());
+		let mut client = IpcClient::new(options.socket_path.as_path());
 		ensure_runtime_capabilities(&mut client, "unexpected capabilities response from shared GUI runtime")?;
 
 		Ok((
@@ -111,12 +111,11 @@ impl GuiRuntimeSession {
 }
 
 fn ensure_socket_parent(socket_path: &Path) -> Result<(), GlorpError> {
-	let Some(parent) = socket_path.parent() else {
-		return Ok(());
-	};
-
-	std::fs::create_dir_all(parent)
-		.map_err(|error| GlorpError::transport(format!("failed to create socket parent {}: {error}", parent.display())))
+	socket_path.parent().map_or(Ok(()), |parent| {
+		std::fs::create_dir_all(parent).map_err(|error| {
+			GlorpError::transport(format!("failed to create socket parent {}: {error}", parent.display()))
+		})
+	})
 }
 
 fn ensure_runtime_capabilities(client: &mut impl GlorpHost, error: &'static str) -> Result<(), GlorpError> {
