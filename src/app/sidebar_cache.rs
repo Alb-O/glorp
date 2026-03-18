@@ -165,39 +165,35 @@ fn interaction_details(
 fn editor_selection_details(text: &str, editor: &EditorPresentation) -> String {
 	let view = &editor.editor;
 	let selection_rects = view.overlay_count(OverlayRectKind::EditorSelection);
-	let Some(selection) = view.selection.as_ref() else {
-		return match view.mode {
-			EditorMode::Normal => format!("  mode: {}\n  selection: none", view.mode),
-			EditorMode::Insert => format!(
-				"  mode: {}\n  selection: none\n  undo/redo: {}/{}",
-				view.mode, editor.undo_depth, editor.redo_depth
-			),
-		};
-	};
+	let undo_redo = format!("{}/{}", editor.undo_depth, editor.redo_depth);
 
-	match view.mode {
-		EditorMode::Normal => format!(
-			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}/{}",
-			view.mode,
-			selection,
-			preview_range(text, selection),
-			selection_rects,
-			view.selection_head.unwrap_or(selection.start),
-			view.pointer_anchor.unwrap_or(selection.start),
-			editor.undo_depth,
-			editor.redo_depth,
-		),
-		EditorMode::Insert => format!(
-			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  head byte: {}\n  undo/redo: {}/{}",
-			view.mode,
-			selection,
-			preview_range(text, selection),
-			selection_rects,
-			view.selection_head.unwrap_or(selection.start),
-			editor.undo_depth,
-			editor.redo_depth,
-		),
-	}
+	view.selection.as_ref().map_or_else(
+		|| match view.mode {
+			EditorMode::Normal => format!("  mode: {}\n  selection: none", view.mode),
+			EditorMode::Insert => format!("  mode: {}\n  selection: none\n  undo/redo: {}", view.mode, undo_redo),
+		},
+		|selection| {
+			let head = view.selection_head.unwrap_or(selection.start);
+			let selected_text = preview_range(text, selection);
+
+			match view.mode {
+				EditorMode::Normal => format!(
+					"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}",
+					view.mode,
+					selection,
+					selected_text,
+					selection_rects,
+					head,
+					view.pointer_anchor.unwrap_or(selection.start),
+					undo_redo,
+				),
+				EditorMode::Insert => format!(
+					"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  head byte: {}\n  undo/redo: {}",
+					view.mode, selection, selected_text, selection_rects, head, undo_redo,
+				),
+			}
+		},
+	)
 }
 
 fn preview_range(text: &str, range: &Range<usize>) -> String {

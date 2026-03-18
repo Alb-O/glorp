@@ -71,11 +71,7 @@ impl DocumentLayout {
 			glyph_count,
 			cluster_count: clusters.len(),
 			font_count: font_names.len(),
-			warnings: if runs.is_empty() {
-				Arc::from(["No layout runs were produced. Check the font choice and text content.".to_string()])
-			} else {
-				Arc::from([])
-			},
+			warnings: build_warnings(runs.is_empty()),
 			runs: runs.into(),
 			clusters: clusters.into(),
 			line_byte_offsets,
@@ -146,7 +142,9 @@ fn build_clusters(
 		}
 	}
 
-	clusters.extend(current);
+	if let Some(cluster) = current {
+		clusters.push(cluster);
+	}
 
 	clusters
 }
@@ -156,11 +154,11 @@ fn lookup_font_name(font_names: &[(fontdb::ID, Arc<str>)], font_id: fontdb::ID) 
 		.binary_search_by_key(&font_id, |(id, _)| *id)
 		.ok()
 		.and_then(|index| font_names.get(index))
-		.map_or_else(|| Arc::<str>::from("unknown-font"), |(_, name)| name.clone())
+		.map_or_else(|| Arc::<str>::from("unknown-font"), |(_, name)| Arc::clone(name))
 }
 
 fn build_byte_order(clusters: &[LayoutCluster]) -> Vec<usize> {
-	let mut byte_order = (0..clusters.len()).collect::<Vec<_>>();
+	let mut byte_order: Vec<_> = (0..clusters.len()).collect();
 	// Navigation and cursor lookup are byte-based even when visual cluster
 	// order differs, so keep a separate byte-sorted index beside run order.
 	byte_order.sort_by(|a, b| {
@@ -172,6 +170,14 @@ fn build_byte_order(clusters: &[LayoutCluster]) -> Vec<usize> {
 			.then_with(|| clusters[*a].run_index.cmp(&clusters[*b].run_index))
 	});
 	byte_order
+}
+
+fn build_warnings(no_runs: bool) -> Arc<[String]> {
+	if no_runs {
+		Arc::from(["No layout runs were produced. Check the font choice and text content.".to_string()])
+	} else {
+		Arc::from([])
+	}
 }
 
 #[cfg(test)]

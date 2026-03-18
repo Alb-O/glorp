@@ -10,14 +10,7 @@ impl EditorEngine {
 	pub(super) fn move_left(&mut self, layout: &DocumentLayout) {
 		self.clear_pointer_anchor();
 		match self.mode() {
-			EditorMode::Normal => {
-				if let Some(target) = self
-					.active_selection_index(layout)
-					.and_then(|current| current.checked_sub(1))
-				{
-					self.select_cluster(layout, target);
-				}
-			}
+			EditorMode::Normal => self.move_normal_selection(layout, |current| current.checked_sub(1)),
 			EditorMode::Insert => {
 				self.set_insert_head(
 					layout,
@@ -31,15 +24,9 @@ impl EditorEngine {
 	pub(super) fn move_right(&mut self, layout: &DocumentLayout) {
 		self.clear_pointer_anchor();
 		match self.mode() {
-			EditorMode::Normal => {
-				if let Some(target) = self
-					.active_selection_index(layout)
-					.filter(|current| current + 1 < layout.clusters().len())
-					.map(|current| current + 1)
-				{
-					self.select_cluster(layout, target);
-				}
-			}
+			EditorMode::Normal => self.move_normal_selection(layout, |current| {
+				(current + 1 < layout.clusters().len()).then_some(current + 1)
+			}),
 			EditorMode::Insert => {
 				self.set_insert_head(
 					layout,
@@ -93,30 +80,43 @@ impl EditorEngine {
 				let Some(current) = self.active_selection(layout) else {
 					return;
 				};
-				if let Some(target) = if to_start {
-					layout.first_cluster_in_run(current.run_index)
-				} else {
-					layout.last_cluster_in_run(current.run_index)
-				} {
-					self.select_cluster(layout, target);
-				}
+				self.select_run_edge(layout, current.run_index, to_start);
 			}
 			EditorMode::Insert => {
 				let caret = layout.caret_metrics(self.caret());
-				let target = if to_start {
-					layout
-						.first_cluster_in_run(caret.run_index)
-						.map_or(self.caret(), |index| layout.clusters()[index].byte_range.start)
-				} else {
-					layout
-						.last_cluster_in_run(caret.run_index)
-						.map_or(self.caret(), |index| layout.clusters()[index].byte_range.end)
-				};
+				let target = Self::run_edge_byte(layout, caret.run_index, to_start).unwrap_or(self.caret());
 
 				self.set_insert_head(layout, target);
 				self.set_preferred_x(None);
 			}
 		}
+	}
+
+	fn move_normal_selection(&mut self, layout: &DocumentLayout, target: impl FnOnce(usize) -> Option<usize>) {
+		if let Some(target) = self.active_selection_index(layout).and_then(target) {
+			self.select_cluster(layout, target);
+		}
+	}
+
+	fn select_run_edge(&mut self, layout: &DocumentLayout, run_index: usize, to_start: bool) {
+		if let Some(target) = Self::run_edge_index(layout, run_index, to_start) {
+			self.select_cluster(layout, target);
+		}
+	}
+
+	fn run_edge_index(layout: &DocumentLayout, run_index: usize, to_start: bool) -> Option<usize> {
+		if to_start {
+			layout.first_cluster_in_run(run_index)
+		} else {
+			layout.last_cluster_in_run(run_index)
+		}
+	}
+
+	fn run_edge_byte(layout: &DocumentLayout, run_index: usize, to_start: bool) -> Option<usize> {
+		Self::run_edge_index(layout, run_index, to_start).map(|index| {
+			let range = &layout.clusters()[index].byte_range;
+			if to_start { range.start } else { range.end }
+		})
 	}
 
 	pub(super) fn exit_insert(&mut self) -> ApplyResult {

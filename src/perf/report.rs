@@ -239,13 +239,17 @@ pub(super) fn build_dashboard(
 ) -> PerfDashboard {
 	// Summaries back both the table and the graphs; compute them once so a
 	// dashboard rebuild does not rescan the same metric windows twice.
-	let hot_paths = MetricKind::ALL.map(|kind| metric_summary(store, kind));
+	let hot_paths = MetricKind::ALL
+		.into_iter()
+		.map(|kind| metric_summary(store, kind))
+		.collect::<Vec<_>>();
 	let frame_pacing = frame_pacing_summary(store);
 	let recent_activity = RECENT_ACTIVITY_METRICS
 		.into_iter()
 		.map(|kind| recent_metric_activity(store, kind))
 		.chain(std::iter::once(frame_pacing.recent_activity()))
 		.collect();
+	let graphs = graphs(store, &frame_pacing, &hot_paths);
 
 	PerfDashboard {
 		overview: PerfOverview {
@@ -262,9 +266,9 @@ pub(super) fn build_dashboard(
 			scene_height: layout.measured_height,
 			layout_width: layout.max_width,
 		},
-		hot_paths: hot_paths.to_vec(),
+		hot_paths,
 		recent_activity,
-		graphs: graphs(store, &frame_pacing, &hot_paths),
+		graphs,
 		frame_pacing,
 	}
 }
@@ -311,7 +315,7 @@ fn frame_pacing_summary(store: &PerfStore) -> PerfFramePacingSummary {
 }
 
 fn graphs(
-	store: &PerfStore, frame_pacing: &PerfFramePacingSummary, hot_paths: &[PerfMetricSummary; MetricKind::ALL.len()],
+	store: &PerfStore, frame_pacing: &PerfFramePacingSummary, hot_paths: &[PerfMetricSummary],
 ) -> Vec<PerfGraphSeries> {
 	let frame_p95 = percentile_ms(&store.frames.intervals_ms, 95);
 	let frame_graph = PerfGraphSeries {

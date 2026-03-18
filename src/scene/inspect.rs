@@ -31,25 +31,21 @@ impl DocumentLayout {
 		&self, hovered_target: Option<CanvasTarget>, selected_target: Option<CanvasTarget>, layout_width: f32,
 		show_hitboxes: bool,
 	) -> Arc<[OverlayPrimitive]> {
-		let mut overlays = Vec::with_capacity(4);
-
-		for (target, selected) in hovered_target
+		hovered_target
 			.into_iter()
 			.map(|target| (target, false))
 			.chain(selected_target.into_iter().map(|target| (target, true)))
-		{
-			self.append_target_overlay_primitives(&mut overlays, target, selected, layout_width, show_hitboxes);
-		}
-
-		overlays.into()
+			.flat_map(|(target, selected)| {
+				self.target_overlay_primitives(target, selected, layout_width, show_hitboxes)
+			})
+			.collect()
 	}
 
-	fn append_target_overlay_primitives(
-		&self, overlays: &mut Vec<OverlayPrimitive>, target: CanvasTarget, selected: bool, layout_width: f32,
-		show_hitboxes: bool,
-	) {
+	fn target_overlay_primitives(
+		&self, target: CanvasTarget, selected: bool, layout_width: f32, show_hitboxes: bool,
+	) -> Vec<OverlayPrimitive> {
 		let Some(rect) = self.target_rect(target) else {
-			return;
+			return Vec::new();
 		};
 		let (rect, kind, hitbox_kind) = match target {
 			CanvasTarget::Run(_) => (
@@ -79,11 +75,10 @@ impl DocumentLayout {
 			),
 		};
 
-		overlays.extend(
-			std::iter::once(kind)
-				.chain(hitbox_kind)
-				.map(|kind| OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText)),
-		);
+		std::iter::once(kind)
+			.chain(hitbox_kind)
+			.map(|kind| OverlayPrimitive::scene_rect(rect, kind, OverlayLayer::OverText))
+			.collect()
 	}
 }
 
