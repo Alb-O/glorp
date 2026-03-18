@@ -135,7 +135,7 @@ impl GuiRuntimeClient {
 
 	pub fn execute_gui(&mut self, command: GuiCommand) -> Result<(), GlorpError> {
 		let GuiTransportResponse::ExecuteGui(result) =
-			gui_transport_request(&self.socket_path, &GuiTransportRequest::ExecuteGui(command))?
+			gui_transport_request(&self.socket_path, GuiTransportRequest::ExecuteGui(command))?
 		else {
 			return Err(GlorpError::transport("unexpected private gui execute response"));
 		};
@@ -144,7 +144,7 @@ impl GuiRuntimeClient {
 
 	pub fn gui_frame(&mut self) -> Result<GuiRuntimeFrame, GlorpError> {
 		let GuiTransportResponse::GuiFrame(result) =
-			gui_transport_request(&self.socket_path, &GuiTransportRequest::GuiFrame)?
+			gui_transport_request(&self.socket_path, GuiTransportRequest::GuiFrame)?
 		else {
 			return Err(GlorpError::transport("unexpected private gui frame response"));
 		};

@@ -317,7 +317,7 @@ where
 		return Err(GlorpError::validation(None, format!("operation `{id}` requires input")));
 	};
 
-	serde_json::from_value::<T>(input.clone().into())
+	serde_json::from_value::<T>(input.into())
 		.map_err(|error| GlorpError::validation(None, format!("invalid input for `{id}`: {error}")))
 }
 

@@ -118,7 +118,7 @@ impl PluginCommand for OperationCommand {
 fn run_helper(helper: GlorpHelper, call: &EvaluatedCall, span: Span) -> Result<PipelineData, LabeledError> {
 	let result = match helper {
 		GlorpHelper::ConfigValidate(input) => {
-			glorp_api::GlorpConfig::validate_path(&input.path, input.value).map_err(to_labeled_error)?;
+			glorp_api::GlorpConfig::validate_path(&input.path, &input.value).map_err(to_labeled_error)?;
 			GlorpHelperResult::ConfigValidate(OkView { ok: true })
 		}
 		GlorpHelper::SessionAttach => {
@@ -133,7 +133,7 @@ fn run_helper(helper: GlorpHelper, call: &EvaluatedCall, span: Span) -> Result<P
 		GlorpHelper::SessionShutdown => {
 			let resolved = resolve_session(call)?;
 			let TransportResponse::Shutdown(result) =
-				transport_request(&resolved.socket, &TransportRequest::Shutdown).map_err(to_labeled_error)?
+				transport_request(&resolved.socket, TransportRequest::Shutdown).map_err(to_labeled_error)?
 			else {
 				return Err(LabeledError::new("unexpected shutdown response"));
 			};
@@ -177,9 +177,7 @@ struct ResolvedSession {
 fn resolve_session(call: &EvaluatedCall) -> Result<ResolvedSession, LabeledError> {
 	if let Some(session) = call.get_flag::<Value>("session")? {
 		let socket = PathBuf::from(session_socket(&session)?);
-		let repo_root = session_repo_root(&session)?
-			.map(PathBuf::from)
-			.unwrap_or_else(repo_root_from_call);
+		let repo_root = session_repo_root(&session)?.map_or_else(repo_root_from_call, PathBuf::from);
 		return ensure_session(repo_root, socket);
 	}
 
@@ -189,8 +187,7 @@ fn resolve_session(call: &EvaluatedCall) -> Result<ResolvedSession, LabeledError
 
 	let repo_root = call
 		.get_flag::<String>("repo-root")?
-		.map(PathBuf::from)
-		.unwrap_or_else(repo_root_from_call);
+		.map_or_else(repo_root_from_call, PathBuf::from);
 	let socket = default_socket_path(&repo_root);
 	ensure_session(repo_root, socket)
 }
@@ -319,8 +316,9 @@ fn query_to_value(result: GlorpQueryResult, span: Span) -> Value {
 fn helper_to_value(result: GlorpHelperResult, span: Span) -> Value {
 	match result {
 		GlorpHelperResult::SessionAttach(value) => serialize_to_value!(value, span),
-		GlorpHelperResult::SessionShutdown(value) => serialize_to_value!(value, span),
-		GlorpHelperResult::ConfigValidate(value) => serialize_to_value!(value, span),
+		GlorpHelperResult::SessionShutdown(value) | GlorpHelperResult::ConfigValidate(value) => {
+			serialize_to_value!(value, span)
+		}
 		GlorpHelperResult::EventsSubscribe(value) => serialize_to_value!(value, span),
 		GlorpHelperResult::EventsNext(value) => serialize_to_value!(value, span),
 		GlorpHelperResult::EventsUnsubscribe(value) => serialize_to_value!(value, span),

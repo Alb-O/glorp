@@ -76,7 +76,7 @@ impl EditorEngine {
 			.or_else(|| layout.cluster_before(caret.saturating_add(1)))
 	}
 
-	pub fn active_selection<'a>(&self, layout: &'a DocumentLayout) -> Option<&'a LayoutCluster> {
+	pub fn active_selection<'layout>(&self, layout: &'layout DocumentLayout) -> Option<&'layout LayoutCluster> {
 		layout.cluster(self.active_selection_index(layout)?)
 	}
 

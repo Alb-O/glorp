@@ -31,7 +31,7 @@ impl IpcServerHandle {
 
 	pub fn shutdown(mut self) -> Result<(), GlorpError> {
 		self.stop.store(true, Ordering::SeqCst);
-		let _ = super::transport_request(&self.socket_path, &TransportRequest::Shutdown);
+		let _ = super::transport_request(&self.socket_path, TransportRequest::Shutdown);
 		self.join()
 	}
 

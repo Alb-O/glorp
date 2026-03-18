@@ -38,30 +38,37 @@ pub fn socket_is_live(socket_path: &Path) -> bool {
 	}
 }
 
-pub fn transport_request(socket_path: &Path, request: &TransportRequest) -> Result<TransportResponse, GlorpError> {
-	let ServerResponse::Public(response) = request_response(socket_path, &ServerRequest::Public(request.clone()))?
-	else {
-		return Err(unexpected_response("public transport"));
-	};
-	Ok(response)
+pub fn transport_request(socket_path: &Path, request: TransportRequest) -> Result<TransportResponse, GlorpError> {
+	expect_response(
+		request_response(socket_path, ServerRequest::Public(request)),
+		"public transport",
+		|response| match response {
+			ServerResponse::Public(response) => Some(response),
+			ServerResponse::Gui(_) => None,
+		},
+	)
 }
 
 pub fn gui_transport_request(
-	socket_path: &Path, request: &GuiTransportRequest,
+	socket_path: &Path, request: GuiTransportRequest,
 ) -> Result<GuiTransportResponse, GlorpError> {
-	let ServerResponse::Gui(response) = request_response(socket_path, &ServerRequest::Gui(request.clone()))? else {
-		return Err(unexpected_response("private gui transport"));
-	};
-	Ok(response)
+	expect_response(
+		request_response(socket_path, ServerRequest::Gui(request)),
+		"private gui transport",
+		|response| match response {
+			ServerResponse::Gui(response) => Some(response),
+			ServerResponse::Public(_) => None,
+		},
+	)
 }
 
-fn request_response<Req, Resp>(socket_path: &Path, request: &Req) -> Result<Resp, GlorpError>
+fn request_response<Req, Resp>(socket_path: &Path, request: Req) -> Result<Resp, GlorpError>
 where
 	Req: Serialize,
 	Resp: DeserializeOwned, {
 	let mut stream = UnixStream::connect(socket_path)
 		.map_err(|error| GlorpError::transport(format!("failed to connect to {}: {error}", socket_path.display())))?;
-	let payload = serde_json::to_string(request)
+	let payload = serde_json::to_string(&request)
 		.map_err(|error| GlorpError::internal(format!("failed to encode request: {error}")))?;
 	writeln!(stream, "{payload}")
 		.map_err(|error| GlorpError::transport(format!("failed to write request: {error}")))?;
@@ -76,45 +83,71 @@ where
 
 impl GlorpHost for IpcClient {
 	fn execute(&mut self, exec: GlorpExec) -> Result<GlorpOutcome, GlorpError> {
-		let TransportResponse::Execute(result) = self.response(&TransportRequest::Execute(exec))? else {
-			return Err(unexpected_response("execute"));
-		};
-		result
+		expect_response(
+			self.response(TransportRequest::Execute(exec)),
+			"execute",
+			|response| match response {
+				TransportResponse::Execute(result) => Some(result),
+				_ => None,
+			},
+		)?
 	}
 
 	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
-		let TransportResponse::Query(result) = self.response(&TransportRequest::Query(query))? else {
-			return Err(unexpected_response("query"));
-		};
-		*result
+		expect_response(
+			self.response(TransportRequest::Query(query)),
+			"query",
+			|response| match response {
+				TransportResponse::Query(result) => Some(*result),
+				_ => None,
+			},
+		)?
 	}
 
 	fn subscribe(&mut self, request: GlorpSubscription) -> Result<GlorpStreamToken, GlorpError> {
-		let TransportResponse::Subscribe(result) = self.response(&TransportRequest::Subscribe(request))? else {
-			return Err(unexpected_response("subscribe"));
-		};
-		result
+		expect_response(
+			self.response(TransportRequest::Subscribe(request)),
+			"subscribe",
+			|response| match response {
+				TransportResponse::Subscribe(result) => Some(result),
+				_ => None,
+			},
+		)?
 	}
 
 	fn next_event(&mut self, token: GlorpStreamToken) -> Result<Option<GlorpEvent>, GlorpError> {
-		let TransportResponse::NextEvent(result) = self.response(&TransportRequest::NextEvent(token))? else {
-			return Err(unexpected_response("next-event"));
-		};
-		result
+		expect_response(
+			self.response(TransportRequest::NextEvent(token)),
+			"next-event",
+			|response| match response {
+				TransportResponse::NextEvent(result) => Some(result),
+				_ => None,
+			},
+		)?
 	}
 
 	fn unsubscribe(&mut self, token: GlorpStreamToken) -> Result<(), GlorpError> {
-		let TransportResponse::Unsubscribe(result) = self.response(&TransportRequest::Unsubscribe(token))? else {
-			return Err(unexpected_response("unsubscribe"));
-		};
-		result
+		expect_response(
+			self.response(TransportRequest::Unsubscribe(token)),
+			"unsubscribe",
+			|response| match response {
+				TransportResponse::Unsubscribe(result) => Some(result),
+				_ => None,
+			},
+		)?
 	}
 }
 
 impl IpcClient {
-	fn response(&self, request: &TransportRequest) -> Result<TransportResponse, GlorpError> {
+	fn response(&self, request: TransportRequest) -> Result<TransportResponse, GlorpError> {
 		transport_request(&self.socket_path, request)
 	}
+}
+
+fn expect_response<T, Response>(
+	response: Result<Response, GlorpError>, kind: &str, extract: impl FnOnce(Response) -> Option<T>,
+) -> Result<T, GlorpError> {
+	extract(response?).ok_or_else(|| unexpected_response(kind))
 }
 
 fn unexpected_response(kind: &str) -> GlorpError {

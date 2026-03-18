@@ -146,3 +146,19 @@ impl From<GlorpValue> for serde_json::Value {
 		}
 	}
 }
+
+impl From<&GlorpValue> for serde_json::Value {
+	fn from(value: &GlorpValue) -> Self {
+		match value {
+			GlorpValue::Null => Self::Null,
+			GlorpValue::Bool(value) => Self::Bool(*value),
+			GlorpValue::Int(value) => Self::Number((*value).into()),
+			GlorpValue::Float(value) => serde_json::json!(*value),
+			GlorpValue::String(value) => Self::String(value.clone()),
+			GlorpValue::List(values) => Self::Array(values.iter().map(Into::into).collect()),
+			GlorpValue::Record(values) => {
+				Self::Object(values.iter().map(|(key, value)| (key.clone(), value.into())).collect())
+			}
+		}
+	}
+}

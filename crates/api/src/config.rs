@@ -75,11 +75,11 @@ impl GlorpConfig {
 	pub fn patch(&mut self, values: &[ConfigAssignment]) -> Result<Vec<ConfigPath>, GlorpError> {
 		values
 			.iter()
-			.try_fold(Vec::with_capacity(values.len()), |mut paths, assignment| {
+			.map(|assignment| {
 				self.set_path(&assignment.path, &assignment.value)?;
-				paths.push(assignment.path.clone());
-				Ok(paths)
+				Ok(assignment.path.clone())
 			})
+			.collect()
 	}
 
 	pub fn set_path(&mut self, path: &str, value: &GlorpValue) -> Result<(), GlorpError> {
@@ -129,9 +129,9 @@ impl GlorpConfig {
 		}
 	}
 
-	pub fn validate_path(path: &str, value: GlorpValue) -> Result<(), GlorpError> {
+	pub fn validate_path(path: &str, value: &GlorpValue) -> Result<(), GlorpError> {
 		let mut config = Self::default();
-		config.set_path(path, &value)
+		config.set_path(path, value)
 	}
 
 	#[must_use]

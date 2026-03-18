@@ -17,8 +17,9 @@ impl SubscriptionSet {
 	}
 
 	pub fn publish_changed(&mut self, outcome: &GlorpOutcome) {
+		let event = GlorpEvent::Changed(outcome.clone());
 		for queue in self.queues.values_mut() {
-			queue.push_back(GlorpEvent::Changed(outcome.clone()));
+			queue.push_back(event.clone());
 		}
 	}
 
@@ -32,7 +33,7 @@ impl SubscriptionSet {
 	pub fn unsubscribe(&mut self, token: GlorpStreamToken) -> Result<(), GlorpError> {
 		self.queues
 			.remove(&token)
-			.ok_or_else(|| GlorpError::not_found(format!("unknown subscription token `{token}`")))?;
-		Ok(())
+			.map(|_| ())
+			.ok_or_else(|| GlorpError::not_found(format!("unknown subscription token `{token}`")))
 	}
 }
