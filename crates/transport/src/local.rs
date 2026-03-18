@@ -1,8 +1,5 @@
 use {
-	glorp_api::{
-		GlorpError, GlorpEvent, GlorpExec, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
-		GlorpSubscription,
-	},
+	glorp_api::{GlorpCall, GlorpCallResult, GlorpError, GlorpHost},
 	glorp_runtime::RuntimeHost,
 	std::sync::{Arc, Mutex},
 };
@@ -40,23 +37,7 @@ impl LocalClient {
 }
 
 impl GlorpHost for LocalClient {
-	fn execute(&mut self, exec: GlorpExec) -> Result<GlorpOutcome, GlorpError> {
-		self.with_host(|host| host.execute(exec))
-	}
-
-	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
-		self.with_host(|host| host.query(query))
-	}
-
-	fn subscribe(&mut self, request: GlorpSubscription) -> Result<GlorpStreamToken, GlorpError> {
-		self.with_host(|host| host.subscribe(request))
-	}
-
-	fn next_event(&mut self, token: GlorpStreamToken) -> Result<Option<GlorpEvent>, GlorpError> {
-		self.with_host(|host| host.next_event(token))
-	}
-
-	fn unsubscribe(&mut self, token: GlorpStreamToken) -> Result<(), GlorpError> {
-		self.with_host(|host| host.unsubscribe(token))
+	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
+		self.with_host(|host| host.call(call))
 	}
 }

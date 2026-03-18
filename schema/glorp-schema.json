@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 5,
   "types": [
     {
       "name": "BuiltinType",
@@ -305,35 +305,56 @@
       }
     },
     {
-      "name": "OperationKind",
-      "docs": "Operation category.",
+      "name": "GlorpCallKind",
+      "docs": "Public call category.",
       "kind": {
         "kind": "enum",
         "variants": [
           {
-            "name": "exec",
+            "name": "mutation",
             "docs": "Mutating operation."
           },
           {
-            "name": "query",
+            "name": "read",
             "docs": "Read-only operation."
           },
           {
             "name": "helper",
-            "docs": "Plugin-side helper operation."
+            "docs": "Helper or control operation."
           }
         ]
       }
     },
     {
-      "name": "OperationSpec",
-      "docs": "One protocol operation.",
+      "name": "GlorpCallRoute",
+      "docs": "Where the call is handled.",
+      "kind": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "runtime",
+            "docs": "Handled by the runtime host."
+          },
+          {
+            "name": "transport",
+            "docs": "Handled by the IPC transport layer."
+          },
+          {
+            "name": "client",
+            "docs": "Handled locally by the client or plugin."
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpCallSpec",
+      "docs": "One public call contract.",
       "kind": {
         "kind": "record",
         "fields": [
           {
             "name": "id",
-            "docs": "Operation identifier.",
+            "docs": "Call identifier.",
             "ty": {
               "kind": "builtin",
               "value": "string"
@@ -342,16 +363,25 @@
           },
           {
             "name": "kind",
-            "docs": "Operation category.",
+            "docs": "Public call category.",
             "ty": {
               "kind": "named",
-              "value": "OperationKind"
+              "value": "GlorpCallKind"
+            },
+            "required": true
+          },
+          {
+            "name": "route",
+            "docs": "Where the call is handled.",
+            "ty": {
+              "kind": "named",
+              "value": "GlorpCallRoute"
             },
             "required": true
           },
           {
             "name": "docs",
-            "docs": "Operation documentation.",
+            "docs": "Call documentation.",
             "ty": {
               "kind": "builtin",
               "value": "string"
@@ -360,7 +390,7 @@
           },
           {
             "name": "input",
-            "docs": "Operation input type.",
+            "docs": "Call input type.",
             "ty": {
               "kind": "option",
               "value": {
@@ -372,10 +402,19 @@
           },
           {
             "name": "output",
-            "docs": "Operation output type.",
+            "docs": "Call output type.",
             "ty": {
               "kind": "named",
               "value": "TypeRef"
+            },
+            "required": true
+          },
+          {
+            "name": "transactional",
+            "docs": "Whether the call is allowed inside `txn`.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
             },
             "required": true
           }
@@ -446,13 +485,13 @@
             "required": true
           },
           {
-            "name": "operations",
-            "docs": "Protocol operations.",
+            "name": "calls",
+            "docs": "Public call contracts.",
             "ty": {
               "kind": "list",
               "value": {
                 "kind": "named",
-                "value": "OperationSpec"
+                "value": "GlorpCallSpec"
               }
             },
             "required": true
@@ -679,8 +718,26 @@
       }
     },
     {
-      "name": "GlorpExec",
-      "docs": "Typed exec operations.",
+      "name": "StreamTokenInput",
+      "docs": "Subscription token input.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "token",
+            "docs": "Subscription token.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "GlorpCall",
+      "docs": "Typed public calls.",
       "kind": {
         "kind": "tagged-union",
         "tag": "op",
@@ -688,7 +745,7 @@
         "variants": [
           {
             "name": "txn",
-            "docs": "Apply multiple exec operations atomically.",
+            "docs": "Apply multiple mutation calls atomically.",
             "payload": {
               "kind": "named",
               "value": "GlorpTxn"
@@ -782,24 +839,88 @@
               "kind": "named",
               "value": "EditorHistoryInput"
             }
+          },
+          {
+            "name": "schema",
+            "docs": "Return the protocol reflection schema.",
+            "payload": null
+          },
+          {
+            "name": "config",
+            "docs": "Return the effective runtime config.",
+            "payload": null
+          },
+          {
+            "name": "document-text",
+            "docs": "Return the current document text.",
+            "payload": null
+          },
+          {
+            "name": "editor",
+            "docs": "Return the current editor read model.",
+            "payload": null
+          },
+          {
+            "name": "capabilities",
+            "docs": "Return stable runtime capability flags.",
+            "payload": null
+          },
+          {
+            "name": "session-attach",
+            "docs": "Resolve and validate a live Glorp session.",
+            "payload": null
+          },
+          {
+            "name": "session-shutdown",
+            "docs": "Stop the live shared runtime for the resolved session.",
+            "payload": null
+          },
+          {
+            "name": "config-validate",
+            "docs": "Validate a config value without mutating runtime state.",
+            "payload": {
+              "kind": "named",
+              "value": "ConfigAssignment"
+            }
+          },
+          {
+            "name": "events-subscribe",
+            "docs": "Subscribe to runtime change events.",
+            "payload": null
+          },
+          {
+            "name": "events-next",
+            "docs": "Poll the next event for a subscription token.",
+            "payload": {
+              "kind": "named",
+              "value": "StreamTokenInput"
+            }
+          },
+          {
+            "name": "events-unsubscribe",
+            "docs": "Release a subscription token.",
+            "payload": {
+              "kind": "named",
+              "value": "StreamTokenInput"
+            }
           }
         ]
       }
     },
     {
       "name": "GlorpTxn",
-      "docs": "Multiple exec operations applied atomically.",
+      "docs": "Multiple mutation calls applied atomically.",
       "kind": {
         "kind": "record",
         "fields": [
           {
-            "name": "execs",
-            "docs": "Ordered exec operations.",
+            "name": "calls",
+            "docs": "Ordered mutation calls.",
             "ty": {
               "kind": "list",
               "value": {
                 "kind": "named",
-                "value": "GlorpExec"
+                "value": "GlorpCall"
               }
             },
             "required": true
@@ -1543,24 +1664,6 @@
       }
     },
     {
-      "name": "StreamTokenInput",
-      "docs": "Subscription token input.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "token",
-            "docs": "Subscription token.",
-            "ty": {
-              "kind": "builtin",
-              "value": "int"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
       "name": "GlorpNotice",
       "docs": "Notice payload.",
       "kind": {
@@ -1642,11 +1745,12 @@
       }
     }
   ],
-  "operations": [
+  "calls": [
     {
       "id": "txn",
-      "kind": "exec",
-      "docs": "Apply multiple exec operations atomically.",
+      "kind": "mutation",
+      "route": "runtime",
+      "docs": "Apply multiple mutation calls atomically.",
       "input": {
         "kind": "named",
         "value": "GlorpTxn"
@@ -1654,11 +1758,13 @@
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": false
     },
     {
       "id": "config-set",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Set one config field.",
       "input": {
         "kind": "named",
@@ -1667,11 +1773,13 @@
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "config-reset",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Reset one config field to its default.",
       "input": {
         "kind": "named",
@@ -1680,11 +1788,13 @@
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "config-patch",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Patch config with a record.",
       "input": {
         "kind": "named",
@@ -1693,31 +1803,37 @@
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "config-reload",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Reload the durable config file.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "config-persist",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Persist the effective config file.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "document-replace",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Replace the document text.",
       "input": {
         "kind": "named",
@@ -1726,11 +1842,13 @@
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "editor-motion",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Apply a typed editor motion.",
       "input": {
         "kind": "named",
@@ -1739,11 +1857,13 @@
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "editor-mode",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Apply a typed editor mode change.",
       "input": {
         "kind": "named",
@@ -1752,11 +1872,13 @@
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "editor-insert",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Insert text at the current selection.",
       "input": {
         "kind": "named",
@@ -1765,41 +1887,49 @@
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "editor-backspace",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Delete backward.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "editor-delete-forward",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Delete forward.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "editor-delete-selection",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Delete the current selection.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "editor-history",
-      "kind": "exec",
+      "kind": "mutation",
+      "route": "runtime",
       "docs": "Apply editor history navigation.",
       "input": {
         "kind": "named",
@@ -1808,81 +1938,97 @@
       "output": {
         "kind": "named",
         "value": "GlorpOutcome"
-      }
+      },
+      "transactional": true
     },
     {
       "id": "schema",
-      "kind": "query",
+      "kind": "read",
+      "route": "runtime",
       "docs": "Return the protocol reflection schema.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "GlorpSchema"
-      }
+      },
+      "transactional": false
     },
     {
       "id": "config",
-      "kind": "query",
+      "kind": "read",
+      "route": "runtime",
       "docs": "Return the effective runtime config.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "GlorpConfig"
-      }
+      },
+      "transactional": false
     },
     {
       "id": "document-text",
-      "kind": "query",
+      "kind": "read",
+      "route": "runtime",
       "docs": "Return the current document text.",
       "input": null,
       "output": {
         "kind": "builtin",
         "value": "string"
-      }
+      },
+      "transactional": false
     },
     {
       "id": "editor",
-      "kind": "query",
+      "kind": "read",
+      "route": "runtime",
       "docs": "Return the current editor read model.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "EditorStateView"
-      }
+      },
+      "transactional": false
     },
     {
       "id": "capabilities",
-      "kind": "query",
+      "kind": "read",
+      "route": "runtime",
       "docs": "Return stable runtime capability flags.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "GlorpCapabilities"
-      }
+      },
+      "transactional": false
     },
     {
       "id": "session-attach",
       "kind": "helper",
+      "route": "client",
       "docs": "Resolve and validate a live Glorp session.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "GlorpSessionView"
-      }
+      },
+      "transactional": false
     },
     {
       "id": "session-shutdown",
       "kind": "helper",
+      "route": "transport",
       "docs": "Stop the live shared runtime for the resolved session.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "OkView"
-      }
+      },
+      "transactional": false
     },
     {
       "id": "config-validate",
       "kind": "helper",
+      "route": "client",
       "docs": "Validate a config value without mutating runtime state.",
       "input": {
         "kind": "named",
@@ -1891,21 +2037,25 @@
       "output": {
         "kind": "named",
         "value": "OkView"
-      }
+      },
+      "transactional": false
     },
     {
       "id": "events-subscribe",
       "kind": "helper",
+      "route": "runtime",
       "docs": "Subscribe to runtime change events.",
       "input": null,
       "output": {
         "kind": "named",
         "value": "GlorpEventStreamView"
-      }
+      },
+      "transactional": false
     },
     {
       "id": "events-next",
       "kind": "helper",
+      "route": "runtime",
       "docs": "Poll the next event for a subscription token.",
       "input": {
         "kind": "named",
@@ -1917,11 +2067,13 @@
           "kind": "named",
           "value": "GlorpEvent"
         }
-      }
+      },
+      "transactional": false
     },
     {
       "id": "events-unsubscribe",
       "kind": "helper",
+      "route": "runtime",
       "docs": "Release a subscription token.",
       "input": {
         "kind": "named",
@@ -1930,7 +2082,8 @@
       "output": {
         "kind": "named",
         "value": "TokenAckView"
-      }
+      },
+      "transactional": false
     }
   ],
   "events": [

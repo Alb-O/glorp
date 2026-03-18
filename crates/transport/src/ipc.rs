@@ -1,29 +1,16 @@
 use {
-	glorp_api::{
-		GlorpError, GlorpEvent, GlorpExec, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
-		GlorpSubscription,
-	},
+	glorp_api::{GlorpCall, GlorpCallResult, GlorpError},
 	glorp_runtime::{GuiCommand, GuiTransportFrame},
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum TransportRequest {
-	Execute(GlorpExec),
-	Query(GlorpQuery),
-	Subscribe(GlorpSubscription),
-	NextEvent(GlorpStreamToken),
-	Unsubscribe(GlorpStreamToken),
-	Shutdown,
+	Call(GlorpCall),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum TransportResponse {
-	Execute(Result<GlorpOutcome, GlorpError>),
-	Query(Box<Result<GlorpQueryResult, GlorpError>>),
-	Subscribe(Result<GlorpStreamToken, GlorpError>),
-	NextEvent(Result<Option<GlorpEvent>, GlorpError>),
-	Unsubscribe(Result<(), GlorpError>),
-	Shutdown(Result<(), GlorpError>),
+	Call(Box<Result<GlorpCallResult, GlorpError>>),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -12,7 +12,7 @@ use {
 		},
 	},
 	glorp_api::{
-		ConfigAssignment, EditorHistoryInput, EditorModeInput, EditorMotionInput, EnumValue, GlorpError, GlorpExec,
+		ConfigAssignment, EditorHistoryInput, EditorModeInput, EditorMotionInput, EnumValue, GlorpCall, GlorpError,
 		GlorpHost, GlorpTxn, GlorpValue, TextInput, WrapChoice,
 	},
 	glorp_editor::{
@@ -240,10 +240,10 @@ impl RuntimeShell {
 	fn handle_controls(&mut self, message: ControlsMessage) -> Result<(), GlorpError> {
 		match message {
 			ControlsMessage::LoadPreset(preset) => {
-				let execs = [
+				let calls = [
 					Some(config_set("editor.preset", enum_value(preset))),
 					(preset != glorp_api::SamplePreset::Custom).then(|| {
-						GlorpExec::DocumentReplace(TextInput {
+						GlorpCall::DocumentReplace(TextInput {
 							text: sample_preset_text(preset).to_owned(),
 						})
 					}),
@@ -251,7 +251,7 @@ impl RuntimeShell {
 				.into_iter()
 				.flatten()
 				.collect();
-				self.execute(GlorpExec::Txn(GlorpTxn { execs }))?;
+				self.execute(GlorpCall::Txn(GlorpTxn { calls }))?;
 				if preset != glorp_api::SamplePreset::Custom {
 					self.execute_gui(GuiCommand::ViewportScrollTo { x: 0.0, y: 0.0 })?;
 				}
@@ -310,8 +310,8 @@ impl RuntimeShell {
 		}
 	}
 
-	fn execute(&mut self, exec: GlorpExec) -> Result<(), GlorpError> {
-		self.client.execute(exec)?;
+	fn execute(&mut self, call: GlorpCall) -> Result<(), GlorpError> {
+		self.client.call(call)?;
 		self.refresh_frame()
 	}
 
@@ -341,8 +341,8 @@ impl RuntimeShell {
 	}
 }
 
-fn config_set(path: &str, value: GlorpValue) -> GlorpExec {
-	GlorpExec::ConfigSet(ConfigAssignment {
+fn config_set(path: &str, value: GlorpValue) -> GlorpCall {
+	GlorpCall::ConfigSet(ConfigAssignment {
 		path: path.to_owned(),
 		value,
 	})
@@ -410,10 +410,10 @@ fn clamp_scroll(scroll: Vector, metrics: EditorViewportMetrics, layout_width: f3
 	Vector::new(scroll.x.clamp(0.0, max_x), scroll.y.clamp(0.0, max_y))
 }
 
-fn editor_intent_command(intent: EditorIntent) -> GlorpExec {
+fn editor_intent_command(intent: EditorIntent) -> GlorpCall {
 	match intent {
 		EditorIntent::Pointer(_) => unreachable!("pointer intents stay on the private GUI command path"),
-		EditorIntent::Motion(motion) => GlorpExec::EditorMotion(EditorMotionInput {
+		EditorIntent::Motion(motion) => GlorpCall::EditorMotion(EditorMotionInput {
 			motion: match motion {
 				EditorMotion::Left => glorp_api::EditorMotion::Left,
 				EditorMotion::Right => glorp_api::EditorMotion::Right,
@@ -423,7 +423,7 @@ fn editor_intent_command(intent: EditorIntent) -> GlorpExec {
 				EditorMotion::LineEnd => glorp_api::EditorMotion::LineEnd,
 			},
 		}),
-		EditorIntent::Mode(mode) => GlorpExec::EditorMode(EditorModeInput {
+		EditorIntent::Mode(mode) => GlorpCall::EditorMode(EditorModeInput {
 			mode: match mode {
 				EditorModeIntent::EnterInsertBefore => glorp_api::EditorModeCommand::EnterInsertBefore,
 				EditorModeIntent::EnterInsertAfter => glorp_api::EditorModeCommand::EnterInsertAfter,
@@ -431,12 +431,12 @@ fn editor_intent_command(intent: EditorIntent) -> GlorpExec {
 			},
 		}),
 		EditorIntent::Edit(edit) => match edit {
-			EditorEditIntent::Backspace => GlorpExec::EditorBackspace,
-			EditorEditIntent::DeleteForward => GlorpExec::EditorDeleteForward,
-			EditorEditIntent::DeleteSelection => GlorpExec::EditorDeleteSelection,
-			EditorEditIntent::InsertText(text) => GlorpExec::EditorInsert(TextInput { text }),
+			EditorEditIntent::Backspace => GlorpCall::EditorBackspace,
+			EditorEditIntent::DeleteForward => GlorpCall::EditorDeleteForward,
+			EditorEditIntent::DeleteSelection => GlorpCall::EditorDeleteSelection,
+			EditorEditIntent::InsertText(text) => GlorpCall::EditorInsert(TextInput { text }),
 		},
-		EditorIntent::History(history) => GlorpExec::EditorHistory(EditorHistoryInput {
+		EditorIntent::History(history) => GlorpCall::EditorHistory(EditorHistoryInput {
 			action: match history {
 				EditorHistoryIntent::Undo => glorp_api::EditorHistoryCommand::Undo,
 				EditorHistoryIntent::Redo => glorp_api::EditorHistoryCommand::Redo,

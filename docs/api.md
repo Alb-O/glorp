@@ -1,31 +1,29 @@
 # API
 
-Glorp now exposes one flat protocol registry:
+Glorp now exposes one flat call protocol:
 
-`GlorpExec` / `GlorpQuery` / `GlorpHelper` -> `GlorpOutcome` / `GlorpQueryResult` / `GlorpHelperResult` / `GlorpEvent`
+`GlorpCall` -> `GlorpCallResult` / `GlorpEvent`
 
-Transactions are typed exec batches:
+Transactions are typed mutation batches:
 
-`GlorpTxn { execs: Vec<GlorpExec> }`
+`GlorpTxn { calls: Vec<GlorpCall> }`
 
 The public surface is registry-driven:
 
-- exec operations: `config-set`, `document-replace`, `editor-motion`, `editor-mode`, `editor-insert`, `editor-history`, and related editor/config ops
-- query operations: `schema`, `config`, `document-text`, `editor`, `capabilities`
-- helper operations: `session-attach`, `session-shutdown`, `config-validate`, `events-subscribe`, `events-next`, `events-unsubscribe`
+- mutation calls: `config-set`, `document-replace`, `editor-motion`, `editor-mode`, `editor-insert`, `editor-history`, and related editor/config ops
+- read calls: `schema`, `config`, `document-text`, `editor`, `capabilities`
+- helper/control calls: `session-attach`, `session-shutdown`, `config-validate`, `events-subscribe`, `events-next`, `events-unsubscribe`
 
-The Nu plugin exposes exactly three commands:
+The Nu plugin exposes one semantic command:
 
-- `glorp exec <operation> [input]`
-- `glorp query <operation> [input]`
-- `glorp helper <operation> [input]`
+- `glorp call <operation> [input]`
 
 Examples:
 
 ```nu
-glorp exec config-set {path: "editor.wrapping", value: "word"}
-glorp query editor
-glorp helper session-attach
+glorp call config-set {path: "editor.wrapping", value: "word"}
+glorp call editor
+glorp call session-attach
 ```
 
 See `../schema/glorp-schema.json` for the generated reflection source used by the plugin and Nu completions.

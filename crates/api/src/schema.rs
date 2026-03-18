@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 pub struct GlorpSchema {
 	pub version: u32,
 	pub types: Vec<NamedTypeSchema>,
-	pub operations: Vec<OperationSpec>,
+	pub calls: Vec<GlorpCallSpec>,
 	pub events: Vec<EventSchema>,
 }
 
@@ -16,12 +16,14 @@ pub struct NamedTypeSchema {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct OperationSpec {
+pub struct GlorpCallSpec {
 	pub id: String,
-	pub kind: OperationKind,
+	pub kind: GlorpCallKind,
+	pub route: GlorpCallRoute,
 	pub docs: String,
 	pub input: Option<TypeRef>,
 	pub output: TypeRef,
+	pub transactional: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -33,10 +35,18 @@ pub struct EventSchema {
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub enum OperationKind {
-	Exec,
-	Query,
+pub enum GlorpCallKind {
+	Mutation,
+	Read,
 	Helper,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum GlorpCallRoute {
+	Runtime,
+	Transport,
+	Client,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -296,41 +306,58 @@ where
 }
 
 pub fn glorp_schema() -> GlorpSchema {
-	let operations = crate::operation_specs().to_vec();
+	let calls = crate::call_specs().to_vec();
 	let events = event_schemas();
 	let mut registry = TypeRegistry::default();
 
 	registry.register::<GlorpSchema>();
-	for operation in &operations {
-		if let Some(input) = operation.input.as_ref() {
+	for call in &calls {
+		if let Some(input) = call.input.as_ref() {
 			register_type_ref(&mut registry, input);
 		}
-		register_type_ref(&mut registry, &operation.output);
+		register_type_ref(&mut registry, &call.output);
 	}
 	for event in &events {
 		register_type_ref(&mut registry, &event.payload);
 	}
 
 	GlorpSchema {
-		version: 4,
+		version: 5,
 		types: registry.into_types(),
-		operations,
+		calls,
 		events,
 	}
 }
 
-fn operation_variants(registry: &mut TypeRegistry, kind: OperationKind) -> Vec<TaggedVariantSchema> {
-	crate::operation_specs()
+fn call_variants(
+	registry: &mut TypeRegistry, filter: impl Fn(&GlorpCallSpec) -> bool,
+	payload: impl Fn(&GlorpCallSpec) -> Option<TypeRef>,
+) -> Vec<TaggedVariantSchema> {
+	crate::call_specs()
 		.iter()
-		.filter(|operation| operation.kind == kind)
-		.map(|operation| {
-			if let Some(input) = operation.input.as_ref() {
+		.filter(|call| filter(call))
+		.map(|call| {
+			if let Some(input) = call.input.as_ref() {
 				register_type_ref(registry, input);
 			}
 			TaggedVariantSchema {
-				name: operation.id.clone(),
-				docs: operation.docs.clone(),
-				payload: operation.input.clone(),
+				name: call.id.clone(),
+				docs: call.docs.clone(),
+				payload: payload(call),
+			}
+		})
+		.collect()
+}
+
+fn call_result_variants(registry: &mut TypeRegistry) -> Vec<TaggedVariantSchema> {
+	crate::call_specs()
+		.iter()
+		.map(|call| {
+			register_type_ref(registry, &call.output);
+			TaggedVariantSchema {
+				name: call.id.clone(),
+				docs: call.docs.clone(),
+				payload: Some(call.output.clone()),
 			}
 		})
 		.collect()
@@ -361,14 +388,15 @@ fn register_type_ref(registry: &mut TypeRegistry, ty: &TypeRef) {
 		TypeRef::Named(name) => match name.as_str() {
 			"GlorpSchema" => registry.register::<GlorpSchema>(),
 			"NamedTypeSchema" => registry.register::<NamedTypeSchema>(),
-			"OperationSpec" => registry.register::<OperationSpec>(),
+			"GlorpCallSpec" => registry.register::<GlorpCallSpec>(),
 			"EventSchema" => registry.register::<EventSchema>(),
 			"TypeRef" => registry.register::<TypeRef>(),
 			"TypeSchema" => registry.register::<TypeSchema>(),
 			"FieldSchema" => registry.register::<FieldSchema>(),
 			"EnumVariantSchema" => registry.register::<EnumVariantSchema>(),
 			"TaggedVariantSchema" => registry.register::<TaggedVariantSchema>(),
-			"OperationKind" => registry.register::<OperationKind>(),
+			"GlorpCallKind" => registry.register::<GlorpCallKind>(),
+			"GlorpCallRoute" => registry.register::<GlorpCallRoute>(),
 			"BuiltinType" => registry.register::<BuiltinType>(),
 			"ConfigAssignment" => registry.register::<crate::ConfigAssignment>(),
 			"ConfigPatchInput" => registry.register::<crate::ConfigPatchInput>(),
@@ -378,9 +406,8 @@ fn register_type_ref(registry: &mut TypeRegistry, ty: &TypeRef) {
 			"EditorModeInput" => registry.register::<crate::EditorModeInput>(),
 			"EditorHistoryInput" => registry.register::<crate::EditorHistoryInput>(),
 			"GlorpTxn" => registry.register::<crate::GlorpTxn>(),
-			"GlorpExec" => registry.register::<crate::GlorpExec>(),
-			"GlorpQuery" => registry.register::<crate::GlorpQuery>(),
-			"GlorpHelper" => registry.register::<crate::GlorpHelper>(),
+			"GlorpCall" => registry.register::<crate::GlorpCall>(),
+			"GlorpCallResult" => registry.register::<crate::GlorpCallResult>(),
 			"GlorpEvent" => registry.register::<crate::GlorpEvent>(),
 			"GlorpOutcome" => registry.register::<crate::GlorpOutcome>(),
 			"GlorpWarning" => registry.register::<crate::GlorpWarning>(),
@@ -426,27 +453,54 @@ impl_named_enum_schema!(
 );
 impl_named_enum_schema!(crate::EditorMode, "EditorMode", "Stable editor modes.");
 
-impl SchemaType for OperationKind {
+impl SchemaType for GlorpCallKind {
 	fn type_ref() -> TypeRef {
-		TypeRef::Named("OperationKind".to_owned())
+		TypeRef::Named("GlorpCallKind".to_owned())
 	}
 
 	fn register(registry: &mut TypeRegistry) {
-		registry.register_named("OperationKind", "Operation category.", |_registry| TypeSchema::Enum {
+		registry.register_named("GlorpCallKind", "Public call category.", |_registry| TypeSchema::Enum {
 			variants: vec![
 				EnumVariantSchema {
-					name: "exec".to_owned(),
+					name: "mutation".to_owned(),
 					docs: "Mutating operation.".to_owned(),
 				},
 				EnumVariantSchema {
-					name: "query".to_owned(),
+					name: "read".to_owned(),
 					docs: "Read-only operation.".to_owned(),
 				},
 				EnumVariantSchema {
 					name: "helper".to_owned(),
-					docs: "Plugin-side helper operation.".to_owned(),
+					docs: "Helper or control operation.".to_owned(),
 				},
 			],
+		});
+	}
+}
+
+impl SchemaType for GlorpCallRoute {
+	fn type_ref() -> TypeRef {
+		TypeRef::Named("GlorpCallRoute".to_owned())
+	}
+
+	fn register(registry: &mut TypeRegistry) {
+		registry.register_named("GlorpCallRoute", "Where the call is handled.", |_registry| {
+			TypeSchema::Enum {
+				variants: vec![
+					EnumVariantSchema {
+						name: "runtime".to_owned(),
+						docs: "Handled by the runtime host.".to_owned(),
+					},
+					EnumVariantSchema {
+						name: "transport".to_owned(),
+						docs: "Handled by the IPC transport layer.".to_owned(),
+					},
+					EnumVariantSchema {
+						name: "client".to_owned(),
+						docs: "Handled locally by the client or plugin.".to_owned(),
+					},
+				],
+			}
 		});
 	}
 }
@@ -495,12 +549,14 @@ impl_named_record_schema!(NamedTypeSchema, "NamedTypeSchema", "Named schema type
 	"docs" => String: "Type documentation.",
 	"kind" => TypeSchema: "Type shape.",
 });
-impl_named_record_schema!(OperationSpec, "OperationSpec", "One protocol operation.", {
-	"id" => String: "Operation identifier.",
-	"kind" => OperationKind: "Operation category.",
-	"docs" => String: "Operation documentation.",
-	"input" => Option<TypeRef>: "Operation input type.",
-	"output" => TypeRef: "Operation output type.",
+impl_named_record_schema!(GlorpCallSpec, "GlorpCallSpec", "One public call contract.", {
+	"id" => String: "Call identifier.",
+	"kind" => GlorpCallKind: "Public call category.",
+	"route" => GlorpCallRoute: "Where the call is handled.",
+	"docs" => String: "Call documentation.",
+	"input" => Option<TypeRef>: "Call input type.",
+	"output" => TypeRef: "Call output type.",
+	"transactional" => bool: "Whether the call is allowed inside `txn`.",
 });
 impl_named_record_schema!(EventSchema, "EventSchema", "One event contract.", {
 	"id" => String: "Event identifier.",
@@ -545,8 +601,8 @@ impl_named_record_schema!(crate::EditorModeInput, "EditorModeInput", "One editor
 impl_named_record_schema!(crate::EditorHistoryInput, "EditorHistoryInput", "One editor history input.", {
 	"action" => crate::EditorHistoryCommand: "Editor history action.",
 });
-impl_named_record_schema!(crate::GlorpTxn, "GlorpTxn", "Multiple exec operations applied atomically.", {
-	"execs" => Vec<crate::GlorpExec>: "Ordered exec operations.",
+impl_named_record_schema!(crate::GlorpTxn, "GlorpTxn", "Multiple mutation calls applied atomically.", {
+	"calls" => Vec<crate::GlorpCall>: "Ordered mutation calls.",
 });
 impl_named_record_schema!(crate::StreamTokenInput, "StreamTokenInput", "Subscription token input.", {
 	"token" => u64: "Subscription token.",
@@ -640,7 +696,7 @@ impl_named_record_schema!(crate::LayoutRectView, "LayoutRectView", "Rectangle in
 impl_named_record_schema!(GlorpSchema, "GlorpSchema", "Protocol reflection schema.", {
 	"version" => u32: "Schema version.",
 	"types" => Vec<NamedTypeSchema>: "Named protocol types.",
-	"operations" => Vec<OperationSpec>: "Protocol operations.",
+	"calls" => Vec<GlorpCallSpec>: "Public call contracts.",
 	"events" => Vec<EventSchema>: "Protocol events.",
 });
 
@@ -734,49 +790,31 @@ impl SchemaType for TypeSchema {
 	}
 }
 
-impl SchemaType for crate::GlorpExec {
+impl SchemaType for crate::GlorpCall {
 	fn type_ref() -> TypeRef {
-		TypeRef::Named("GlorpExec".to_owned())
+		TypeRef::Named("GlorpCall".to_owned())
 	}
 
 	fn register(registry: &mut TypeRegistry) {
-		registry.register_named("GlorpExec", "Typed exec operations.", |registry| {
-			TypeSchema::TaggedUnion {
-				tag: "op".to_owned(),
-				content: "input".to_owned(),
-				variants: operation_variants(registry, OperationKind::Exec),
-			}
+		registry.register_named("GlorpCall", "Typed public calls.", |registry| TypeSchema::TaggedUnion {
+			tag: "op".to_owned(),
+			content: "input".to_owned(),
+			variants: call_variants(registry, |_| true, |call| call.input.clone()),
 		});
 	}
 }
 
-impl SchemaType for crate::GlorpQuery {
+impl SchemaType for crate::GlorpCallResult {
 	fn type_ref() -> TypeRef {
-		TypeRef::Named("GlorpQuery".to_owned())
+		TypeRef::Named("GlorpCallResult".to_owned())
 	}
 
 	fn register(registry: &mut TypeRegistry) {
-		registry.register_named("GlorpQuery", "Typed query operations.", |registry| {
+		registry.register_named("GlorpCallResult", "Typed public call results.", |registry| {
 			TypeSchema::TaggedUnion {
 				tag: "op".to_owned(),
-				content: "input".to_owned(),
-				variants: operation_variants(registry, OperationKind::Query),
-			}
-		});
-	}
-}
-
-impl SchemaType for crate::GlorpHelper {
-	fn type_ref() -> TypeRef {
-		TypeRef::Named("GlorpHelper".to_owned())
-	}
-
-	fn register(registry: &mut TypeRegistry) {
-		registry.register_named("GlorpHelper", "Typed helper operations.", |registry| {
-			TypeSchema::TaggedUnion {
-				tag: "op".to_owned(),
-				content: "input".to_owned(),
-				variants: operation_variants(registry, OperationKind::Helper),
+				content: "output".to_owned(),
+				variants: call_result_variants(registry),
 			}
 		});
 	}

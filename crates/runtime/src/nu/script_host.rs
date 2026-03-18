@@ -1,6 +1,6 @@
-use glorp_api::GlorpExec;
+use glorp_api::GlorpCall;
 
 #[must_use]
-pub const fn semantic_command(exec: GlorpExec) -> GlorpExec {
-	exec
+pub const fn semantic_command(call: GlorpCall) -> GlorpCall {
+	call
 }

@@ -1,12 +1,9 @@
 use {
 	crate::plugin::GlorpPlugin,
 	glorp_api::{
-		GlorpError, GlorpEventStreamView, GlorpHelper, GlorpHelperResult, GlorpHost, GlorpOutcome, GlorpQueryResult,
-		GlorpSessionView, GlorpValue, OkView, TokenAckView, build_exec, build_helper, build_query,
+		GlorpCall, GlorpCallResult, GlorpCallRoute, GlorpError, GlorpHost, GlorpValue, OkView, build_call, call_spec,
 	},
-	glorp_transport::{
-		IpcClient, TransportRequest, TransportResponse, default_socket_path, socket_is_live, transport_request,
-	},
+	glorp_transport::{IpcClient, default_socket_path, socket_is_live},
 	nu_plugin::{EvaluatedCall, PluginCommand},
 	nu_protocol::{Category, LabeledError, PipelineData, Record, Signature, Span, SyntaxShape, Type, Value},
 	serde_json::Value as JsonValue,
@@ -18,38 +15,17 @@ use {
 	},
 };
 
-macro_rules! serialize_to_value {
-	($value:expr, $span:expr) => {
-		json_to_nu_value(serde_json::to_value($value).unwrap_or(JsonValue::Null), $span)
-	};
-}
-
 pub fn all_commands() -> Vec<Box<dyn PluginCommand<Plugin = GlorpPlugin>>> {
-	[
-		OperationCommand::new("glorp exec", OperationKind::Exec),
-		OperationCommand::new("glorp query", OperationKind::Query),
-		OperationCommand::new("glorp helper", OperationKind::Helper),
-	]
-	.into_iter()
-	.map(|command| Box::new(command) as Box<dyn PluginCommand<Plugin = GlorpPlugin>>)
-	.collect()
-}
-
-#[derive(Debug, Clone, Copy)]
-enum OperationKind {
-	Exec,
-	Query,
-	Helper,
+	vec![Box::new(OperationCommand::new())]
 }
 
 struct OperationCommand {
 	name: &'static str,
-	kind: OperationKind,
 }
 
 impl OperationCommand {
-	const fn new(name: &'static str, kind: OperationKind) -> Self {
-		Self { name, kind }
+	const fn new() -> Self {
+		Self { name: "glorp call" }
 	}
 }
 
@@ -61,11 +37,7 @@ impl PluginCommand for OperationCommand {
 	}
 
 	fn description(&self) -> &str {
-		match self.kind {
-			OperationKind::Exec => "Execute a mutating Glorp operation.",
-			OperationKind::Query => "Execute a read-only Glorp query.",
-			OperationKind::Helper => "Run a plugin-side Glorp helper operation.",
-		}
+		"Execute a public Glorp call."
 	}
 
 	fn signature(&self) -> Signature {
@@ -78,8 +50,8 @@ impl PluginCommand for OperationCommand {
 				"Repo root for shared runtime discovery.",
 				Some('r'),
 			)
-			.required("operation", SyntaxShape::String, "Operation identifier.")
-			.optional("input", SyntaxShape::Any, "Optional operation input.")
+			.required("operation", SyntaxShape::String, "Call identifier.")
+			.optional("input", SyntaxShape::Any, "Optional call input.")
 			.input_output_types(vec![(Type::Nothing, Type::Any)])
 			.category(Category::Custom("glorp".to_owned()))
 	}
@@ -90,82 +62,43 @@ impl PluginCommand for OperationCommand {
 		let span = call.head;
 		let operation: String = call.req(0)?;
 		let input = call.opt::<Value>(1)?.map(glorp_value).transpose()?;
+		let glorp_call = build_call(&operation, input.as_ref()).map_err(to_labeled_error)?;
+		let Some(spec) = call_spec(glorp_call.id()) else {
+			return Err(LabeledError::new(format!("unknown call `{}`", glorp_call.id())));
+		};
 
-		match self.kind {
-			OperationKind::Exec => {
+		let result = match spec.route {
+			GlorpCallRoute::Client => run_local_call(glorp_call, call)?,
+			GlorpCallRoute::Runtime | GlorpCallRoute::Transport => {
 				let mut client = resolve_session(call)?.client;
-				let outcome = client
-					.execute(build_exec(&operation, input.as_ref()).map_err(to_labeled_error)?)
-					.map_err(to_labeled_error)?;
-				Ok(value_pipeline(outcome_to_value(outcome, span)))
+				client.call(glorp_call).map_err(to_labeled_error)?
 			}
-			OperationKind::Query => {
-				let mut client = resolve_session(call)?.client;
-				let result = client
-					.query(build_query(&operation, input.as_ref()).map_err(to_labeled_error)?)
-					.map_err(to_labeled_error)?;
-				Ok(value_pipeline(query_to_value(result, span)))
-			}
-			OperationKind::Helper => run_helper(
-				build_helper(&operation, input.as_ref()).map_err(to_labeled_error)?,
-				call,
-				span,
-			),
-		}
+		};
+
+		Ok(value_pipeline(call_to_value(result, span)))
 	}
 }
 
-fn run_helper(helper: GlorpHelper, call: &EvaluatedCall, span: Span) -> Result<PipelineData, LabeledError> {
-	let result = match helper {
-		GlorpHelper::ConfigValidate(input) => {
+fn run_local_call(glorp_call: GlorpCall, call: &EvaluatedCall) -> Result<GlorpCallResult, LabeledError> {
+	match glorp_call {
+		GlorpCall::ConfigValidate(input) => {
 			glorp_api::GlorpConfig::validate_path(&input.path, &input.value).map_err(to_labeled_error)?;
-			GlorpHelperResult::ConfigValidate(OkView { ok: true })
+			Ok(GlorpCallResult::ConfigValidate(OkView { ok: true }))
 		}
-		GlorpHelper::SessionAttach => {
+		GlorpCall::SessionAttach => {
 			let mut resolved = resolve_session(call)?;
 			let capabilities = capabilities(&mut resolved.client)?;
-			GlorpHelperResult::SessionAttach(GlorpSessionView {
+			Ok(GlorpCallResult::SessionAttach(glorp_api::GlorpSessionView {
 				socket: resolved.socket.display().to_string(),
 				repo_root: Some(resolved.repo_root.display().to_string()),
 				capabilities,
-			})
+			}))
 		}
-		GlorpHelper::SessionShutdown => {
-			let resolved = resolve_session(call)?;
-			let TransportResponse::Shutdown(result) =
-				transport_request(&resolved.socket, TransportRequest::Shutdown).map_err(to_labeled_error)?
-			else {
-				return Err(LabeledError::new("unexpected shutdown response"));
-			};
-			result.map_err(to_labeled_error)?;
-			GlorpHelperResult::SessionShutdown(OkView { ok: true })
-		}
-		GlorpHelper::EventsSubscribe => {
-			let mut client = resolve_session(call)?.client;
-			let token = client
-				.subscribe(glorp_api::GlorpSubscription::Changes)
-				.map_err(to_labeled_error)?;
-			GlorpHelperResult::EventsSubscribe(GlorpEventStreamView {
-				token,
-				subscription: "changes".to_owned(),
-			})
-		}
-		GlorpHelper::EventsNext(input) => {
-			let mut client = resolve_session(call)?.client;
-			let event = client.next_event(input.token).map_err(to_labeled_error)?;
-			GlorpHelperResult::EventsNext(event)
-		}
-		GlorpHelper::EventsUnsubscribe(input) => {
-			let mut client = resolve_session(call)?.client;
-			client.unsubscribe(input.token).map_err(to_labeled_error)?;
-			GlorpHelperResult::EventsUnsubscribe(TokenAckView {
-				ok: true,
-				token: input.token,
-			})
-		}
-	};
-
-	Ok(value_pipeline(helper_to_value(result, span)))
+		other => Err(LabeledError::new(format!(
+			"call `{}` is marked client-local but is not implemented locally",
+			other.id()
+		))),
+	}
 }
 
 struct ResolvedSession {
@@ -208,9 +141,7 @@ fn ensure_session(repo_root: PathBuf, socket: PathBuf) -> Result<ResolvedSession
 }
 
 fn capabilities(client: &mut impl GlorpHost) -> Result<glorp_api::GlorpCapabilities, LabeledError> {
-	let GlorpQueryResult::Capabilities(capabilities) = client
-		.query(glorp_api::GlorpQuery::Capabilities)
-		.map_err(to_labeled_error)?
+	let GlorpCallResult::Capabilities(capabilities) = client.call(GlorpCall::Capabilities).map_err(to_labeled_error)?
 	else {
 		return Err(LabeledError::new("unexpected capabilities response"));
 	};
@@ -266,7 +197,7 @@ fn repo_root_from_call() -> PathBuf {
 fn session_socket(value: &Value) -> Result<&str, LabeledError> {
 	let Value::Record { val, .. } = value else {
 		return Err(LabeledError::new(
-			"session flag must be a record returned by `glorp helper session-attach`",
+			"session flag must be a record returned by `glorp call session-attach`",
 		));
 	};
 
@@ -281,7 +212,7 @@ fn session_socket(value: &Value) -> Result<&str, LabeledError> {
 fn session_repo_root(value: &Value) -> Result<Option<&str>, LabeledError> {
 	let Value::Record { val, .. } = value else {
 		return Err(LabeledError::new(
-			"session flag must be a record returned by `glorp helper session-attach`",
+			"session flag must be a record returned by `glorp call session-attach`",
 		));
 	};
 
@@ -298,30 +229,8 @@ const fn value_pipeline(value: Value) -> PipelineData {
 	PipelineData::Value(value, None)
 }
 
-fn outcome_to_value(outcome: GlorpOutcome, span: Span) -> Value {
-	serialize_to_value!(outcome, span)
-}
-
-fn query_to_value(result: GlorpQueryResult, span: Span) -> Value {
-	match result {
-		GlorpQueryResult::Schema(value) => serialize_to_value!(value, span),
-		GlorpQueryResult::Config(value) => serialize_to_value!(value, span),
-		GlorpQueryResult::DocumentText(value) => serialize_to_value!(value, span),
-		GlorpQueryResult::Editor(value) => serialize_to_value!(value, span),
-		GlorpQueryResult::Capabilities(value) => serialize_to_value!(value, span),
-	}
-}
-
-fn helper_to_value(result: GlorpHelperResult, span: Span) -> Value {
-	match result {
-		GlorpHelperResult::SessionAttach(value) => serialize_to_value!(value, span),
-		GlorpHelperResult::SessionShutdown(value) | GlorpHelperResult::ConfigValidate(value) => {
-			serialize_to_value!(value, span)
-		}
-		GlorpHelperResult::EventsSubscribe(value) => serialize_to_value!(value, span),
-		GlorpHelperResult::EventsNext(value) => serialize_to_value!(value, span),
-		GlorpHelperResult::EventsUnsubscribe(value) => serialize_to_value!(value, span),
-	}
+fn call_to_value(result: GlorpCallResult, span: Span) -> Value {
+	json_to_nu_value(result.into_output_value().unwrap_or(JsonValue::Null), span)
 }
 
 fn glorp_value(value: Value) -> Result<GlorpValue, LabeledError> {
@@ -363,31 +272,16 @@ fn json_to_nu_value(value: JsonValue, span: Span) -> Value {
 			span,
 		),
 		JsonValue::Object(values) => Value::record(
-			values
-				.into_iter()
-				.map(|(key, value)| (key, json_to_nu_value(value, span)))
-				.collect::<Record>(),
+			Record::from_iter(
+				values
+					.into_iter()
+					.map(|(key, value)| (key, json_to_nu_value(value, span))),
+			),
 			span,
 		),
 	}
 }
 
 fn to_labeled_error(error: GlorpError) -> LabeledError {
-	match error {
-		GlorpError::Validation {
-			path,
-			message,
-			allowed_values,
-		} => {
-			let mut error = LabeledError::new(message);
-			if let Some(path) = path {
-				error = error.with_help(format!("path: {path}"));
-			}
-			if !allowed_values.is_empty() {
-				error = error.with_help(format!("allowed values: {}", allowed_values.join(", ")));
-			}
-			error
-		}
-		other => LabeledError::new(other.to_string()),
-	}
+	LabeledError::new(error.to_string())
 }

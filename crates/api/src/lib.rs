@@ -1,3 +1,4 @@
+mod catalog;
 mod command;
 mod config;
 mod error;
@@ -23,9 +24,5 @@ pub enum GlorpSubscription {
 }
 
 pub trait GlorpHost {
-	fn execute(&mut self, exec: GlorpExec) -> Result<GlorpOutcome, GlorpError>;
-	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError>;
-	fn subscribe(&mut self, request: GlorpSubscription) -> Result<GlorpStreamToken, GlorpError>;
-	fn next_event(&mut self, token: GlorpStreamToken) -> Result<Option<GlorpEvent>, GlorpError>;
-	fn unsubscribe(&mut self, token: GlorpStreamToken) -> Result<(), GlorpError>;
+	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError>;
 }

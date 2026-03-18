@@ -1,5 +1,7 @@
 # Glorp: Nushell-First Runtime Architecture
 
+> Note: the live codebase now uses a unified `GlorpCall` / `GlorpCallResult` protocol and the primary Nu surface is `glorp call`. Older split `exec` / `query` / `helper` examples below describe an earlier revision.
+
 ## Goal
 
 Glorp should expose one deliberate, stable semantic API that becomes the primary scripting, configuration, automation, and agent-control surface. Nushell is the primary interface at that boundary, but it should not directly own or mutate arbitrary internal Rust state.

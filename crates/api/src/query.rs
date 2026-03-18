@@ -1,24 +1,4 @@
-use crate::{EditorMode, GlorpConfig, GlorpRevisions, LayoutRectView, WrapChoice};
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-#[serde(tag = "op", content = "input", rename_all = "kebab-case")]
-pub enum GlorpQuery {
-	Schema,
-	Config,
-	DocumentText,
-	Editor,
-	Capabilities,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-#[serde(tag = "kind", content = "output", rename_all = "kebab-case")]
-pub enum GlorpQueryResult {
-	Schema(crate::GlorpSchema),
-	Config(GlorpConfig),
-	DocumentText(String),
-	Editor(EditorStateView),
-	Capabilities(GlorpCapabilities),
-}
+use crate::{EditorMode, GlorpRevisions, LayoutRectView, WrapChoice};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct GlorpCapabilities {

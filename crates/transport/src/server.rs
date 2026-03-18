@@ -2,7 +2,7 @@ use {
 	crate::{
 		GuiTransportRequest, GuiTransportResponse, ServerRequest, ServerResponse, TransportRequest, TransportResponse,
 	},
-	glorp_api::{GlorpError, GlorpHost},
+	glorp_api::{GlorpCall, GlorpCallResult, GlorpError, GlorpHost, OkView},
 	glorp_runtime::RuntimeHost,
 	std::{
 		io::{BufRead, BufReader, Write},
@@ -31,7 +31,7 @@ impl IpcServerHandle {
 
 	pub fn shutdown(mut self) -> Result<(), GlorpError> {
 		self.stop.store(true, Ordering::SeqCst);
-		let _ = super::transport_request(&self.socket_path, TransportRequest::Shutdown);
+		let _ = super::transport_request(&self.socket_path, TransportRequest::Call(GlorpCall::SessionShutdown));
 		self.join()
 	}
 
@@ -135,15 +135,11 @@ fn dispatch_public_request(
 	request: TransportRequest, host: &mut RuntimeHost, stop: &Arc<AtomicBool>,
 ) -> TransportResponse {
 	match request {
-		TransportRequest::Execute(command) => TransportResponse::Execute(host.execute(command)),
-		TransportRequest::Query(query) => TransportResponse::Query(Box::new(host.query(query))),
-		TransportRequest::Subscribe(request) => TransportResponse::Subscribe(host.subscribe(request)),
-		TransportRequest::NextEvent(token) => TransportResponse::NextEvent(host.next_event(token)),
-		TransportRequest::Unsubscribe(token) => TransportResponse::Unsubscribe(host.unsubscribe(token)),
-		TransportRequest::Shutdown => {
+		TransportRequest::Call(GlorpCall::SessionShutdown) => {
 			stop.store(true, Ordering::SeqCst);
-			TransportResponse::Shutdown(Ok(()))
+			TransportResponse::Call(Box::new(Ok(GlorpCallResult::SessionShutdown(OkView { ok: true }))))
 		}
+		TransportRequest::Call(call) => TransportResponse::Call(Box::new(host.call(call))),
 	}
 }
 

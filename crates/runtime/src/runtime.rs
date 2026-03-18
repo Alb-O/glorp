@@ -1,9 +1,6 @@
 use {
-	crate::{ConfigStore, ConfigStorePaths, events::SubscriptionSet, execute, project, state::RuntimeState},
-	glorp_api::{
-		GlorpCapabilities, GlorpError, GlorpEvent, GlorpExec, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult,
-		GlorpStreamToken, GlorpSubscription, SamplePreset,
-	},
+	crate::{ConfigStore, ConfigStorePaths, events::SubscriptionSet, execute, state::RuntimeState},
+	glorp_api::{GlorpCall, GlorpCallResult, GlorpError, GlorpHost, GlorpOutcome, SamplePreset},
 	glorp_editor::sample_preset_text,
 };
 
@@ -15,7 +12,7 @@ pub struct RuntimeOptions {
 pub struct GlorpRuntime {
 	pub(crate) config_store: ConfigStore,
 	pub(crate) state: RuntimeState,
-	subscriptions: SubscriptionSet,
+	pub(crate) subscriptions: SubscriptionSet,
 }
 
 impl GlorpRuntime {
@@ -82,34 +79,8 @@ impl GlorpRuntime {
 }
 
 impl GlorpHost for GlorpRuntime {
-	fn execute(&mut self, exec: GlorpExec) -> Result<GlorpOutcome, GlorpError> {
-		execute::execute(self, exec)
-	}
-
-	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
-		Ok(match query {
-			GlorpQuery::Schema => GlorpQueryResult::Schema(glorp_api::glorp_schema()),
-			GlorpQuery::Config => GlorpQueryResult::Config(self.state.config.clone()),
-			GlorpQuery::DocumentText => GlorpQueryResult::DocumentText(self.state.session.text().into()),
-			GlorpQuery::Editor => GlorpQueryResult::Editor(project::editor_view_from_state(&self.state)),
-			GlorpQuery::Capabilities => GlorpQueryResult::Capabilities(GlorpCapabilities {
-				transactions: true,
-				subscriptions: true,
-				transports: vec!["local".into(), "ipc".into()],
-			}),
-		})
-	}
-
-	fn subscribe(&mut self, request: GlorpSubscription) -> Result<GlorpStreamToken, GlorpError> {
-		Ok(self.subscriptions.subscribe(request))
-	}
-
-	fn next_event(&mut self, token: GlorpStreamToken) -> Result<Option<GlorpEvent>, GlorpError> {
-		self.subscriptions.next_event(token)
-	}
-
-	fn unsubscribe(&mut self, token: GlorpStreamToken) -> Result<(), GlorpError> {
-		self.subscriptions.unsubscribe(token)
+	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
+		execute::call(self, call)
 	}
 }
 

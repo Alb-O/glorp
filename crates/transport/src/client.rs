@@ -2,10 +2,7 @@ use {
 	crate::{
 		GuiTransportRequest, GuiTransportResponse, ServerRequest, ServerResponse, TransportRequest, TransportResponse,
 	},
-	glorp_api::{
-		GlorpError, GlorpEvent, GlorpExec, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
-		GlorpSubscription,
-	},
+	glorp_api::{GlorpCall, GlorpCallResult, GlorpError, GlorpHost},
 	serde::{Serialize, de::DeserializeOwned},
 	std::{
 		io::{BufRead, BufReader, Write},
@@ -32,8 +29,8 @@ pub fn socket_is_live(socket_path: &Path) -> bool {
 	socket_path.exists() && {
 		let mut client = IpcClient::new(socket_path);
 		matches!(
-			client.query(GlorpQuery::Capabilities),
-			Ok(GlorpQueryResult::Capabilities(_))
+			client.call(GlorpCall::Capabilities),
+			Ok(GlorpCallResult::Capabilities(_))
 		)
 	}
 }
@@ -82,57 +79,12 @@ where
 }
 
 impl GlorpHost for IpcClient {
-	fn execute(&mut self, exec: GlorpExec) -> Result<GlorpOutcome, GlorpError> {
+	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
 		expect_response(
-			self.response(TransportRequest::Execute(exec)),
-			"execute",
+			self.response(TransportRequest::Call(call)),
+			"call",
 			|response| match response {
-				TransportResponse::Execute(result) => Some(result),
-				_ => None,
-			},
-		)?
-	}
-
-	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
-		expect_response(
-			self.response(TransportRequest::Query(query)),
-			"query",
-			|response| match response {
-				TransportResponse::Query(result) => Some(*result),
-				_ => None,
-			},
-		)?
-	}
-
-	fn subscribe(&mut self, request: GlorpSubscription) -> Result<GlorpStreamToken, GlorpError> {
-		expect_response(
-			self.response(TransportRequest::Subscribe(request)),
-			"subscribe",
-			|response| match response {
-				TransportResponse::Subscribe(result) => Some(result),
-				_ => None,
-			},
-		)?
-	}
-
-	fn next_event(&mut self, token: GlorpStreamToken) -> Result<Option<GlorpEvent>, GlorpError> {
-		expect_response(
-			self.response(TransportRequest::NextEvent(token)),
-			"next-event",
-			|response| match response {
-				TransportResponse::NextEvent(result) => Some(result),
-				_ => None,
-			},
-		)?
-	}
-
-	fn unsubscribe(&mut self, token: GlorpStreamToken) -> Result<(), GlorpError> {
-		expect_response(
-			self.response(TransportRequest::Unsubscribe(token)),
-			"unsubscribe",
-			|response| match response {
-				TransportResponse::Unsubscribe(result) => Some(result),
-				_ => None,
+				TransportResponse::Call(result) => Some(*result),
 			},
 		)?
 	}

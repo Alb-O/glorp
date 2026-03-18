@@ -3,7 +3,7 @@
 Two Nu-facing artifacts exist:
 
 - `../nu/glorp.nu`: generated Nu bootstrap script that loads the plugin and completions when sourced
-- `nu_plugin_glorp`: the Nushell plugin binary behind `glorp exec`, `glorp query`, and `glorp helper`
+- `nu_plugin_glorp`: the Nushell plugin binary behind `glorp call`
 
 Example transcript:
 
@@ -11,10 +11,10 @@ Example transcript:
 plugin add ./target/debug/nu_plugin_glorp
 source ./nu/glorp.nu
 
-let session = (glorp helper session-attach)
+let session = (glorp call session-attach)
 
-glorp exec txn {
-  execs: [
+glorp call txn {
+  calls: [
     {op: "config-set", input: {path: "editor.wrapping", value: "glyph"}}
     {op: "document-replace", input: {text: "hello"}}
     {op: "editor-mode", input: {mode: "enter-insert-after"}}
@@ -23,6 +23,6 @@ glorp exec txn {
   ]
 } --session $session
 
-glorp query editor --session $session
-glorp query document-text --session $session
+glorp call editor --session $session
+glorp call document-text --session $session
 ```

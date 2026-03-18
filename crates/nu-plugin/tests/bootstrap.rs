@@ -100,7 +100,7 @@ fn sourced_nu_bootstrap_script_controls_runtime_e2e() {
 		plugin_config.to_str().expect("plugin config should be utf8"),
 		"-c",
 		&format!(
-			r#"source "{}"; glorp exec document-replace {{text: "hello from sourced nu"}} --socket "{}"; glorp query document-text --socket "{}""#,
+			r#"source "{}"; glorp call document-replace {{text: "hello from sourced nu"}} --socket "{}"; glorp call document-text --socket "{}""#,
 			harness.paths.nu_module_path.display(),
 			harness.socket_path.display(),
 			harness.socket_path.display(),

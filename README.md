@@ -5,7 +5,7 @@ IPC transport, GUI client, Nu plugin, and a minimal shared-runtime host.
 
 ## Workspace
 
-- `crates/api`: public exec/query/helper operations, events, config, schema
+- `crates/api`: public call protocol, events, config, schema
 - `crates/editor`: editing and layout engine
 - `crates/runtime`: canonical state owner and persistence
 - `crates/transport`: in-process and IPC clients
@@ -40,7 +40,7 @@ when a shared runtime is not already live.
 
 - `nu/default-config.nu`: durable data-first config
 - `nu/glorp.nu`: generated Nu module that loads the plugin and completions
-- `crates/nu-plugin`: primary Nu command surface over the shared runtime via `glorp exec`, `glorp query`, and `glorp helper`
+- `crates/nu-plugin`: primary Nu command surface over the shared runtime via `glorp call`
 
 ## Proof
 

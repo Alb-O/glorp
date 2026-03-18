@@ -1,6 +1,6 @@
 use {
 	cosmic_text::Buffer,
-	glorp_api::{EditorConfig, GlorpError, GlorpHost, GlorpQuery, GlorpQueryResult},
+	glorp_api::{EditorConfig, GlorpCall, GlorpCallResult, GlorpError, GlorpHost},
 	glorp_editor::{
 		EditorPresentation, EditorTextLayerState, SessionSnapshot, build_buffer, make_font_system, scene_config,
 	},
@@ -181,24 +181,8 @@ impl GuiRuntimeClient {
 }
 
 impl GlorpHost for GuiRuntimeClient {
-	fn execute(&mut self, exec: glorp_api::GlorpExec) -> Result<glorp_api::GlorpOutcome, GlorpError> {
-		self.client.execute(exec)
-	}
-
-	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
-		self.client.query(query)
-	}
-
-	fn subscribe(&mut self, request: glorp_api::GlorpSubscription) -> Result<glorp_api::GlorpStreamToken, GlorpError> {
-		self.client.subscribe(request)
-	}
-
-	fn next_event(&mut self, token: glorp_api::GlorpStreamToken) -> Result<Option<glorp_api::GlorpEvent>, GlorpError> {
-		self.client.next_event(token)
-	}
-
-	fn unsubscribe(&mut self, token: glorp_api::GlorpStreamToken) -> Result<(), GlorpError> {
-		self.client.unsubscribe(token)
+	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
+		self.client.call(call)
 	}
 }
 
@@ -243,7 +227,7 @@ fn ensure_socket_parent(socket_path: &Path) -> Result<(), GlorpError> {
 }
 
 fn ensure_runtime_capabilities(client: &mut impl GlorpHost, error: &'static str) -> Result<(), GlorpError> {
-	let GlorpQueryResult::Capabilities(_) = client.query(GlorpQuery::Capabilities)? else {
+	let GlorpCallResult::Capabilities(_) = client.call(GlorpCall::Capabilities)? else {
 		return Err(GlorpError::transport(error));
 	};
 
