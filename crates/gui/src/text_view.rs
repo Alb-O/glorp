@@ -137,7 +137,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 		}
 
 		if self.draw_text {
-			let buffer = &self.snapshot.editor.text_layer.buffer;
+			let buffer = self.snapshot.editor.text_layer.buffer.clone();
 			renderer.fill_raw(iced::advanced::graphics::text::Raw {
 				buffer: buffer.clone(),
 				position: origin,
@@ -152,7 +152,7 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 			) {
 				// Repaint only the active insert cell with the inverted glyph color.
 				renderer.fill_raw(iced::advanced::graphics::text::Raw {
-					buffer: buffer.clone(),
+					buffer,
 					position: origin,
 					color: INSERT_GLYPH_COLOR,
 					clip_bounds: clip,

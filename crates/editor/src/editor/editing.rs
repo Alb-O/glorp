@@ -153,14 +153,16 @@ impl EditorEngine {
 	fn apply_history_entry(
 		&mut self, font_system: &mut FontSystem, entry: Option<super::history::HistoryEntry>, undo: bool,
 	) -> ApplyResult {
-		entry.map_or_else(ApplyResult::default, |entry| {
-			let (text_edit, snapshot) = if undo {
-				(entry.inverse, entry.before)
-			} else {
-				(entry.forward, entry.after)
-			};
-			self.replay_history(font_system, text_edit, &snapshot)
-		})
+		let Some(entry) = entry else {
+			return ApplyResult::default();
+		};
+
+		let (text_edit, snapshot) = if undo {
+			(entry.inverse, entry.before)
+		} else {
+			(entry.forward, entry.after)
+		};
+		self.replay_history(font_system, text_edit, &snapshot)
 	}
 }
 

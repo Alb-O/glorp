@@ -162,7 +162,7 @@ fn draw_thresholds(frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGra
 fn draw_series(frame: &mut canvas::Frame, bounds: Rectangle, graph: &PerfGraphSeries, palette: &iced::theme::Palette) {
 	if graph.samples_ms.is_empty() {
 		frame.fill_text(canvas::Text {
-			content: "waiting for samples".to_string(),
+			content: "waiting for samples".into(),
 			position: Point::new(bounds.x + 10.0, bounds.height.mul_add(0.55, bounds.y)),
 			color: palette.background.base.text,
 			size: Pixels(14.0),
@@ -249,7 +249,7 @@ fn graph_points(bounds: Rectangle, graph: &PerfGraphSeries) -> Vec<Point> {
 		)];
 	}
 
-	let steps = count_as_f32(graph.samples_ms.iter().skip(1));
+	let steps = graph.samples_ms.len().saturating_sub(1) as f32;
 	let step = bounds.width / steps.max(1.0);
 	let mut x = bounds.x;
 
@@ -262,10 +262,6 @@ fn graph_points(bounds: Rectangle, graph: &PerfGraphSeries) -> Vec<Point> {
 			point
 		})
 		.collect()
-}
-
-fn count_as_f32(items: impl IntoIterator) -> f32 {
-	items.into_iter().fold(0.0, |count, _| count + 1.0)
 }
 
 fn sample_y(bounds: Rectangle, sample_ms: f32, ceiling_ms: f32) -> f32 {

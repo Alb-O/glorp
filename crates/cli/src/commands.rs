@@ -153,7 +153,7 @@ enum SceneSubcommand {
 	Ensure,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Clone, Copy, Subcommand)]
 enum EventsSubcommand {
 	Subscribe,
 	Next { token: u64 },

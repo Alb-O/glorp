@@ -148,9 +148,7 @@ fn insert_named_key_intent(key: &keyboard::Key) -> Option<EditorIntent> {
 }
 
 fn insert_text_intent(text: Option<&str>, modifiers: keyboard::Modifiers) -> Option<EditorIntent> {
-	(!modifiers.alt())
-		.then_some(text)
-		.flatten()
+	text.filter(|_| !modifiers.alt())
 		.filter(|text| !text.chars().all(char::is_control))
 		.map(|text| EditorIntent::Edit(EditorEditIntent::InsertText(text.into())))
 }

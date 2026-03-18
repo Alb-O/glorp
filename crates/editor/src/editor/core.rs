@@ -70,12 +70,11 @@ impl EditorEngine {
 	}
 
 	pub fn active_selection_index(&self, layout: &DocumentLayout) -> Option<usize> {
-		self.selection()?;
-		let caret = self.caret();
-
-		layout
-			.cluster_at_or_after(caret)
-			.or_else(|| layout.cluster_before(caret.saturating_add(1)))
+		self.selection().map(EditorSelection::head).and_then(|caret| {
+			layout
+				.cluster_at_or_after(caret)
+				.or_else(|| layout.cluster_before(caret.saturating_add(1)))
+		})
 	}
 
 	pub fn active_selection<'a>(&self, layout: &'a DocumentLayout) -> Option<&'a LayoutCluster> {

@@ -13,7 +13,7 @@ pub fn debug_snippet(text: &str) -> String {
 
 #[must_use]
 pub fn debug_range(text: &str, range: &Range<usize>) -> String {
-	text.get(range.clone())
+	text.get(range.start..range.end)
 		.map_or_else(|| "<invalid utf8 slice>".into(), debug_snippet)
 }
 
