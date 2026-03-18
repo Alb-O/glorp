@@ -113,6 +113,31 @@ impl ControlsState {
 }
 
 #[derive(Debug)]
+pub(super) struct AppState {
+	pub(super) controls: ControlsState,
+	pub(super) sidebar: SidebarState,
+	pub(super) viewport: ViewportState,
+	pub(super) shell: ShellState,
+	pub(super) editor_metrics: EditorViewportMetrics,
+}
+
+impl AppState {
+	pub(super) fn new(controls: ControlsState, viewport: ViewportState, editor_metrics: EditorViewportMetrics) -> Self {
+		Self {
+			controls,
+			sidebar: SidebarState::new(),
+			viewport,
+			shell: ShellState::new(),
+			editor_metrics,
+		}
+	}
+
+	pub(super) fn scene_config(&self) -> SceneConfig {
+		self.controls.scene_config(self.viewport.layout_width)
+	}
+}
+
+#[derive(Debug)]
 pub(super) struct ViewportState {
 	pub(super) layout_width: f32,
 	pub(super) canvas_viewport: Size,
@@ -132,16 +157,13 @@ impl ViewportState {
 		}
 	}
 
-	pub(super) fn observe_resize(&mut self, size: Size) -> bool {
+	pub(super) fn observe_resize(&mut self, size: Size) {
 		let viewport = scene_viewport_size(size);
 		let layout_width = viewport.width;
-		let width_changed = (self.layout_width - layout_width).abs() >= 0.5;
 
 		self.canvas_viewport = viewport;
 		self.layout_width = layout_width;
 		self.resize_coalescer.observe(layout_width);
-
-		width_changed
 	}
 
 	pub(super) fn flush_resize(&mut self) -> Option<f32> {

@@ -1,60 +1,34 @@
 use {
 	super::{
-		AppModel,
-		sidebar_cache::InspectSidebarArgs,
-		sidebar_data::{InspectSidebarData, SidebarBodyData},
+		presenter::{AppViewModel, present},
+		sidebar_data::SidebarBodyData,
 		state::ShellPane,
+		store::AppStore,
 	},
 	crate::{
-		overlay::OverlayPrimitive,
-		perf::{CanvasPerfSink, unavailable_dashboard},
-		presentation::SessionSnapshot,
-		types::{Message, ShellMessage, SidebarTab},
+		types::{Message, ShellMessage},
 		ui::{
-			CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, is_stacked_shell,
-			view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar, view_stacked_shell,
+			CanvasPaneProps, InspectTabProps, SidebarProps, is_stacked_shell, view_canvas_pane, view_controls_tab,
+			view_inspect_tab, view_perf_tab, view_sidebar, view_stacked_shell,
 		},
 	},
 	iced::{
-		Element, Length, Vector,
+		Element, Length,
 		widget::{lazy, pane_grid, responsive},
 	},
 	std::sync::Arc,
 };
 
-#[derive(Debug, Clone)]
-struct SidebarRenderModel {
-	active_tab: SidebarTab,
-	editor_mode: crate::editor::EditorMode,
-	editor_bytes: usize,
-	undo_depth: usize,
-	redo_depth: usize,
-	body: SidebarBodyData,
-}
-
-#[derive(Debug, Clone)]
-struct AppRenderModel {
-	snapshot: Arc<SessionSnapshot>,
-	layout_width: f32,
-	decorations: CanvasDecorations,
-	inspect_overlays: Arc<[OverlayPrimitive]>,
-	inspect_targets_active: bool,
-	focused: bool,
-	scroll: Vector,
-	perf: CanvasPerfSink,
-	sidebar: SidebarRenderModel,
-}
-
-impl AppModel {
+impl AppStore {
 	pub(crate) fn view(&self) -> Element<'_, Message> {
-		let render = self.render_model();
+		let render = present(self);
 
 		responsive(move |size| {
 			if is_stacked_shell(size) {
 				view_stacked_shell(render_sidebar(&render, true), render_canvas(&render, true))
 			} else {
 				let render = render.clone();
-				let grid = pane_grid(&self.shell.chrome, move |_, pane, _| {
+				let grid = pane_grid(&self.state.shell.chrome, move |_, pane, _| {
 					let content = match pane {
 						ShellPane::Sidebar => render_sidebar(&render, false),
 						ShellPane::Canvas => render_canvas(&render, false),
@@ -80,95 +54,13 @@ impl AppModel {
 		.into()
 	}
 
-	pub(crate) fn headless_view(&self) -> Element<'_, ()> {
-		self.view().map(|_| ())
-	}
-
 	#[cfg(test)]
-	pub(super) fn test_view_sidebar(&self) -> Element<'_, Message> {
-		render_sidebar(&self.render_model(), false)
-	}
-
-	fn render_model(&self) -> AppRenderModel {
-		let snapshot = Arc::new(self.session.snapshot().clone());
-		let inspect_targets_active = self.sidebar.active_tab == SidebarTab::Inspect;
-
-		AppRenderModel {
-			inspect_overlays: self.inspect_overlays(snapshot.as_ref(), inspect_targets_active),
-			sidebar: SidebarRenderModel {
-				active_tab: self.sidebar.active_tab,
-				editor_mode: snapshot.mode(),
-				editor_bytes: snapshot.editor_bytes(),
-				undo_depth: snapshot.editor.undo_depth,
-				redo_depth: snapshot.editor.redo_depth,
-				body: self.sidebar_body_data(snapshot.as_ref()),
-			},
-			snapshot,
-			layout_width: self.viewport.layout_width,
-			decorations: CanvasDecorations {
-				show_baselines: self.controls.show_baselines,
-				show_hitboxes: self.controls.show_hitboxes,
-			},
-			inspect_targets_active,
-			focused: self.viewport.canvas_focused,
-			scroll: self.viewport.canvas_scroll,
-			perf: self.perf.sink(),
-		}
-	}
-
-	fn sidebar_body_data(&self, snapshot: &SessionSnapshot) -> SidebarBodyData {
-		match self.sidebar.active_tab {
-			SidebarTab::Controls => SidebarBodyData::Controls(ControlsTabProps {
-				preset: self.controls.preset,
-				font: self.controls.font,
-				shaping: self.controls.shaping,
-				wrapping: self.controls.wrapping,
-				font_size: self.controls.font_size,
-				line_height: self.controls.line_height,
-				show_baselines: self.controls.show_baselines,
-				show_hitboxes: self.controls.show_hitboxes,
-			}),
-			SidebarTab::Inspect => snapshot.scene.as_ref().map_or_else(
-				|| SidebarBodyData::Inspect(Arc::new(unavailable_inspect_sidebar_data())),
-				|scene| {
-					SidebarBodyData::Inspect(self.sidebar_cache.inspect_data(InspectSidebarArgs {
-						editor: &snapshot.editor,
-						scene,
-						text: self.session.text(),
-						hovered_target: self.sidebar.hovered_target,
-						selected_target: self.sidebar.selected_target,
-					}))
-				},
-			),
-			SidebarTab::Perf => snapshot.scene.as_ref().map_or_else(
-				|| {
-					SidebarBodyData::Perf(Arc::new(unavailable_dashboard(
-						snapshot.mode(),
-						snapshot.editor_bytes(),
-						self.viewport.layout_width,
-					)))
-				},
-				|scene| SidebarBodyData::Perf(self.sidebar_cache.perf_dashboard(&snapshot.editor, scene, &self.perf)),
-			),
-		}
-	}
-
-	fn inspect_overlays(&self, snapshot: &SessionSnapshot, active: bool) -> Arc<[OverlayPrimitive]> {
-		snapshot.scene.as_ref().filter(|_| active).map_or_else(
-			|| Arc::from([]),
-			|scene| {
-				scene.layout.inspect_overlay_primitives(
-					self.sidebar.hovered_target,
-					self.sidebar.selected_target,
-					self.viewport.layout_width,
-					self.controls.show_hitboxes,
-				)
-			},
-		)
+	pub(super) fn view_sidebar_for_test(&self) -> Element<'_, Message> {
+		render_sidebar(&present(self), false)
 	}
 }
 
-fn render_sidebar(render: &AppRenderModel, stacked: bool) -> Element<'static, Message> {
+fn render_sidebar(render: &AppViewModel, stacked: bool) -> Element<'static, Message> {
 	view_sidebar(SidebarProps {
 		active_tab: render.sidebar.active_tab,
 		editor_mode: render.sidebar.editor_mode,
@@ -180,7 +72,7 @@ fn render_sidebar(render: &AppRenderModel, stacked: bool) -> Element<'static, Me
 	})
 }
 
-fn render_canvas(render: &AppRenderModel, stacked: bool) -> Element<'static, Message> {
+fn render_canvas(render: &AppViewModel, stacked: bool) -> Element<'static, Message> {
 	view_canvas_pane(CanvasPaneProps {
 		snapshot: Arc::clone(&render.snapshot),
 		layout_width: render.layout_width,
@@ -211,12 +103,5 @@ fn render_sidebar_body(body: SidebarBodyData) -> Element<'static, Message> {
 			let key = Arc::as_ptr(&data);
 			lazy(key, move |_| view_perf_tab(data.as_ref())).into()
 		}
-	}
-}
-
-fn unavailable_inspect_sidebar_data() -> InspectSidebarData {
-	InspectSidebarData {
-		warnings: Arc::from([]),
-		interaction_details: Arc::<str>::from("derived scene unavailable"),
 	}
 }

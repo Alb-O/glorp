@@ -16,11 +16,24 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
-pub(super) enum SessionCommand {
+pub(super) enum SessionRequest {
 	ReplaceDocument { text: String, config: SceneConfig },
 	SyncConfig(SceneConfig),
 	SyncWidth(f32),
 	ApplyEditorIntent(EditorIntent),
+	EnsureScene,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum SceneDemand {
+	HotPathOnly,
+	DerivedScene,
+}
+
+impl SceneDemand {
+	const fn materializes_scene(self) -> bool {
+		matches!(self, Self::DerivedScene)
+	}
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,13 +78,19 @@ impl SessionChanges {
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
-pub(super) struct SessionTransition {
+pub(super) struct SessionDelta {
 	changes: SessionChanges,
 	pub(super) width_sync: Option<Duration>,
 	pub(super) scene_materialized: Option<Duration>,
 }
 
-impl SessionTransition {
+#[derive(Debug, Clone)]
+pub(super) struct SessionFeedback {
+	pub(super) delta: SessionDelta,
+	pub(super) snapshot: SessionSnapshot,
+}
+
+impl SessionDelta {
 	pub(super) fn changed(&self) -> bool {
 		!self.changes.is_empty() || self.width_sync.is_some() || self.scene_materialized.is_some()
 	}
@@ -146,25 +165,23 @@ impl DocumentSession {
 		(self.snapshot.editor.undo_depth, self.snapshot.editor.redo_depth)
 	}
 
-	pub(super) fn execute(&mut self, command: SessionCommand, materialize_scene: bool) -> SessionTransition {
-		let mut transition = match command {
-			SessionCommand::ReplaceDocument { text, config } => self.execute_replace_document(&text, config),
-			SessionCommand::SyncConfig(config) => self.execute_sync_config(config),
-			SessionCommand::SyncWidth(width) => self.execute_sync_width(width),
-			SessionCommand::ApplyEditorIntent(intent) => self.execute_editor_intent(intent),
+	pub(super) fn execute(&mut self, request: SessionRequest, demand: SceneDemand) -> SessionFeedback {
+		let ensure_scene = matches!(request, SessionRequest::EnsureScene);
+		let mut delta = match request {
+			SessionRequest::ReplaceDocument { text, config } => self.execute_replace_document(&text, config),
+			SessionRequest::SyncConfig(config) => self.execute_sync_config(config),
+			SessionRequest::SyncWidth(width) => self.execute_sync_width(width),
+			SessionRequest::ApplyEditorIntent(intent) => self.execute_editor_intent(intent),
+			SessionRequest::EnsureScene => SessionDelta::default(),
 		};
 
-		if materialize_scene {
-			transition.scene_materialized = self.materialize_scene_if_needed();
+		if demand.materializes_scene() || ensure_scene {
+			delta.scene_materialized = self.materialize_scene_if_needed();
 		}
 
-		transition
-	}
-
-	pub(super) fn ensure_scene_materialized(&mut self) -> SessionTransition {
-		SessionTransition {
-			scene_materialized: self.materialize_scene_if_needed(),
-			..SessionTransition::default()
+		SessionFeedback {
+			delta,
+			snapshot: self.snapshot.clone(),
 		}
 	}
 
@@ -173,49 +190,49 @@ impl DocumentSession {
 		self.derived_scene_build_count
 	}
 
-	fn execute_replace_document(&mut self, text: &str, config: SceneConfig) -> SessionTransition {
+	fn execute_replace_document(&mut self, text: &str, config: SceneConfig) -> SessionDelta {
 		self.editor.reset(&mut self.font_system, text, config);
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		SessionTransition {
+		SessionDelta {
 			changes: SessionChanges::default()
 				.with(SessionChange::Text)
 				.with(SessionChange::View)
 				.with(SessionChange::Selection)
 				.with(SessionChange::Mode),
-			..SessionTransition::default()
+			..SessionDelta::default()
 		}
 	}
 
-	fn execute_sync_config(&mut self, config: SceneConfig) -> SessionTransition {
+	fn execute_sync_config(&mut self, config: SceneConfig) -> SessionDelta {
 		if !self.editor.sync_buffer_config(&mut self.font_system, config) {
-			return SessionTransition::default();
+			return SessionDelta::default();
 		}
 
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		SessionTransition {
+		SessionDelta {
 			changes: SessionChanges::default().with(SessionChange::View),
-			..SessionTransition::default()
+			..SessionDelta::default()
 		}
 	}
 
-	fn execute_sync_width(&mut self, width: f32) -> SessionTransition {
+	fn execute_sync_width(&mut self, width: f32) -> SessionDelta {
 		let started = Instant::now();
 		if !self.editor.sync_buffer_width(&mut self.font_system, width) {
-			return SessionTransition::default();
+			return SessionDelta::default();
 		}
 
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		SessionTransition {
+		SessionDelta {
 			changes: SessionChanges::default().with(SessionChange::View),
 			width_sync: Some(started.elapsed()),
-			..SessionTransition::default()
+			..SessionDelta::default()
 		}
 	}
 
-	fn execute_editor_intent(&mut self, intent: EditorIntent) -> SessionTransition {
+	fn execute_editor_intent(&mut self, intent: EditorIntent) -> SessionDelta {
 		let EditorOutcome {
 			view_changed,
 			selection_changed,
@@ -233,13 +250,13 @@ impl DocumentSession {
 			self.invalidate_scene();
 		}
 
-		SessionTransition {
+		SessionDelta {
 			changes: SessionChanges::default()
 				.with_if(text_changed, SessionChange::Text)
 				.with_if(view_changed, SessionChange::View)
 				.with_if(selection_changed, SessionChange::Selection)
 				.with_if(mode_changed, SessionChange::Mode),
-			..SessionTransition::default()
+			..SessionDelta::default()
 		}
 	}
 
@@ -301,21 +318,21 @@ mod tests {
 	#[test]
 	fn text_edit_without_scene_demand_invalidates_scene_without_rebuilding() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
-		let initial = session.ensure_scene_materialized();
-		assert!(initial.scene_materialized.is_some());
+		let initial = session.execute(SessionRequest::EnsureScene, SceneDemand::DerivedScene);
+		assert!(initial.delta.scene_materialized.is_some());
 		assert_eq!(session.derived_scene_build_count(), 1);
 
 		session.execute(
-			SessionCommand::ApplyEditorIntent(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
-			false,
+			SessionRequest::ApplyEditorIntent(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
+			SceneDemand::HotPathOnly,
 		);
 		let transition = session.execute(
-			SessionCommand::ApplyEditorIntent(EditorIntent::Edit(EditorEditIntent::InsertText("!".to_string()))),
-			false,
+			SessionRequest::ApplyEditorIntent(EditorIntent::Edit(EditorEditIntent::InsertText("!".to_string()))),
+			SceneDemand::HotPathOnly,
 		);
 
-		assert!(transition.document_changed());
-		assert!(transition.scene_materialized.is_none());
+		assert!(transition.delta.document_changed());
+		assert!(transition.delta.scene_materialized.is_none());
 		assert!(session.snapshot().scene.is_none());
 		assert_eq!(session.derived_scene_build_count(), 1);
 	}
@@ -323,22 +340,22 @@ mod tests {
 	#[test]
 	fn text_edit_with_scene_demand_rebuilds_scene_once() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
-		session.ensure_scene_materialized();
+		session.execute(SessionRequest::EnsureScene, SceneDemand::DerivedScene);
 		assert_eq!(session.derived_scene_build_count(), 1);
 
 		session.execute(
-			SessionCommand::ApplyEditorIntent(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
-			true,
+			SessionRequest::ApplyEditorIntent(EditorIntent::Mode(EditorModeIntent::EnterInsertAfter)),
+			SceneDemand::DerivedScene,
 		);
 		assert_eq!(session.derived_scene_build_count(), 1);
 
 		let transition = session.execute(
-			SessionCommand::ApplyEditorIntent(EditorIntent::Edit(EditorEditIntent::InsertText("!".to_string()))),
-			true,
+			SessionRequest::ApplyEditorIntent(EditorIntent::Edit(EditorEditIntent::InsertText("!".to_string()))),
+			SceneDemand::DerivedScene,
 		);
 
-		assert!(transition.document_changed());
-		assert!(transition.scene_materialized.is_some());
+		assert!(transition.delta.document_changed());
+		assert!(transition.delta.scene_materialized.is_some());
 		assert_eq!(session.derived_scene_build_count(), 2);
 		assert!(session.snapshot().scene.is_some());
 	}
@@ -347,34 +364,34 @@ mod tests {
 	fn sync_config_no_op_returns_empty_transition() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
 
-		let transition = session.execute(SessionCommand::SyncConfig(test_config(540.0)), false);
+		let transition = session.execute(SessionRequest::SyncConfig(test_config(540.0)), SceneDemand::HotPathOnly);
 
-		assert!(!transition.changed());
-		assert!(transition.scene_materialized.is_none());
+		assert!(!transition.delta.changed());
+		assert!(transition.delta.scene_materialized.is_none());
 	}
 
 	#[test]
 	fn width_sync_reports_duration_only_for_real_width_changes() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
 
-		let noop = session.execute(SessionCommand::SyncWidth(540.0), false);
-		assert!(noop.width_sync.is_none());
-		assert!(!noop.changed());
+		let noop = session.execute(SessionRequest::SyncWidth(540.0), SceneDemand::HotPathOnly);
+		assert!(noop.delta.width_sync.is_none());
+		assert!(!noop.delta.changed());
 
-		let changed = session.execute(SessionCommand::SyncWidth(640.0), false);
-		assert!(changed.width_sync.is_some());
-		assert!(changed.view_changed());
+		let changed = session.execute(SessionRequest::SyncWidth(640.0), SceneDemand::HotPathOnly);
+		assert!(changed.delta.width_sync.is_some());
+		assert!(changed.delta.view_changed());
 	}
 
 	#[test]
 	fn ensure_scene_is_a_no_op_when_already_materialized() {
 		let mut session = DocumentSession::new("abc", test_config(540.0));
 
-		let initial = session.ensure_scene_materialized();
-		let repeated = session.ensure_scene_materialized();
+		let initial = session.execute(SessionRequest::EnsureScene, SceneDemand::DerivedScene);
+		let repeated = session.execute(SessionRequest::EnsureScene, SceneDemand::DerivedScene);
 
-		assert!(initial.scene_materialized.is_some());
-		assert!(repeated.scene_materialized.is_none());
+		assert!(initial.delta.scene_materialized.is_some());
+		assert!(repeated.delta.scene_materialized.is_none());
 		assert_eq!(session.derived_scene_build_count(), 1);
 	}
 }
