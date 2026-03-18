@@ -269,7 +269,7 @@ pub fn render_nu_completions() -> String {
 }
 
 pub fn render_nu_module() -> String {
-	"plugin use glorp\nuse ./completions.nu *\n".to_owned()
+	"# source this file after registering `nu_plugin_glorp` with `plugin add`\nplugin use glorp\nuse ./completions.nu *\n".to_owned()
 }
 
 fn named<T>() -> TypeRef

@@ -1,7 +1,12 @@
 [package]
 name = "glorp_nu_plugin"
+autobins = false
 version.workspace = true
 edition.workspace = true
+
+[[bin]]
+name = "nu_plugin_glorp"
+path = "src/main.rs"
 
 [dependencies]
 glorp_api = { path = "../api" }
@@ -11,4 +16,5 @@ nu-protocol.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+glorp_runtime = { path = "../runtime" }
 nu-plugin-test-support.workspace = true

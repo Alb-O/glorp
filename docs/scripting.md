@@ -2,13 +2,14 @@
 
 Two Nu-facing artifacts exist:
 
-- `../nu/glorp.nu`: generated Nu module that loads the plugin and completions
-- `glorp_nu_plugin`: the runtime client behind `glorp exec`, `glorp query`, and `glorp helper`
+- `../nu/glorp.nu`: generated Nu bootstrap script that loads the plugin and completions when sourced
+- `nu_plugin_glorp`: the Nushell plugin binary behind `glorp exec`, `glorp query`, and `glorp helper`
 
 Example transcript:
 
 ```nu
-use ./nu/glorp.nu *
+plugin add ./target/debug/nu_plugin_glorp
+source ./nu/glorp.nu
 
 let session = (glorp helper session-attach)
 

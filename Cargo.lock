@@ -1532,6 +1532,7 @@ name = "glorp_nu_plugin"
 version = "0.1.0"
 dependencies = [
  "glorp_api",
+ "glorp_runtime",
  "glorp_transport",
  "nu-plugin",
  "nu-plugin-test-support",
