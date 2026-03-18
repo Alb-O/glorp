@@ -317,18 +317,19 @@ impl RuntimeState {
 	}
 
 	pub fn delta_from_session(&mut self, session_delta: &SessionDelta) -> GlorpDelta {
+		let text_changed = session_delta.text_changed();
+		let view_changed = session_delta.view_changed();
+		let selection_changed = session_delta.selection_changed();
+		let mode_changed = session_delta.mode_changed();
+		let editor_changed = text_changed || view_changed || selection_changed || mode_changed;
 		let scene_changed = session_delta.scene_materialized.is_some();
-		if session_delta.text_changed()
-			|| session_delta.view_changed()
-			|| session_delta.selection_changed()
-			|| session_delta.mode_changed()
-		{
+		if editor_changed {
 			self.revisions.editor += 1;
 		}
 
 		if let Some(scene) = self.session.snapshot().scene.as_ref() {
 			self.revisions.scene = Some(scene.revision);
-		} else if session_delta.text_changed() || session_delta.view_changed() {
+		} else if text_changed || view_changed {
 			self.revisions.scene = None;
 		}
 
@@ -337,10 +338,10 @@ impl RuntimeState {
 		}
 
 		GlorpDelta {
-			text_changed: session_delta.text_changed(),
-			view_changed: session_delta.view_changed(),
-			selection_changed: session_delta.selection_changed(),
-			mode_changed: session_delta.mode_changed(),
+			text_changed,
+			view_changed,
+			selection_changed,
+			mode_changed,
 			config_changed: false,
 			ui_changed: false,
 			scene_changed,

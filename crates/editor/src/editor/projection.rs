@@ -109,9 +109,9 @@ impl EditorEngine {
 		};
 		let viewport_target = self.active_viewport_target(layout_ref);
 		let overlay_started = Instant::now();
-		let overlays = self.build_overlays(layout_ref, selection.as_ref(), insert_cursor, viewport_target, tone);
+		let overlays = self.build_overlays(layout_ref, self.selection(), insert_cursor, viewport_target, tone);
 		let overlay_elapsed = overlay_started.elapsed();
-		self.set_view_state(selection.as_ref(), overlays, viewport_target);
+		self.set_view_state(selection, selection_head, overlays, viewport_target);
 		self.layout.set_document_layout(layout);
 		let total_ms = duration_ms(started.elapsed());
 		if total_ms >= 8.0 {
@@ -201,13 +201,13 @@ impl EditorEngine {
 		let insert_cursor = selection_head.and_then(|head| self.layout.insert_cursor_rectangle(self.text(), head));
 		let viewport_target = selection_head.and_then(|head| self.layout.insert_cursor_block(self.text(), head));
 		let overlays = Self::insert_overlays(tone, insert_cursor, viewport_target);
-		self.set_view_state(selection.as_ref(), overlays, viewport_target);
+		self.set_view_state(selection, selection_head, overlays, viewport_target);
 	}
 
 	fn refresh_normal_view_state_fast(&mut self) {
 		let (selection, selection_head) = self.selection_state();
 		let tone = EditorOverlayTone::from(self.mode());
-		let (selection_rectangles, viewport_target) = selection.as_ref().map_or_else(
+		let (selection_rectangles, viewport_target) = self.selection().map_or_else(
 			|| (Arc::from([]), None),
 			|selection| {
 				normal_selection_geometry(
@@ -219,28 +219,29 @@ impl EditorEngine {
 			},
 		);
 		let overlays = Self::normal_overlays(tone, selection_rectangles.as_ref(), viewport_target);
-		self.set_view_state(selection.as_ref(), overlays, viewport_target);
-	}
-
-	fn selection_state(&self) -> (Option<EditorSelection>, Option<usize>) {
-		let selection = self.selection().cloned();
-		let selection_head = selection.as_ref().map(EditorSelection::head);
-		(selection, selection_head)
+		self.set_view_state(selection, selection_head, overlays, viewport_target);
 	}
 
 	fn set_view_state(
-		&mut self, selection: Option<&EditorSelection>, overlays: Arc<[OverlayPrimitive]>,
-		viewport_target: Option<LayoutRect>,
+		&mut self, selection: Option<std::ops::Range<usize>>, selection_head: Option<usize>,
+		overlays: Arc<[OverlayPrimitive]>, viewport_target: Option<LayoutRect>,
 	) {
-		let selection_head = selection.map(EditorSelection::head);
 		self.layout.set_view_state(EditorViewState {
 			mode: self.mode(),
-			selection: selection.map(|selection| selection.range.clone()),
+			selection,
 			selection_head,
 			pointer_anchor: self.pointer_anchor(),
 			overlays,
 			viewport_target,
 		});
+	}
+
+	fn selection_state(&self) -> (Option<std::ops::Range<usize>>, Option<usize>) {
+		let selection = self.selection();
+		(
+			selection.map(|selection| selection.range().clone()),
+			selection.map(EditorSelection::head),
+		)
 	}
 
 	fn insert_overlays(

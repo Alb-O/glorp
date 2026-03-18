@@ -6,7 +6,7 @@ use {
 		GlorpCapabilities, GlorpCommand, GlorpError, GlorpEvent, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult,
 		GlorpStreamToken, GlorpSubscription, SamplePreset,
 	},
-	std::path::PathBuf,
+	std::{borrow::Cow, path::PathBuf},
 };
 
 #[derive(Debug, Clone)]
@@ -25,7 +25,7 @@ impl GlorpRuntime {
 		let config_store = ConfigStore::new(options.paths);
 		let config = config_store.load()?;
 		let text = sample_text(config.editor.preset);
-		let state = RuntimeState::new(config, &text);
+		let state = RuntimeState::new(config, text.as_ref());
 		persistence::persist_schema(&config_store)?;
 		Ok(Self {
 			config_store,
@@ -117,22 +117,23 @@ pub fn default_runtime_paths(repo_root: impl Into<PathBuf>) -> ConfigStorePaths 
 	}
 }
 
-fn sample_text(preset: Option<SamplePreset>) -> String {
+fn sample_text(preset: Option<SamplePreset>) -> Cow<'static, str> {
 	match preset.unwrap_or(SamplePreset::Tall) {
-		SamplePreset::Tall => concat!(
+		SamplePreset::Tall => Cow::Borrowed(concat!(
 			"chapter 01: office affine ffi ffl fj\n",
 			"chapter 02: 漢字カタカナ and Latin in one lane\n",
 			"chapter 03: السلام عليكم مع سطور إضافية\n",
 			"chapter 04: emoji 🙂🚀👩‍💻 over baseline checks\n",
 			"chapter 05: end marker"
-		)
-		.into(),
-		SamplePreset::Mixed => "office affine ffi ffl\n漢字カタカナ and Latin\nالسلام عليكم\nemoji 🙂🚀👩‍💻".into(),
-		SamplePreset::Rust => "fn main() {\n    println!(\"ffi -> office -> 汉字\");\n}\n".into(),
-		SamplePreset::Ligatures => "office affine final fluff ffi ffl fj".into(),
-		SamplePreset::Arabic => "السلام عليكم\nمرحبا بالعالم".into(),
-		SamplePreset::Cjk => "漢字かなカナ\n混在テキスト with ASCII".into(),
-		SamplePreset::Emoji => "🙂🚀👩‍💻 text + emoji fallback".into(),
-		SamplePreset::Custom => String::new(),
+		)),
+		SamplePreset::Mixed => {
+			Cow::Borrowed("office affine ffi ffl\n漢字カタカナ and Latin\nالسلام عليكم\nemoji 🙂🚀👩‍💻")
+		}
+		SamplePreset::Rust => Cow::Borrowed("fn main() {\n    println!(\"ffi -> office -> 汉字\");\n}\n"),
+		SamplePreset::Ligatures => Cow::Borrowed("office affine final fluff ffi ffl fj"),
+		SamplePreset::Arabic => Cow::Borrowed("السلام عليكم\nمرحبا بالعالم"),
+		SamplePreset::Cjk => Cow::Borrowed("漢字かなカナ\n混在テキスト with ASCII"),
+		SamplePreset::Emoji => Cow::Borrowed("🙂🚀👩‍💻 text + emoji fallback"),
+		SamplePreset::Custom => Cow::Borrowed(""),
 	}
 }

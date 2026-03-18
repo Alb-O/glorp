@@ -69,7 +69,7 @@ impl DocumentLayout {
 	#[must_use]
 	pub fn nearest_cluster_in_run(&self, run_index: usize, preferred_x: f32) -> Option<usize> {
 		let run = self.runs.get(run_index).filter(|run| !run.cluster_range.is_empty())?;
-		self.clusters[run.cluster_range.clone()]
+		self.clusters[run.cluster_range.start..run.cluster_range.end]
 			.iter()
 			.enumerate()
 			.min_by(|(_, a), (_, b)| {

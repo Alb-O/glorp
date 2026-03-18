@@ -5,7 +5,7 @@ pub fn debug_snippet(text: &str) -> String {
 	let escaped: String = text.chars().flat_map(char::escape_default).collect();
 
 	if escaped.is_empty() {
-		String::from("<empty>")
+		"<empty>".into()
 	} else {
 		format!("\"{escaped}\"")
 	}
@@ -13,8 +13,8 @@ pub fn debug_snippet(text: &str) -> String {
 
 #[must_use]
 pub fn debug_range(text: &str, range: &Range<usize>) -> String {
-	text.get(range.start..range.end)
-		.map_or_else(|| String::from("<invalid utf8 slice>"), debug_snippet)
+	text.get(range.clone())
+		.map_or_else(|| "<invalid utf8 slice>".into(), debug_snippet)
 }
 
 #[must_use]

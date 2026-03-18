@@ -94,13 +94,10 @@ impl GlorpConfig {
 
 	pub fn value(&self, path: &str) -> Result<GlorpValue, GlorpError> {
 		match path {
-			"editor.preset" => Ok(self
-				.editor
-				.preset
-				.map_or(GlorpValue::Null, |value| value.as_ref().into())),
-			"editor.font" => Ok(self.editor.font.as_ref().into()),
-			"editor.shaping" => Ok(self.editor.shaping.as_ref().into()),
-			"editor.wrapping" => Ok(self.editor.wrapping.as_ref().into()),
+			"editor.preset" => Ok(optional_enum_value(self.editor.preset)),
+			"editor.font" => Ok(enum_value(self.editor.font)),
+			"editor.shaping" => Ok(enum_value(self.editor.shaping)),
+			"editor.wrapping" => Ok(enum_value(self.editor.wrapping)),
 			"editor.font_size" => Ok(self.editor.font_size.into()),
 			"editor.line_height" => Ok(self.editor.line_height.into()),
 			"inspect.show_baselines" => Ok(self.inspect.show_baselines.into()),
@@ -252,9 +249,21 @@ where
 		GlorpError::validation_with_allowed(
 			Some(path.to_owned()),
 			format!("invalid value `{value}` for `{path}`"),
-			T::allowed_values().iter().map(|value| (*value).to_owned()).collect(),
+			T::allowed_values().iter().copied().map(str::to_owned).collect(),
 		)
 	})
+}
+
+fn enum_value<T>(value: T) -> GlorpValue
+where
+	T: EnumValue, {
+	value.as_ref().into()
+}
+
+fn optional_enum_value<T>(value: Option<T>) -> GlorpValue
+where
+	T: EnumValue, {
+	value.map_or(GlorpValue::Null, enum_value)
 }
 
 fn parse_bool(path: &str, value: &GlorpValue) -> Result<bool, GlorpError> {

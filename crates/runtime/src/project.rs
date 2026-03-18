@@ -90,7 +90,7 @@ pub fn inspect_details_view_from_state(
 			hovered_target: state.ui.hovered_target,
 			selected_target: state.ui.selected_target,
 			active_target,
-			warnings: vec![],
+			warnings: Vec::new(),
 			interaction_details: "derived scene unavailable".into(),
 			scene: None,
 		};

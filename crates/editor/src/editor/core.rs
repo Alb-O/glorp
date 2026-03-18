@@ -48,11 +48,9 @@ impl EditorEngine {
 		// movement commands can stay purely layout-relative after resets.
 		if let Some(cluster) = self.document_layout().cluster(0) {
 			let head = cluster.byte_range.start;
-			self.core.session.set_normal_selection(
-				EditorSelection::new(cluster.byte_range.clone(), head),
-				None,
-				Some(head),
-			);
+			self.core
+				.session
+				.set_normal_selection(selection_at_cluster(cluster, head), None, Some(head));
 		} else {
 			self.set_selection(None);
 			self.clear_pointer_anchor();
@@ -65,7 +63,7 @@ impl EditorEngine {
 		};
 
 		self.core.session.set_normal_selection(
-			EditorSelection::new(cluster.byte_range.clone(), cluster.byte_range.start),
+			selection_at_cluster_start(cluster),
 			Some(cluster.center_x()),
 			Some(cluster.byte_range.start),
 		);
@@ -73,10 +71,11 @@ impl EditorEngine {
 
 	pub fn active_selection_index(&self, layout: &DocumentLayout) -> Option<usize> {
 		self.selection()?;
+		let caret = self.caret();
 
 		layout
-			.cluster_at_or_after(self.caret())
-			.or_else(|| layout.cluster_before(self.caret().saturating_add(1)))
+			.cluster_at_or_after(caret)
+			.or_else(|| layout.cluster_before(caret.saturating_add(1)))
 	}
 
 	pub fn active_selection<'a>(&self, layout: &'a DocumentLayout) -> Option<&'a LayoutCluster> {
@@ -151,7 +150,7 @@ impl EditorEngine {
 		layout
 			.cluster_at_insert_head(head)
 			.and_then(|index| layout.cluster(index))
-			.map(|cluster| EditorSelection::new(cluster.byte_range.clone(), head))
+			.map(|cluster| selection_at_cluster(cluster, head))
 	}
 
 	pub fn set_insert_head(&mut self, layout: &DocumentLayout, head: usize) {
@@ -165,4 +164,12 @@ impl EditorEngine {
 		self.reset_normal_selection();
 		self.refresh_view_state(None);
 	}
+}
+
+fn selection_at_cluster(cluster: &LayoutCluster, head: usize) -> EditorSelection {
+	EditorSelection::new(cluster.byte_range.clone(), head)
+}
+
+fn selection_at_cluster_start(cluster: &LayoutCluster) -> EditorSelection {
+	selection_at_cluster(cluster, cluster.byte_range.start)
 }
