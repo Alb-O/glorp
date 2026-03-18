@@ -21,6 +21,7 @@ pub struct DocumentLayoutTestSpec {
 }
 
 impl DocumentLayout {
+	#[must_use]
 	pub fn build(text: &str, buffer: &Buffer, config: SceneConfig, font_names: &[(fontdb::ID, Arc<str>)]) -> Self {
 		let text = Arc::<str>::from(text);
 		let line_byte_offsets = Arc::<[usize]>::from(line_byte_offsets(text.as_ref()));
@@ -169,11 +170,9 @@ fn build_byte_order(clusters: &[LayoutCluster]) -> Vec<usize> {
 }
 
 fn build_warnings(no_runs: bool) -> Arc<[String]> {
-	if no_runs {
-		Arc::from(["No layout runs were produced. Check the font choice and text content.".to_string()])
-	} else {
-		Arc::from([])
-	}
+	no_runs
+		.then_some("No layout runs were produced. Check the font choice and text content.".to_string())
+		.map_or_else(|| Arc::from([]), |warning| Arc::from([warning]))
 }
 
 #[cfg(test)]
@@ -184,6 +183,7 @@ impl DocumentLayout {
 		Self::build(text, &buffer, config, font_names.as_ref())
 	}
 
+	#[must_use]
 	pub fn new_for_test(spec: DocumentLayoutTestSpec) -> Self {
 		let DocumentLayoutTestSpec {
 			text,

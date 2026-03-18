@@ -6,14 +6,17 @@ use {
 };
 
 impl DocumentLayout {
+	#[must_use]
 	pub fn clusters(&self) -> &[LayoutCluster] {
 		&self.clusters
 	}
 
+	#[must_use]
 	pub fn cluster(&self, index: usize) -> Option<&LayoutCluster> {
 		self.clusters.get(index)
 	}
 
+	#[must_use]
 	pub fn cluster_at_or_after(&self, byte: usize) -> Option<usize> {
 		let index = self
 			.byte_order
@@ -21,6 +24,7 @@ impl DocumentLayout {
 		self.byte_order.get(index).copied()
 	}
 
+	#[must_use]
 	pub fn cluster_before(&self, byte: usize) -> Option<usize> {
 		self.byte_order
 			.partition_point(|cluster_index| self.clusters[*cluster_index].byte_range.start < byte)
@@ -29,6 +33,7 @@ impl DocumentLayout {
 			.copied()
 	}
 
+	#[must_use]
 	pub fn cluster_index_for_cursor(&self, cursor: Cursor) -> Option<usize> {
 		let line_offset = self.line_byte_offsets.get(cursor.line).copied().unwrap_or_default();
 		let byte = line_offset + cursor.index;
@@ -47,18 +52,21 @@ impl DocumentLayout {
 		}
 	}
 
+	#[must_use]
 	pub fn first_cluster_in_run(&self, run_index: usize) -> Option<usize> {
 		self.runs
 			.get(run_index)
 			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.start))
 	}
 
+	#[must_use]
 	pub fn last_cluster_in_run(&self, run_index: usize) -> Option<usize> {
 		self.runs
 			.get(run_index)
 			.and_then(|run| (!run.cluster_range.is_empty()).then_some(run.cluster_range.end - 1))
 	}
 
+	#[must_use]
 	pub fn nearest_cluster_in_run(&self, run_index: usize, preferred_x: f32) -> Option<usize> {
 		let run = self.runs.get(run_index).filter(|run| !run.cluster_range.is_empty())?;
 		self.clusters[run.cluster_range.clone()]
@@ -72,6 +80,7 @@ impl DocumentLayout {
 			.map(|(offset, _)| run.cluster_range.start + offset)
 	}
 
+	#[must_use]
 	pub fn nearest_cluster_on_adjacent_run(
 		&self, run_index: usize, preferred_x: f32, direction: isize,
 	) -> Option<usize> {
@@ -85,6 +94,7 @@ impl DocumentLayout {
 		}
 	}
 
+	#[must_use]
 	pub fn nearest_cluster_at(&self, y: f32, preferred_x: f32) -> Option<usize> {
 		let run_index = self
 			.runs
@@ -99,17 +109,20 @@ impl DocumentLayout {
 		self.nearest_cluster_in_run(run_index, preferred_x)
 	}
 
+	#[must_use]
 	pub fn has_run_at_y(&self, y: f32) -> bool {
 		self.runs
 			.iter()
 			.any(|run| y >= run.line_top && y <= run.line_top + run.line_height)
 	}
 
+	#[must_use]
 	pub fn ends_hard_line(&self, byte: usize) -> bool {
 		byte.checked_add(1)
 			.is_some_and(|next| self.line_byte_offsets[1..].binary_search(&next).is_ok())
 	}
 
+	#[must_use]
 	pub fn cluster_at_insert_head(&self, byte: usize) -> Option<usize> {
 		// A caret parked on a hard newline should stay visually attached to the
 		// preceding cluster instead of jumping onto the next rendered row.
@@ -120,6 +133,7 @@ impl DocumentLayout {
 		}
 	}
 
+	#[must_use]
 	pub fn caret_metrics(&self, byte: usize) -> LayoutCaretMetrics {
 		self.cluster_at_or_after(byte)
 			.and_then(|index| {
@@ -141,6 +155,7 @@ impl DocumentLayout {
 			.unwrap_or(LayoutCaretMetrics { run_index: 0, x: 0.0 })
 	}
 
+	#[must_use]
 	pub fn hit_test(&self, local: Point) -> Option<CanvasTarget> {
 		// Cluster hit boxes win over run bands so inspect mode stays precise when
 		// both would match the same pointer position.
@@ -171,6 +186,7 @@ impl DocumentLayout {
 			})
 	}
 
+	#[must_use]
 	pub fn target_rect(&self, target: CanvasTarget) -> Option<LayoutRect> {
 		match target {
 			CanvasTarget::Run(run_index) => self.runs.get(run_index).map(|run| LayoutRect {
@@ -184,6 +200,7 @@ impl DocumentLayout {
 	}
 }
 
+#[must_use]
 pub fn cluster_rectangle(cluster: &LayoutCluster) -> LayoutRect {
 	LayoutRect {
 		x: cluster.x,

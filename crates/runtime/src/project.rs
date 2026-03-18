@@ -1,8 +1,44 @@
 use {
 	crate::{inspect::inspect_state, state},
-	glorp_api::*,
+	glorp_api::{
+		CanvasTarget, EditorStateView, EditorViewportView, GlorpSnapshot, InspectDetailsView, InspectSceneView,
+		LayoutRectView, PerfDashboardView, PerfMetricSummaryView, PerfOverviewView, PerfStateView, SceneLevel,
+		SceneStateView, SelectionStateView, UiStateView,
+	},
 	glorp_editor::SessionSnapshot,
 };
+
+#[derive(Debug, Clone, Copy)]
+struct SceneSummary {
+	revision: Option<u64>,
+	measured_width: f32,
+	measured_height: f32,
+	run_count: usize,
+	cluster_count: usize,
+	warning_count: usize,
+}
+
+impl SceneSummary {
+	const EMPTY: Self = Self {
+		revision: None,
+		measured_width: 0.0,
+		measured_height: 0.0,
+		run_count: 0,
+		cluster_count: 0,
+		warning_count: 0,
+	};
+
+	fn from_scene(scene: Option<&glorp_editor::ScenePresentation>) -> Self {
+		scene.map_or(Self::EMPTY, |scene| Self {
+			revision: Some(scene.revision),
+			measured_width: scene.layout.measured_width,
+			measured_height: scene.layout.measured_height,
+			run_count: scene.layout.runs.len(),
+			cluster_count: scene.layout.cluster_count,
+			warning_count: scene.layout.warnings.len(),
+		})
+	}
+}
 
 pub fn snapshot_from_state(
 	state: &mut crate::state::RuntimeState, level: SceneLevel, include_document_text: bool,
@@ -48,34 +84,29 @@ pub fn inspect_details_view_from_state(
 	ensure_scene_materialized(state);
 
 	let active_target = target.or(state.ui.selected_target).or(state.ui.hovered_target);
-	let scene = state.session.snapshot().scene.as_ref();
-	let (warnings, interaction_details, scene) = scene.map_or_else(
-		|| (Vec::new(), "derived scene unavailable".to_owned(), None),
-		|scene| {
-			(
-				scene.layout.warnings.to_vec(),
-				scene
-					.layout
-					.target_details(active_target)
-					.as_deref()
-					.unwrap_or("hover a run or cluster for details")
-					.to_owned(),
-				Some(InspectSceneView {
-					revision: scene.revision,
-					run_count: scene.layout.runs.len(),
-					cluster_count: scene.layout.cluster_count,
-				}),
-			)
-		},
-	);
+	let Some(scene) = state.session.snapshot().scene.as_ref() else {
+		return InspectDetailsView {
+			hovered_target: state.ui.hovered_target,
+			selected_target: state.ui.selected_target,
+			active_target,
+			warnings: Vec::new(),
+			interaction_details: "derived scene unavailable".to_owned(),
+			scene: None,
+		};
+	};
 
 	InspectDetailsView {
 		hovered_target: state.ui.hovered_target,
 		selected_target: state.ui.selected_target,
 		active_target,
-		warnings,
-		interaction_details,
-		scene,
+		warnings: scene.layout.warnings.to_vec(),
+		interaction_details: scene
+			.layout
+			.target_details(active_target)
+			.as_deref()
+			.unwrap_or("hover a run or cluster for details")
+			.to_owned(),
+		scene: Some(inspect_scene_view(scene)),
 	}
 }
 
@@ -83,20 +114,20 @@ pub fn perf_dashboard_view_from_state(state: &mut crate::state::RuntimeState) ->
 	ensure_scene_materialized(state);
 
 	let snapshot = state.session.snapshot();
-	let scene = snapshot.scene.as_ref();
+	let scene = SceneSummary::from_scene(snapshot.scene.as_ref());
 	PerfDashboardView {
 		overview: PerfOverviewView {
 			editor_mode: state::mode(snapshot.mode()),
 			editor_bytes: snapshot.editor_bytes(),
 			text_lines: state.session.text().lines().count().max(1),
 			layout_width: state.ui.layout_width,
-			scene_ready: scene.is_some(),
-			scene_revision: scene.map(|scene| scene.revision),
-			scene_width: scene.map_or(0.0, |scene| scene.layout.measured_width),
-			scene_height: scene.map_or(0.0, |scene| scene.layout.measured_height),
-			run_count: scene.map_or(0, |scene| scene.layout.runs.len()),
-			cluster_count: scene.map_or(0, |scene| scene.layout.cluster_count),
-			warning_count: scene.map_or(0, |scene| scene.layout.warnings.len()),
+			scene_ready: scene.revision.is_some(),
+			scene_revision: scene.revision,
+			scene_width: scene.measured_width,
+			scene_height: scene.measured_height,
+			run_count: scene.run_count,
+			cluster_count: scene.cluster_count,
+			warning_count: scene.warning_count,
 		},
 		metrics: vec![PerfMetricSummaryView {
 			label: "scene.build".to_owned(),
@@ -123,7 +154,7 @@ pub fn ui_state_view(state: &crate::state::RuntimeState) -> UiStateView {
 
 pub fn perf_state_view(state: &crate::state::RuntimeState) -> PerfStateView {
 	PerfStateView {
-		scene_builds: state.perf.scene_build.total_samples as usize,
+		scene_builds: usize::try_from(state.perf.scene_build.total_samples).unwrap_or(usize::MAX),
 		scene_build_millis: state.perf.scene_build.total_millis,
 	}
 }
@@ -163,13 +194,25 @@ fn editor_view(snapshot: &SessionSnapshot, text: &str) -> EditorStateView {
 }
 
 fn scene_view(scene: Option<&glorp_editor::ScenePresentation>) -> Option<SceneStateView> {
-	scene.map(|scene| SceneStateView {
+	scene.map(scene_state_view)
+}
+
+fn scene_state_view(scene: &glorp_editor::ScenePresentation) -> SceneStateView {
+	SceneStateView {
 		revision: scene.revision,
 		measured_width: scene.layout.measured_width,
 		measured_height: scene.layout.measured_height,
 		run_count: scene.layout.runs.len(),
 		cluster_count: scene.layout.cluster_count,
-	})
+	}
+}
+
+fn inspect_scene_view(scene: &glorp_editor::ScenePresentation) -> InspectSceneView {
+	InspectSceneView {
+		revision: scene.revision,
+		run_count: scene.layout.runs.len(),
+		cluster_count: scene.layout.cluster_count,
+	}
 }
 
 fn layout_rect_view(target: glorp_editor::LayoutRect) -> LayoutRectView {

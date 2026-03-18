@@ -22,6 +22,7 @@ pub fn init_tracing() {
 	});
 }
 
+#[must_use]
 pub fn duration_ms(duration: Duration) -> f64 {
 	duration.as_secs_f64() * 1000.0
 }

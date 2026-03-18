@@ -5,6 +5,7 @@ use {
 	iced::Font,
 };
 
+#[must_use]
 pub fn make_font_system() -> FontSystem {
 	let mut font_system = FontSystem::new();
 	let db = font_system.db_mut();
@@ -13,6 +14,7 @@ pub fn make_font_system() -> FontSystem {
 	font_system
 }
 
+#[must_use]
 pub fn scene_config(
 	font_choice: FontChoice, shaping: ShapingChoice, wrapping: WrapChoice, font_size: f32, line_height: f32,
 	max_width: f32,

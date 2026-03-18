@@ -8,6 +8,7 @@ use {
 };
 
 impl DocumentLayout {
+	#[must_use]
 	pub fn target_details(&self, target: Option<CanvasTarget>) -> Option<Arc<str>> {
 		match target? {
 			CanvasTarget::Run(run_index) => self.runs.get(run_index).map(|run| {
@@ -27,6 +28,7 @@ impl DocumentLayout {
 		}
 	}
 
+	#[must_use]
 	pub fn inspect_overlay_primitives(
 		&self, hovered_target: Option<CanvasTarget>, selected_target: Option<CanvasTarget>, layout_width: f32,
 		show_hitboxes: bool,

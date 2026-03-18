@@ -1,5 +1,6 @@
 use std::ops::Range;
 
+#[must_use]
 pub fn debug_snippet(text: &str) -> String {
 	let escaped: String = text.chars().flat_map(char::escape_default).collect();
 
@@ -10,11 +11,13 @@ pub fn debug_snippet(text: &str) -> String {
 	}
 }
 
+#[must_use]
 pub fn debug_range(text: &str, range: &Range<usize>) -> String {
 	text.get(range.clone())
 		.map_or_else(|| String::from("<invalid utf8 slice>"), debug_snippet)
 }
 
+#[must_use]
 pub fn line_byte_offsets(text: &str) -> Vec<usize> {
 	std::iter::once(0)
 		.chain(

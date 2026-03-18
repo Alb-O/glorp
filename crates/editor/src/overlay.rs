@@ -63,6 +63,7 @@ pub struct OverlayPrimitive {
 }
 
 impl OverlayPrimitive {
+	#[must_use]
 	pub fn scene_rect(rect: LayoutRect, kind: OverlayRectKind, layer: OverlayLayer) -> Self {
 		Self {
 			rect,

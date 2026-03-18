@@ -35,6 +35,7 @@ pub struct SceneConfig {
 }
 
 impl SceneConfig {
+	#[must_use]
 	pub fn font(self) -> Font {
 		self.font_choice.to_iced_font()
 	}
