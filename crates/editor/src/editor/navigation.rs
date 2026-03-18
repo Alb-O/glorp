@@ -30,7 +30,7 @@ impl EditorEngine {
 			EditorMode::Insert => {
 				self.set_insert_head(
 					layout,
-					next_char_boundary(self.text(), self.caret()).unwrap_or_else(|| self.text().len()),
+					next_char_boundary(self.text(), self.caret()).unwrap_or(self.text().len()),
 				);
 				self.set_preferred_x(None);
 			}
@@ -84,7 +84,7 @@ impl EditorEngine {
 			}
 			EditorMode::Insert => {
 				let caret = layout.caret_metrics(self.caret());
-				let target = Self::run_edge_byte(layout, caret.run_index, to_start).unwrap_or_else(|| self.caret());
+				let target = Self::run_edge_byte(layout, caret.run_index, to_start).unwrap_or(self.caret());
 
 				self.set_insert_head(layout, target);
 				self.set_preferred_x(None);

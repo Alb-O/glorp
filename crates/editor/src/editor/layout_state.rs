@@ -101,7 +101,7 @@ impl EditorLayout {
 	}
 
 	pub fn cached_document_layout_arc(&self) -> Option<Arc<DocumentLayout>> {
-		self.document_layout.borrow().as_ref().map(Arc::clone)
+		self.document_layout.borrow().as_ref().cloned()
 	}
 
 	pub fn set_document_layout(&self, document_layout: Arc<DocumentLayout>) {

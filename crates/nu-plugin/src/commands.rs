@@ -176,8 +176,10 @@ struct ResolvedSession {
 
 fn resolve_session(call: &EvaluatedCall) -> Result<ResolvedSession, LabeledError> {
 	if let Some(session) = call.get_flag::<Value>("session")? {
-		let socket = session_socket(&session)?;
-		let repo_root = session_repo_root(&session)?.unwrap_or_else(repo_root_from_call);
+		let socket = PathBuf::from(session_socket(&session)?);
+		let repo_root = session_repo_root(&session)?
+			.map(PathBuf::from)
+			.unwrap_or_else(repo_root_from_call);
 		return ensure_session(repo_root, socket);
 	}
 
@@ -265,7 +267,7 @@ fn repo_root_from_call() -> PathBuf {
 	std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
-fn session_socket(value: &Value) -> Result<PathBuf, LabeledError> {
+fn session_socket(value: &Value) -> Result<&str, LabeledError> {
 	let Value::Record { val, .. } = value else {
 		return Err(LabeledError::new(
 			"session flag must be a record returned by `glorp helper session-attach`",
@@ -273,29 +275,27 @@ fn session_socket(value: &Value) -> Result<PathBuf, LabeledError> {
 	};
 
 	match val.get("socket") {
-		Some(Value::String { val, .. }) => Ok(PathBuf::from(val)),
+		Some(Value::String { val, .. }) => Ok(val),
 		_ => Err(LabeledError::new(
 			"session record does not contain a string `socket` field",
 		)),
 	}
 }
 
-fn session_repo_root(value: &Value) -> Result<Option<PathBuf>, LabeledError> {
+fn session_repo_root(value: &Value) -> Result<Option<&str>, LabeledError> {
 	let Value::Record { val, .. } = value else {
 		return Err(LabeledError::new(
 			"session flag must be a record returned by `glorp helper session-attach`",
 		));
 	};
 
-	Ok(match val.get("repo_root") {
-		Some(Value::String { val, .. }) => Some(PathBuf::from(val)),
-		Some(Value::Nothing { .. }) | None => None,
-		_ => {
-			return Err(LabeledError::new(
-				"session record contains a non-string `repo_root` field",
-			));
-		}
-	})
+	match val.get("repo_root") {
+		Some(Value::String { val, .. }) => Ok(Some(val)),
+		Some(Value::Nothing { .. }) | None => Ok(None),
+		_ => Err(LabeledError::new(
+			"session record contains a non-string `repo_root` field",
+		)),
+	}
 }
 
 const fn value_pipeline(value: Value) -> PipelineData {

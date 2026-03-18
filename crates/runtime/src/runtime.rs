@@ -5,7 +5,6 @@ use {
 		GlorpStreamToken, GlorpSubscription, SamplePreset,
 	},
 	glorp_editor::sample_preset_text,
-	std::path::PathBuf,
 };
 
 #[derive(Debug, Clone)]
@@ -114,8 +113,8 @@ impl GlorpHost for GlorpRuntime {
 	}
 }
 
-pub fn default_runtime_paths(repo_root: impl Into<PathBuf>) -> ConfigStorePaths {
-	let repo_root = repo_root.into();
+pub fn default_runtime_paths(repo_root: impl AsRef<std::path::Path>) -> ConfigStorePaths {
+	let repo_root = repo_root.as_ref();
 	ConfigStorePaths {
 		durable_config_path: repo_root.join("nu/default-config.nu"),
 		schema_path: repo_root.join("schema/glorp-schema.json"),

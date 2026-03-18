@@ -3,7 +3,7 @@ mod ipc;
 mod local;
 mod server;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub use self::{
 	client::{IpcClient, gui_transport_request, socket_is_live, transport_request},
@@ -14,6 +14,6 @@ pub use self::{
 	server::{IpcServerHandle, start_server, start_server_shared},
 };
 
-pub fn default_socket_path(repo_root: impl Into<PathBuf>) -> PathBuf {
-	repo_root.into().join("glorp.sock")
+pub fn default_socket_path(repo_root: impl AsRef<Path>) -> PathBuf {
+	repo_root.as_ref().join("glorp.sock")
 }
