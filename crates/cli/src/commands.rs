@@ -288,18 +288,11 @@ impl Cli {
 	}
 
 	fn host(&self) -> Result<Host, GlorpError> {
-		if let Some(socket) = self
-			.socket
-			.clone()
-			.or_else(|| std::env::var_os("GLORP_SOCKET").map(PathBuf::from))
-		{
+		if let Some(socket) = self.requested_socket() {
 			return Ok(Host::Ipc(IpcClient::new(socket)));
 		}
 
-		let repo_root = self.repo_root.clone().unwrap_or(
-			std::env::current_dir()
-				.map_err(|error| GlorpError::transport(format!("failed to determine current directory: {error}")))?,
-		);
+		let repo_root = self.repo_root_or_cwd()?;
 		if let Some(socket) = autodetect_socket(&repo_root) {
 			return Ok(Host::Ipc(IpcClient::new(socket)));
 		}
@@ -312,7 +305,7 @@ impl Cli {
 	fn attach_session(&self) -> Result<GlorpSessionView, GlorpError> {
 		let (socket, repo_root) = self.live_socket()?;
 		let mut client = IpcClient::new(socket.clone());
-		let GlorpQueryResult::Capabilities(capabilities) = client.query(GlorpQuery::Capabilities)? else {
+		let Some(capabilities) = query_capabilities(&mut client)? else {
 			return Err(GlorpError::transport(format!(
 				"unexpected capabilities response from {}",
 				socket.display()
@@ -326,39 +319,46 @@ impl Cli {
 	}
 
 	fn live_socket(&self) -> Result<(PathBuf, Option<PathBuf>), GlorpError> {
-		if let Some(socket) = self
-			.socket
-			.clone()
-			.or_else(|| std::env::var_os("GLORP_SOCKET").map(PathBuf::from))
-		{
-			if socket_is_live(&socket) {
-				return Ok((socket, None));
-			}
-			return Err(GlorpError::transport(format!(
-				"no live runtime at {}",
-				socket.display()
-			)));
+		if let Some(socket) = self.requested_socket() {
+			return socket_is_live(&socket)
+				.then_some((socket.clone(), None))
+				.ok_or_else(|| GlorpError::transport(format!("no live runtime at {}", socket.display())));
 		}
 
-		let repo_root = self.repo_root.clone().unwrap_or(
-			std::env::current_dir()
-				.map_err(|error| GlorpError::transport(format!("failed to determine current directory: {error}")))?,
-		);
+		let repo_root = self.repo_root_or_cwd()?;
 		let socket = default_socket_path(&repo_root);
-		if socket_is_live(&socket) {
-			Ok((socket, Some(repo_root)))
-		} else {
-			Err(GlorpError::transport(format!(
-				"no live runtime at {}",
-				socket.display()
-			)))
-		}
+		socket_is_live(&socket)
+			.then_some((socket.clone(), Some(repo_root)))
+			.ok_or_else(|| GlorpError::transport(format!("no live runtime at {}", socket.display())))
+	}
+
+	fn requested_socket(&self) -> Option<PathBuf> {
+		self.socket
+			.clone()
+			.or_else(|| std::env::var_os("GLORP_SOCKET").map(PathBuf::from))
+	}
+
+	fn repo_root_or_cwd(&self) -> Result<PathBuf, GlorpError> {
+		self.repo_root.clone().map_or_else(
+			|| {
+				std::env::current_dir()
+					.map_err(|error| GlorpError::transport(format!("failed to determine current directory: {error}")))
+			},
+			Ok,
+		)
 	}
 }
 
 fn autodetect_socket(repo_root: &Path) -> Option<PathBuf> {
 	let socket = default_socket_path(repo_root);
 	socket_is_live(&socket).then_some(socket)
+}
+
+fn query_capabilities(host: &mut impl GlorpHost) -> Result<Option<GlorpCapabilities>, GlorpError> {
+	Ok(match host.query(GlorpQuery::Capabilities)? {
+		GlorpQueryResult::Capabilities(capabilities) => Some(capabilities),
+		_ => None,
+	})
 }
 
 impl GlorpHost for Host {

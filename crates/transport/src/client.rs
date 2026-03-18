@@ -1,6 +1,9 @@
 use {
 	crate::{TransportRequest, TransportResponse},
-	glorp_api::*,
+	glorp_api::{
+		GlorpCommand, GlorpError, GlorpEvent, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
+		GlorpSubscription,
+	},
 	std::{
 		io::{BufRead, BufReader, Write},
 		os::unix::net::UnixStream,
@@ -21,6 +24,7 @@ impl IpcClient {
 	}
 }
 
+#[must_use]
 pub fn socket_is_live(socket_path: &Path) -> bool {
 	if !socket_path.exists() {
 		return false;

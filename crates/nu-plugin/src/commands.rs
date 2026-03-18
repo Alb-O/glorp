@@ -652,11 +652,10 @@ fn json_to_nu_value(value: JsonValue, span: Span) -> Value {
 			span,
 		),
 		JsonValue::Object(values) => Value::record(
-			Record::from_iter(
-				values
-					.into_iter()
-					.map(|(key, value)| (key, json_to_nu_value(value, span))),
-			),
+			values
+				.into_iter()
+				.map(|(key, value)| (key, json_to_nu_value(value, span)))
+				.collect::<Record>(),
 			span,
 		),
 	}

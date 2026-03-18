@@ -24,50 +24,46 @@ pub fn execute(runtime: &mut GlorpRuntime, command: GlorpCommand) -> Result<Glor
 fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome, GlorpError> {
 	let checkpoint = runtime.state.checkpoint();
 	let previous_events = runtime.subscriptions_state();
-	let mut accumulated = GlorpOutcome::default();
 
-	for command in txn.commands {
-		let outcome = match execute(runtime, command) {
-			Ok(outcome) => outcome,
-			Err(error) => {
-				runtime.state.restore(checkpoint);
-				runtime.restore_subscriptions(previous_events);
-				return Err(error);
-			}
-		};
-		merge_outcome(&mut accumulated, outcome);
+	match txn
+		.commands
+		.into_iter()
+		.try_fold(GlorpOutcome::default(), |mut accumulated, command| {
+			merge_outcome(&mut accumulated, execute(runtime, command)?);
+			Ok(accumulated)
+		}) {
+		Ok(outcome) => Ok(outcome),
+		Err(error) => {
+			runtime.state.restore(checkpoint);
+			runtime.restore_subscriptions(previous_events);
+			Err(error)
+		}
 	}
-
-	Ok(accumulated)
 }
 
 fn execute_config(runtime: &mut GlorpRuntime, command: ConfigCommand) -> Result<GlorpOutcome, GlorpError> {
-	let mut changed_paths = Vec::new();
-
-	match command {
+	let changed_paths = match command {
 		ConfigCommand::Set { path, value } => {
 			runtime.state.config.set_path(&path, value)?;
-			changed_paths.push(path);
+			vec![path]
 		}
-		ConfigCommand::Patch { values } => {
-			changed_paths = runtime.state.config.patch(&values)?;
-		}
+		ConfigCommand::Patch { values } => runtime.state.config.patch(&values)?,
 		ConfigCommand::Reset { path } => {
 			runtime.state.config.reset_path(&path)?;
-			changed_paths.push(path);
+			vec![path]
 		}
 		ConfigCommand::Reload => {
 			runtime.state.config = runtime.config_store.load()?;
-			changed_paths = GlorpConfig::schema_defaults()
+			GlorpConfig::schema_defaults()
 				.into_iter()
 				.map(|(path, _)| path)
-				.collect();
+				.collect()
 		}
 		ConfigCommand::Persist => {
 			runtime.config_store.save(&runtime.state.config)?;
 			return Ok(outcome(runtime.state.revisions, GlorpDelta::default(), Vec::new()));
 		}
-	}
+	};
 
 	let session = runtime.state.session.execute(
 		SessionRequest::SyncConfig,

@@ -1,6 +1,6 @@
 use {
 	crate::{TransportRequest, TransportResponse},
-	glorp_api::*,
+	glorp_api::{GlorpError, GlorpHost},
 	glorp_runtime::RuntimeHost,
 	std::{
 		io::{BufRead, BufReader, Write},
@@ -22,6 +22,7 @@ pub struct IpcServerHandle {
 }
 
 impl IpcServerHandle {
+	#[must_use]
 	pub fn socket_path(&self) -> &Path {
 		&self.socket_path
 	}

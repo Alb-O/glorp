@@ -33,10 +33,13 @@ fn main() -> ExitCode {
 fn run() -> Result<(), GlorpError> {
 	telemetry::init_tracing();
 	let cli = Cli::parse();
-	let repo_root = cli.repo_root.unwrap_or(
-		std::env::current_dir()
-			.map_err(|error| GlorpError::transport(format!("failed to determine current directory: {error}")))?,
-	);
+	let repo_root = cli.repo_root.map_or_else(
+		|| {
+			std::env::current_dir()
+				.map_err(|error| GlorpError::transport(format!("failed to determine current directory: {error}")))
+		},
+		Ok,
+	)?;
 	let mut launch = GuiLaunchOptions::for_repo_root(repo_root);
 	if let Some(socket_path) = cli.socket {
 		launch.socket_path = socket_path;

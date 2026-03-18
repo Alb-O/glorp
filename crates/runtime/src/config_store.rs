@@ -17,10 +17,12 @@ pub struct ConfigStore {
 }
 
 impl ConfigStore {
+	#[must_use]
 	pub fn new(paths: ConfigStorePaths) -> Self {
 		Self { paths }
 	}
 
+	#[must_use]
 	pub fn paths(&self) -> &ConfigStorePaths {
 		&self.paths
 	}
@@ -75,21 +77,15 @@ fn config_from_json(value: serde_json::Value) -> Result<GlorpConfig, GlorpError>
 		return Err(GlorpError::validation(None, "config.nu must evaluate to a record"));
 	};
 
-	for (namespace, value) in root {
-		match value {
-			GlorpValue::Record(fields) => {
-				for (field, value) in fields {
-					config.set_path(&format!("{namespace}.{field}"), value)?;
-				}
-			}
-			other => {
-				return Err(GlorpError::validation(
-					None,
-					format!("config namespace `{namespace}` must be a record, got {}", other.kind()),
-				));
-			}
-		}
-	}
+	root.into_iter().try_for_each(|(namespace, value)| match value {
+		GlorpValue::Record(fields) => fields
+			.into_iter()
+			.try_for_each(|(field, value)| config.set_path(&format!("{namespace}.{field}"), value)),
+		other => Err(GlorpError::validation(
+			None,
+			format!("config namespace `{namespace}` must be a record, got {}", other.kind()),
+		)),
+	})?;
 
 	Ok(config)
 }
