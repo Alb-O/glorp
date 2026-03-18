@@ -228,7 +228,8 @@ fn insert_cursor_geometry(buffer: &Buffer, font_size: f32, text: &str, byte: usi
 
 			(visual_line, offset, block_width)
 		});
-	let y = (visual_lines_offset(cursor.line, buffer) + visual_line as f32) * line_height - scroll.vertical;
+	let y = (visual_lines_offset(cursor.line, buffer) + count_as_f32(layout.iter().take(visual_line))) * line_height
+		- scroll.vertical;
 
 	Some(InsertCursorGeometry {
 		x: offset,
@@ -307,7 +308,11 @@ fn visual_lines_offset(line: usize, buffer: &Buffer) -> f32 {
 }
 
 fn visual_line_len(line: &cosmic_text::BufferLine) -> f32 {
-	line.layout_opt().map_or(0.0, |layout| layout.len() as f32)
+	line.layout_opt().map_or(0.0, |layout| count_as_f32(layout.iter()))
+}
+
+fn count_as_f32(items: impl IntoIterator) -> f32 {
+	items.into_iter().fold(0.0, |count, _| count + 1.0)
 }
 
 fn byte_to_cursor_with_offsets(text: &str, line_offsets: &[usize], byte: usize) -> cosmic_text::Cursor {

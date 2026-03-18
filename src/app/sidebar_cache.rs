@@ -8,7 +8,7 @@ use {
 		overlay::OverlayRectKind,
 		perf::{PerfDashboard, PerfMonitor, PerfSnapshotKey},
 		presentation::{EditorPresentation, ScenePresentation},
-		scene::{DocumentLayout, debug_snippet},
+		scene::{DocumentLayout, debug_range},
 		types::CanvasTarget,
 	},
 	std::{cell::RefCell, ops::Range, sync::Arc},
@@ -166,39 +166,35 @@ fn editor_selection_details(text: &str, editor: &EditorPresentation) -> String {
 	let view = &editor.editor;
 	let selection_rects = view.overlay_count(OverlayRectKind::EditorSelection);
 	let undo_redo = format!("{}/{}", editor.undo_depth, editor.redo_depth);
-
-	view.selection.as_ref().map_or_else(
-		|| match view.mode {
+	let Some(selection) = view.selection.as_ref() else {
+		return match view.mode {
 			EditorMode::Normal => format!("  mode: {}\n  selection: none", view.mode),
 			EditorMode::Insert => format!("  mode: {}\n  selection: none\n  undo/redo: {}", view.mode, undo_redo),
-		},
-		|selection| {
-			let head = view.selection_head.unwrap_or(selection.start);
-			let selected_text = preview_range(text, selection);
+		};
+	};
+	let head = view.selection_head.unwrap_or(selection.start);
+	let selected_text = preview_range(text, selection);
 
-			match view.mode {
-				EditorMode::Normal => format!(
-					"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}",
-					view.mode,
-					selection,
-					selected_text,
-					selection_rects,
-					head,
-					view.pointer_anchor.unwrap_or(selection.start),
-					undo_redo,
-				),
-				EditorMode::Insert => format!(
-					"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  head byte: {}\n  undo/redo: {}",
-					view.mode, selection, selected_text, selection_rects, head, undo_redo,
-				),
-			}
-		},
-	)
+	match view.mode {
+		EditorMode::Normal => format!(
+			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  active byte: {}\n  anchor byte: {}\n  undo/redo: {}",
+			view.mode,
+			selection,
+			selected_text,
+			selection_rects,
+			head,
+			view.pointer_anchor.unwrap_or(selection.start),
+			undo_redo,
+		),
+		EditorMode::Insert => format!(
+			"  mode: {}\n  bytes: {:?}\n  text: {}\n  rects: {}\n  head byte: {}\n  undo/redo: {}",
+			view.mode, selection, selected_text, selection_rects, head, undo_redo,
+		),
+	}
 }
 
 fn preview_range(text: &str, range: &Range<usize>) -> String {
-	text.get(range.clone())
-		.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
+	debug_range(text, range)
 }
 
 fn target_details_or_none(layout: &DocumentLayout, target: Option<CanvasTarget>) -> Arc<str> {

@@ -201,9 +201,10 @@ impl DocumentLayout {
 			clusters,
 		} = spec;
 		let byte_order = build_byte_order(&clusters);
+		let line_byte_offsets = Arc::from(line_byte_offsets(text.as_ref()));
 
 		Self {
-			text: text.clone(),
+			text,
 			wrapping,
 			max_width,
 			measured_width,
@@ -213,7 +214,7 @@ impl DocumentLayout {
 			font_count,
 			runs: runs.into(),
 			clusters: clusters.into(),
-			line_byte_offsets: Arc::from(line_byte_offsets(text.as_ref())),
+			line_byte_offsets,
 			byte_order: byte_order.into(),
 			warnings: Vec::new().into(),
 		}

@@ -19,7 +19,7 @@ pub(crate) use self::{
 	build::resolve_font_names_from_buffer,
 	data::{LayoutCaretMetrics, LayoutCluster, LayoutRun},
 	font::{build_buffer, make_font_system, scene_config},
-	text::{debug_snippet, line_byte_offsets},
+	text::{debug_range, line_byte_offsets},
 };
 
 pub(crate) type FontNameMap = Arc<[(cosmic_text::fontdb::ID, Arc<str>)]>;

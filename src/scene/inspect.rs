@@ -1,5 +1,5 @@
 use {
-	super::{DocumentLayout, LayoutCluster, debug_snippet},
+	super::{DocumentLayout, LayoutCluster, debug_range},
 	crate::{
 		overlay::{LayoutRect, OverlayLayer, OverlayPrimitive, OverlayRectKind},
 		types::CanvasTarget,
@@ -99,8 +99,6 @@ fn cluster_details(layout: &DocumentLayout, index: usize, cluster: &LayoutCluste
 
 impl DocumentLayout {
 	fn debug_snippet(&self, range: &Range<usize>) -> String {
-		self.text
-			.get(range.clone())
-			.map_or_else(|| "<invalid utf8 slice>".to_string(), debug_snippet)
+		debug_range(&self.text, range)
 	}
 }

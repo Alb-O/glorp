@@ -23,28 +23,77 @@ pub(super) enum SessionCommand {
 	ApplyEditorIntent(EditorIntent),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SessionChange {
+	Text,
+	View,
+	Selection,
+	Mode,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct SessionChanges(u8);
+
+impl SessionChange {
+	const fn bit(self) -> u8 {
+		match self {
+			Self::Text => 1 << 0,
+			Self::View => 1 << 1,
+			Self::Selection => 1 << 2,
+			Self::Mode => 1 << 3,
+		}
+	}
+}
+
+impl SessionChanges {
+	const fn with(mut self, change: SessionChange) -> Self {
+		self.0 |= change.bit();
+		self
+	}
+
+	const fn with_if(self, condition: bool, change: SessionChange) -> Self {
+		if condition { self.with(change) } else { self }
+	}
+
+	const fn contains(self, change: SessionChange) -> bool {
+		self.0 & change.bit() != 0
+	}
+
+	const fn is_empty(self) -> bool {
+		self.0 == 0
+	}
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(super) struct SessionTransition {
-	pub(super) text_changed: bool,
-	pub(super) view_changed: bool,
-	pub(super) selection_changed: bool,
-	pub(super) mode_changed: bool,
+	changes: SessionChanges,
 	pub(super) width_sync: Option<Duration>,
 	pub(super) scene_materialized: Option<Duration>,
 }
 
 impl SessionTransition {
 	pub(super) fn changed(&self) -> bool {
-		self.text_changed
-			|| self.view_changed
-			|| self.selection_changed
-			|| self.mode_changed
-			|| self.width_sync.is_some()
-			|| self.scene_materialized.is_some()
+		!self.changes.is_empty() || self.width_sync.is_some() || self.scene_materialized.is_some()
 	}
 
 	pub(super) fn document_changed(&self) -> bool {
-		self.text_changed
+		self.text_changed()
+	}
+
+	pub(super) fn text_changed(&self) -> bool {
+		self.changes.contains(SessionChange::Text)
+	}
+
+	pub(super) fn view_changed(&self) -> bool {
+		self.changes.contains(SessionChange::View)
+	}
+
+	pub(super) fn selection_changed(&self) -> bool {
+		self.changes.contains(SessionChange::Selection)
+	}
+
+	pub(super) fn mode_changed(&self) -> bool {
+		self.changes.contains(SessionChange::Mode)
 	}
 }
 
@@ -129,10 +178,11 @@ impl DocumentSession {
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
 		SessionTransition {
-			text_changed: true,
-			view_changed: true,
-			selection_changed: true,
-			mode_changed: true,
+			changes: SessionChanges::default()
+				.with(SessionChange::Text)
+				.with(SessionChange::View)
+				.with(SessionChange::Selection)
+				.with(SessionChange::Mode),
 			..SessionTransition::default()
 		}
 	}
@@ -145,7 +195,7 @@ impl DocumentSession {
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
 		SessionTransition {
-			view_changed: true,
+			changes: SessionChanges::default().with(SessionChange::View),
 			..SessionTransition::default()
 		}
 	}
@@ -159,7 +209,7 @@ impl DocumentSession {
 		self.refresh_editor_snapshot();
 		self.invalidate_scene();
 		SessionTransition {
-			view_changed: true,
+			changes: SessionChanges::default().with(SessionChange::View),
 			width_sync: Some(started.elapsed()),
 			..SessionTransition::default()
 		}
@@ -184,10 +234,11 @@ impl DocumentSession {
 		}
 
 		SessionTransition {
-			text_changed,
-			view_changed,
-			selection_changed,
-			mode_changed,
+			changes: SessionChanges::default()
+				.with_if(text_changed, SessionChange::Text)
+				.with_if(view_changed, SessionChange::View)
+				.with_if(selection_changed, SessionChange::Selection)
+				.with_if(mode_changed, SessionChange::Mode),
 			..SessionTransition::default()
 		}
 	}
@@ -312,7 +363,7 @@ mod tests {
 
 		let changed = session.execute(SessionCommand::SyncWidth(640.0), false);
 		assert!(changed.width_sync.is_some());
-		assert!(changed.view_changed);
+		assert!(changed.view_changed());
 	}
 
 	#[test]

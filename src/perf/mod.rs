@@ -28,7 +28,7 @@ pub(crate) struct PerfSnapshotKey {
 
 impl PerfMonitor {
 	pub(crate) fn sink(&self) -> CanvasPerfSink {
-		self.sink.clone()
+		Clone::clone(&self.sink)
 	}
 
 	pub(crate) fn key(&self) -> PerfSnapshotKey {

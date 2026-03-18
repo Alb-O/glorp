@@ -249,7 +249,7 @@ fn graph_points(bounds: Rectangle, graph: &PerfGraphSeries) -> Vec<Point> {
 		)];
 	}
 
-	let steps = (graph.samples_ms.len() - 1) as f32;
+	let steps = count_as_f32(graph.samples_ms.iter().skip(1));
 	let step = bounds.width / steps.max(1.0);
 	let mut x = bounds.x;
 
@@ -262,6 +262,10 @@ fn graph_points(bounds: Rectangle, graph: &PerfGraphSeries) -> Vec<Point> {
 			point
 		})
 		.collect()
+}
+
+fn count_as_f32(items: impl IntoIterator) -> f32 {
+	items.into_iter().fold(0.0, |count, _| count + 1.0)
 }
 
 fn sample_y(bounds: Rectangle, sample_ms: f32, ceiling_ms: f32) -> f32 {

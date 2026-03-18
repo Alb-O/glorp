@@ -137,33 +137,36 @@ impl Widget<Message, Theme, iced::Renderer> for SceneTextLayer {
 		}
 
 		if self.draw_text {
-			if let Some(clip) = insert_repaint_clip(
+			let buffer = self.snapshot.editor.text_layer.buffer.clone();
+			match insert_repaint_clip(
 				origin,
 				self.snapshot.editor.editor.mode,
 				self.snapshot.editor.editor.viewport_target,
 			) {
-				let buffer = self.snapshot.editor.text_layer.buffer.clone();
-				// Draw once in the normal color, then repaint only the active insert
-				// cell with the inverted glyph color.
-				renderer.fill_raw(iced::advanced::graphics::text::Raw {
-					buffer: buffer.clone(),
-					position: origin,
-					color: TEXT_COLOR,
-					clip_bounds: bounds,
-				});
-				renderer.fill_raw(iced::advanced::graphics::text::Raw {
-					buffer,
-					position: origin,
-					color: INSERT_GLYPH_COLOR,
-					clip_bounds: clip,
-				});
-			} else {
-				renderer.fill_raw(iced::advanced::graphics::text::Raw {
-					buffer: self.snapshot.editor.text_layer.buffer.clone(),
-					position: origin,
-					color: TEXT_COLOR,
-					clip_bounds: bounds,
-				});
+				Some(clip) => {
+					// Draw once in the normal color, then repaint only the active insert
+					// cell with the inverted glyph color.
+					renderer.fill_raw(iced::advanced::graphics::text::Raw {
+						buffer: buffer.clone(),
+						position: origin,
+						color: TEXT_COLOR,
+						clip_bounds: bounds,
+					});
+					renderer.fill_raw(iced::advanced::graphics::text::Raw {
+						buffer,
+						position: origin,
+						color: INSERT_GLYPH_COLOR,
+						clip_bounds: clip,
+					});
+				}
+				None => {
+					renderer.fill_raw(iced::advanced::graphics::text::Raw {
+						buffer,
+						position: origin,
+						color: TEXT_COLOR,
+						clip_bounds: bounds,
+					});
+				}
 			}
 		}
 	}

@@ -46,7 +46,7 @@ impl EditorLayout {
 	}
 
 	pub(super) fn buffer(&self) -> Arc<Buffer> {
-		self.buffer.clone()
+		Arc::clone(&self.buffer)
 	}
 
 	pub(super) fn view_state(&self) -> EditorViewState {
@@ -101,7 +101,7 @@ impl EditorLayout {
 	}
 
 	pub(super) fn cached_document_layout_arc(&self) -> Option<Arc<DocumentLayout>> {
-		self.document_layout.borrow().clone()
+		self.document_layout.borrow().as_ref().map(Arc::clone)
 	}
 
 	pub(super) fn set_document_layout(&self, document_layout: Arc<DocumentLayout>) {
@@ -114,9 +114,7 @@ impl EditorLayout {
 	}
 
 	pub(super) fn viewport_metrics(&self) -> EditorViewportMetrics {
-		if let Some(metrics) = self.viewport_metrics.get() {
-			metrics
-		} else {
+		self.viewport_metrics.get().unwrap_or_else(|| {
 			let (measured_width, measured_height) = measure_buffer(&self.buffer);
 			let metrics = EditorViewportMetrics {
 				wrapping: self.config.wrapping,
@@ -125,7 +123,7 @@ impl EditorLayout {
 			};
 			self.viewport_metrics.set(Some(metrics));
 			metrics
-		}
+		})
 	}
 
 	pub(super) fn text_layer_state(&self) -> EditorTextLayerState {

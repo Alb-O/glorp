@@ -317,7 +317,7 @@ impl AppModel {
 		self.apply_session_transition(
 			&transition,
 			ApplyPolicy::reveal(
-				source.reveals_viewport() && transition.view_changed,
+				source.reveals_viewport() && transition.view_changed(),
 				transition.document_changed().then_some(SceneRefreshReason::TextEdited),
 			),
 		);
@@ -332,10 +332,10 @@ impl AppModel {
 			warn!(
 				apply_ms,
 				command_ms,
-				text_changed = transition.text_changed,
-				view_changed = transition.view_changed,
-				selection_changed = transition.selection_changed,
-				mode_changed = transition.mode_changed,
+				text_changed = transition.text_changed(),
+				view_changed = transition.view_changed(),
+				selection_changed = transition.selection_changed(),
+				mode_changed = transition.mode_changed(),
 				text_bytes = self.session.text().len(),
 				"editor command over frame budget"
 			);
@@ -343,10 +343,10 @@ impl AppModel {
 			debug!(
 				apply_ms,
 				command_ms,
-				text_changed = transition.text_changed,
-				view_changed = transition.view_changed,
-				selection_changed = transition.selection_changed,
-				mode_changed = transition.mode_changed,
+				text_changed = transition.text_changed(),
+				view_changed = transition.view_changed(),
+				selection_changed = transition.selection_changed(),
+				mode_changed = transition.mode_changed(),
 				text_bytes = self.session.text().len(),
 				"editor command over warning threshold"
 			);
@@ -354,10 +354,10 @@ impl AppModel {
 			trace!(
 				apply_ms,
 				command_ms,
-				text_changed = transition.text_changed,
-				view_changed = transition.view_changed,
-				selection_changed = transition.selection_changed,
-				mode_changed = transition.mode_changed,
+				text_changed = transition.text_changed(),
+				view_changed = transition.view_changed(),
+				selection_changed = transition.selection_changed(),
+				mode_changed = transition.mode_changed(),
 				text_bytes = self.session.text().len(),
 				"editor command applied"
 			);
