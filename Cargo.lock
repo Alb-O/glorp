@@ -1531,6 +1531,7 @@ dependencies = [
  "glorp_gui",
  "glorp_nu_plugin",
  "glorp_runtime",
+ "glorp_test_support",
  "glorp_transport",
  "nu-plugin-test-support",
  "nu-protocol",
@@ -1544,6 +1545,7 @@ version = "0.1.0"
 dependencies = [
  "glorp_api",
  "glorp_runtime",
+ "glorp_test_support",
  "glorp_transport",
  "nu-plugin",
  "nu-plugin-test-support",
@@ -1563,6 +1565,15 @@ dependencies = [
  "serde_json",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "glorp_test_support"
+version = "0.1.0"
+dependencies = [
+ "glorp_api",
+ "glorp_runtime",
+ "glorp_transport",
 ]
 
 [[package]]

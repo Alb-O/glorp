@@ -17,4 +17,5 @@ serde_json.workspace = true
 
 [dev-dependencies]
 glorp_runtime = { path = "../runtime" }
+glorp_test_support = { path = "../test-support" }
 nu-plugin-test-support.workspace = true

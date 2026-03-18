@@ -1,0 +1,9 @@
+[package]
+name = "glorp_test_support"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+glorp_api = { path = "../api" }
+glorp_runtime = { path = "../runtime" }
+glorp_transport = { path = "../transport" }

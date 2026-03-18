@@ -2,79 +2,17 @@ use {
 	glorp_api::*,
 	glorp_gui::{GuiLaunchOptions, GuiRuntimeSession},
 	glorp_nu_plugin::GlorpPlugin,
-	glorp_runtime::{
-		ConfigStore, ConfigStorePaths, GuiCommand, RuntimeHost, RuntimeOptions, SidebarTab, export_surface_artifacts,
+	glorp_runtime::{GuiCommand, RuntimeHost, RuntimeOptions, SidebarTab},
+	glorp_test_support::{
+		TestRepo, call_ok, config, config_set, document_replace, document_text, editor_history, editor_insert,
+		editor_mode, editor_motion, editor_state, next_event, outcome, run_standard_transcript, state_snapshot,
+		subscribe_changes, txn, workspace_root,
 	},
-	glorp_transport::{IpcClient, IpcServerHandle, default_socket_path, start_server},
+	glorp_transport::default_socket_path,
 	nu_plugin_test_support::PluginTest,
 	nu_protocol::{Span, Value},
-	std::{
-		path::PathBuf,
-		time::{SystemTime, UNIX_EPOCH},
-	},
+	std::path::PathBuf,
 };
-
-struct Harness {
-	root: PathBuf,
-	socket_path: PathBuf,
-	paths: ConfigStorePaths,
-	server: Option<IpcServerHandle>,
-}
-
-impl Harness {
-	fn new() -> Self {
-		let stamp = SystemTime::now()
-			.duration_since(UNIX_EPOCH)
-			.expect("current time should be after epoch")
-			.as_nanos();
-		let root = std::env::temp_dir().join(format!("glorp-acceptance-{stamp}"));
-		let paths = ConfigStorePaths {
-			durable_config_path: root.join("nu/default-config.nu"),
-			schema_path: root.join("schema/glorp-schema.json"),
-			nu_module_path: root.join("nu/glorp.nu"),
-			nu_completions_path: root.join("nu/completions.nu"),
-		};
-		let socket_path = root.join("glorp.sock");
-
-		std::fs::create_dir_all(root.join("nu")).expect("create nu dir");
-		std::fs::create_dir_all(root.join("schema")).expect("create schema dir");
-
-		Self {
-			root,
-			socket_path,
-			paths,
-			server: None,
-		}
-	}
-
-	fn runtime(&self) -> RuntimeHost {
-		RuntimeHost::new(RuntimeOptions {
-			paths: self.paths.clone(),
-		})
-		.expect("runtime should start")
-	}
-
-	fn start_server(&mut self) {
-		self.server = Some(start_server(self.socket_path.clone(), self.runtime()).expect("server should start"));
-	}
-
-	fn ipc_client(&self) -> IpcClient {
-		IpcClient::new(self.socket_path.clone())
-	}
-
-	fn export_surface(&self) {
-		export_surface_artifacts(&ConfigStore::new(self.paths.clone())).expect("surface export should succeed");
-	}
-}
-
-impl Drop for Harness {
-	fn drop(&mut self) {
-		if let Some(server) = self.server.take() {
-			let _ = server.shutdown();
-		}
-		let _ = std::fs::remove_dir_all(&self.root);
-	}
-}
 
 fn eval_to_value(plugin_test: &mut PluginTest, nu_source: &str) -> Value {
 	plugin_test
@@ -82,32 +20,6 @@ fn eval_to_value(plugin_test: &mut PluginTest, nu_source: &str) -> Value {
 		.expect("Nushell evaluation should succeed")
 		.into_value(Span::test_data())
 		.expect("pipeline should convert to a value")
-}
-
-fn call(host: &mut impl GlorpCaller, glorp_call: GlorpCall) -> GlorpCallResult {
-	host.call(glorp_call).expect("call should succeed")
-}
-
-fn outcome(host: &mut impl GlorpCaller, glorp_call: GlorpCall) -> GlorpOutcome {
-	let result = call(host, glorp_call);
-	let id = result.id.clone();
-	decode_call_output::<GlorpOutcome>(&id, &result.output).expect("outcome payload should decode")
-}
-
-fn document_text(host: &mut impl GlorpCaller) -> String {
-	calls::DocumentText::call(host, ()).expect("document-text should succeed")
-}
-
-fn config(host: &mut impl GlorpCaller) -> GlorpConfig {
-	calls::Config::call(host, ()).expect("config should succeed")
-}
-
-fn editor_state(host: &mut impl GlorpCaller) -> EditorStateView {
-	calls::Editor::call(host, ()).expect("editor should succeed")
-}
-
-fn host_state(host: &mut impl GlorpCaller) -> (String, EditorStateView, GlorpConfig) {
-	(document_text(host), editor_state(host), config(host))
 }
 
 fn string_field(value: &Value, field: &str) -> String {
@@ -127,79 +39,15 @@ fn int_field(value: &Value, field: &str) -> i64 {
 		.unwrap_or_else(|| panic!("{field} field should be int"))
 }
 
-fn subscribe_changes(host: &mut impl GlorpCaller) -> u64 {
-	calls::EventsSubscribe::call(host, ())
-		.expect("events-subscribe should succeed")
-		.token
-}
-
-fn next_event(host: &mut impl GlorpCaller, token: u64) -> Option<GlorpEvent> {
-	calls::EventsNext::call(host, StreamTokenInput { token }).expect("events-next should succeed")
-}
-
-fn txn(calls: Vec<GlorpCall>) -> GlorpCall {
-	calls::Txn::build(GlorpTxn { calls }).expect("txn should build")
-}
-
-fn config_set(path: &str, value: GlorpValue) -> GlorpCall {
-	calls::ConfigSet::build(ConfigAssignment {
-		path: path.to_owned(),
-		value,
-	})
-	.expect("config-set should build")
-}
-
-fn document_replace(text: &str) -> GlorpCall {
-	calls::DocumentReplace::build(TextInput { text: text.to_owned() }).expect("document-replace should build")
-}
-
-fn editor_mode(mode: EditorModeCommand) -> GlorpCall {
-	calls::EditorMode::build(EditorModeInput { mode }).expect("editor-mode should build")
-}
-
-fn editor_motion(motion: EditorMotion) -> GlorpCall {
-	calls::EditorMotion::build(EditorMotionInput { motion }).expect("editor-motion should build")
-}
-
-fn editor_insert(text: &str) -> GlorpCall {
-	calls::EditorInsert::build(TextInput { text: text.to_owned() }).expect("editor-insert should build")
-}
-
-fn editor_history(action: EditorHistoryCommand) -> GlorpCall {
-	calls::EditorHistory::build(EditorHistoryInput { action }).expect("editor-history should build")
-}
-
-fn run_standard_transcript(host: &mut impl GlorpCaller) -> (String, EditorStateView, GlorpConfig) {
-	let _ = outcome(
-		host,
-		config_set("editor.wrapping", GlorpValue::String("word".to_owned())),
-	);
-	let _ = outcome(host, document_replace("hello"));
-	let _ = outcome(host, editor_mode(EditorModeCommand::EnterInsertAfter));
-	let _ = outcome(host, editor_motion(EditorMotion::LineEnd));
-	let _ = outcome(host, editor_insert(" world"));
-
-	host_state(host)
-}
-
-fn repo_root() -> PathBuf {
-	PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-		.parent()
-		.expect("host crate should have a parent")
-		.parent()
-		.expect("repo root should exist")
-		.to_path_buf()
-}
-
-fn host_bin() -> PathBuf {
-	PathBuf::from(env!("CARGO_BIN_EXE_glorp_host"))
-}
-
-fn gui_options(harness: &Harness) -> GuiLaunchOptions {
+fn gui_options(harness: &TestRepo) -> GuiLaunchOptions {
 	GuiLaunchOptions {
 		repo_root: harness.root.clone(),
 		socket_path: default_socket_path(&harness.root),
 	}
+}
+
+fn host_bin() -> PathBuf {
+	PathBuf::from(env!("CARGO_BIN_EXE_glorp_host"))
 }
 
 fn set_host_bin() {
@@ -210,11 +58,11 @@ fn set_host_bin() {
 
 #[test]
 fn schema_export_smoke_test() {
-	let harness = Harness::new();
+	let harness = TestRepo::new("glorp-acceptance");
 	harness.export_surface();
 	let mut host = harness.runtime();
 
-	let schema = calls::Schema::call(&mut host, ()).expect("schema should succeed");
+	let schema = call_ok::<calls::Schema>(&mut host, ());
 
 	assert_eq!(schema.version, 6);
 	assert!(schema.calls.iter().any(|operation| operation.id == "editor"));
@@ -236,7 +84,7 @@ fn schema_export_smoke_test() {
 
 #[test]
 fn nu_plugin_roundtrip_smoke_test() {
-	let mut harness = Harness::new();
+	let mut harness = TestRepo::new("glorp-acceptance");
 	harness.start_server();
 
 	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
@@ -261,7 +109,7 @@ fn nu_plugin_roundtrip_smoke_test() {
 
 #[test]
 fn invalid_config_rejection_e2e() {
-	let mut host = Harness::new().runtime();
+	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let before_text = document_text(&mut host);
 	let before_editor = editor_state(&mut host);
 	let before_config = calls::Config::call(&mut host, ()).expect("config should succeed");
@@ -291,7 +139,7 @@ fn invalid_config_rejection_e2e() {
 
 #[test]
 fn transaction_atomicity_e2e() {
-	let mut host = Harness::new().runtime();
+	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let token = subscribe_changes(&mut host);
 	let before_text = document_text(&mut host);
 	let before_editor = editor_state(&mut host);
@@ -312,7 +160,7 @@ fn transaction_atomicity_e2e() {
 
 #[test]
 fn nested_transaction_rejection_e2e() {
-	let mut host = Harness::new().runtime();
+	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let error = host
 		.call(txn(vec![txn(vec![document_replace("nested")])]))
 		.expect_err("nested transaction should fail");
@@ -325,7 +173,7 @@ fn nested_transaction_rejection_e2e() {
 
 #[test]
 fn transaction_rejects_non_transactional_and_non_runtime_calls_e2e() {
-	let mut host = Harness::new().runtime();
+	let mut host = TestRepo::new("glorp-acceptance").runtime();
 
 	for nested_call in [
 		calls::Schema::build(()).expect("schema should build"),
@@ -341,7 +189,7 @@ fn transaction_rejects_non_transactional_and_non_runtime_calls_e2e() {
 
 #[test]
 fn runtime_dispatch_rejects_non_runtime_routes_e2e() {
-	let mut host = Harness::new().runtime();
+	let mut host = TestRepo::new("glorp-acceptance").runtime();
 
 	for call in [
 		calls::SessionAttach::build(()).expect("session-attach should build"),
@@ -357,7 +205,7 @@ fn runtime_dispatch_rejects_non_runtime_routes_e2e() {
 
 #[test]
 fn ipc_transport_rejects_client_route_calls_e2e() {
-	let mut harness = Harness::new();
+	let mut harness = TestRepo::new("glorp-acceptance");
 	harness.start_server();
 	let mut client = harness.ipc_client();
 
@@ -373,7 +221,7 @@ fn ipc_transport_rejects_client_route_calls_e2e() {
 
 #[test]
 fn private_gui_state_does_not_emit_public_events() {
-	let mut host = Harness::new().runtime();
+	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let token = subscribe_changes(&mut host);
 
 	host.execute_gui(GuiCommand::SidebarSelect(SidebarTab::Inspect))
@@ -389,7 +237,7 @@ fn private_gui_state_does_not_emit_public_events() {
 
 #[test]
 fn private_viewport_resize_updates_public_editor_state() {
-	let mut host = Harness::new().runtime();
+	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let before = editor_state(&mut host);
 	let token = subscribe_changes(&mut host);
 
@@ -411,7 +259,7 @@ fn private_viewport_resize_updates_public_editor_state() {
 
 #[test]
 fn gui_launcher_socket_contract_e2e() {
-	let mut harness = Harness::new();
+	let mut harness = TestRepo::new("glorp-acceptance");
 	let options = gui_options(&harness);
 	let (mut launched, mut launched_client) =
 		GuiRuntimeSession::connect_or_start(options.clone()).expect("launcher should start runtime");
@@ -430,7 +278,7 @@ fn gui_launcher_socket_contract_e2e() {
 
 #[test]
 fn gui_private_state_survives_reconnect_e2e() {
-	let harness = Harness::new();
+	let harness = TestRepo::new("glorp-acceptance");
 	let options = gui_options(&harness);
 	let (mut owner, mut first) =
 		GuiRuntimeSession::connect_or_start(options.clone()).expect("first GUI session should start runtime");
@@ -469,7 +317,7 @@ fn gui_private_state_survives_reconnect_e2e() {
 
 #[test]
 fn editor_command_to_document_text_e2e() {
-	let mut host = Harness::new().runtime();
+	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let _ = outcome(&mut host, document_replace("abc"));
 	let _ = outcome(&mut host, editor_mode(EditorModeCommand::EnterInsertAfter));
 	let _ = outcome(&mut host, editor_motion(EditorMotion::LineEnd));
@@ -486,7 +334,7 @@ fn editor_command_to_document_text_e2e() {
 
 #[test]
 fn revision_monotonicity_test() {
-	let mut host = Harness::new().runtime();
+	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let initial = editor_state(&mut host).revisions;
 
 	let config = outcome(
@@ -503,14 +351,15 @@ fn revision_monotonicity_test() {
 
 #[test]
 fn ipc_client_parity_test() {
-	let direct = run_standard_transcript(&mut Harness::new().runtime());
+	let mut direct_client = TestRepo::new("glorp-acceptance").local_client();
+	let direct = run_standard_transcript(&mut direct_client);
 
-	let mut ipc_harness = Harness::new();
+	let mut ipc_harness = TestRepo::new("glorp-acceptance");
 	ipc_harness.start_server();
 	let ipc = run_standard_transcript(&mut ipc_harness.ipc_client());
 
 	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
-	let mut plugin_harness = Harness::new();
+	let mut plugin_harness = TestRepo::new("glorp-acceptance");
 	plugin_harness.start_server();
 	let _ = eval_to_value(
 		&mut plugin_test,
@@ -548,18 +397,18 @@ fn ipc_client_parity_test() {
 		),
 	);
 
-	let plugin = host_state(&mut plugin_harness.ipc_client());
-	assert_eq!(ipc.0, direct.0);
-	assert_eq!(plugin.0, direct.0);
-	assert_eq!(ipc.1.mode, direct.1.mode);
-	assert_eq!(plugin.1.mode, direct.1.mode);
-	assert_eq!(ipc.2.editor.wrapping, direct.2.editor.wrapping);
-	assert_eq!(plugin.2.editor.wrapping, direct.2.editor.wrapping);
+	let plugin = state_snapshot(&mut plugin_harness.ipc_client());
+	assert_eq!(ipc.text, direct.text);
+	assert_eq!(plugin.text, direct.text);
+	assert_eq!(ipc.editor.mode, direct.editor.mode);
+	assert_eq!(plugin.editor.mode, direct.editor.mode);
+	assert_eq!(ipc.config.editor.wrapping, direct.config.editor.wrapping);
+	assert_eq!(plugin.config.editor.wrapping, direct.config.editor.wrapping);
 }
 
 #[test]
 fn plugin_auto_starts_shared_host_e2e() {
-	let harness = Harness::new();
+	let harness = TestRepo::new("glorp-acceptance");
 	set_host_bin();
 	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
 	let _ = eval_to_value(
@@ -581,14 +430,14 @@ fn plugin_auto_starts_shared_host_e2e() {
 
 #[test]
 fn persistence_smoke_test() {
-	let harness = Harness::new();
+	let harness = TestRepo::new("glorp-acceptance");
 	let paths = harness.paths.clone();
 	let mut host = harness.runtime();
 	let _ = outcome(
 		&mut host,
 		config_set("editor.wrapping", GlorpValue::String("glyph".to_owned())),
 	);
-	let _ = calls::ConfigPersist::call(&mut host, ()).expect("config-persist should succeed");
+	let _ = call_ok::<calls::ConfigPersist>(&mut host, ());
 	drop(host);
 
 	let mut fresh = RuntimeHost::new(RuntimeOptions { paths }).expect("fresh runtime should start");
@@ -603,7 +452,7 @@ fn persistence_smoke_test() {
 
 #[test]
 fn event_stream_conformance_test() {
-	let mut host = Harness::new().runtime();
+	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let token = subscribe_changes(&mut host);
 
 	let _ = outcome(
@@ -634,7 +483,7 @@ fn event_stream_conformance_test() {
 
 #[test]
 fn plugin_transcript_smoke_test() {
-	let harness = Harness::new();
+	let harness = TestRepo::new("glorp-acceptance");
 	set_host_bin();
 	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
 	let repo_root = harness.root.display();
@@ -681,7 +530,7 @@ fn plugin_transcript_smoke_test() {
 
 #[test]
 fn plugin_transaction_e2e() {
-	let harness = Harness::new();
+	let harness = TestRepo::new("glorp-acceptance");
 	set_host_bin();
 	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
 	let repo_root = harness.root.display();
@@ -710,7 +559,7 @@ fn plugin_transaction_e2e() {
 
 #[test]
 fn plugin_session_attach_and_event_polling_e2e() {
-	let mut harness = Harness::new();
+	let mut harness = TestRepo::new("glorp-acceptance");
 	harness.start_server();
 	let mut plugin_test = PluginTest::new("glorp", GlorpPlugin.into()).expect("plugin test should build");
 
@@ -760,7 +609,7 @@ fn plugin_session_attach_and_event_polling_e2e() {
 
 #[test]
 fn generated_surface_artifact_golden_test() {
-	let repo_root = repo_root();
+	let repo_root = workspace_root();
 	assert_eq!(
 		std::fs::read_to_string(repo_root.join("schema/glorp-schema.json")).expect("schema file"),
 		serde_json::to_string_pretty(&glorp_api::glorp_schema()).expect("schema json"),
