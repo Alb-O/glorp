@@ -32,3 +32,4 @@ glorp call session-attach
 ```
 
 See `../schema/glorp-schema.json` for the generated reflection source used by the plugin and Nu completions.
+Regenerate the checked-in public surface with `cargo run -p xtask -- surface`.

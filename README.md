@@ -16,20 +16,26 @@ IPC transport, GUI client, Nu plugin, and a minimal shared-runtime host.
 ## Run Checks
 
 ```sh
-devenv-run -C . cargo test --workspace
+cargo test --workspace
+```
+
+## Surface
+
+```sh
+cargo run -p xtask -- surface
+cargo run -p xtask -- surface --check
 ```
 
 ## Host
 
 ```sh
-devenv-run -C . cargo run -p glorp_host
-devenv-run -C . cargo run -p glorp_host -- export-surface
+cargo run -p glorp_host
 ```
 
 ## GUI
 
 ```sh
-devenv-run -C . cargo run -p glorp_gui
+cargo run -p glorp_gui
 ```
 
 The GUI hosts or joins the shared runtime on `./glorp.sock`. When that socket is live,

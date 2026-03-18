@@ -5,6 +5,8 @@ Two Nu-facing artifacts exist:
 - `../nu/glorp.nu`: generated Nu bootstrap script that loads the plugin and completions when sourced
 - `nu_plugin_glorp`: the Nushell plugin binary behind `glorp call`
 
+Regenerate checked-in surface artifacts with `cargo run -p xtask -- surface`.
+
 Example transcript:
 
 ```nu

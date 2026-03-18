@@ -15,6 +15,6 @@ pub use self::{
 	config_store::{ConfigStore, ConfigStorePaths},
 	gui::{GuiCommand, GuiEditorPresentation, GuiRuntimeFrame, GuiSnapshot, GuiTransportFrame, SidebarTab},
 	host::RuntimeHost,
-	persistence::export_surface_artifacts,
+	persistence::{ensure_surface_artifacts_current, export_surface_artifacts, sync_surface_artifacts},
 	runtime::{RuntimeOptions, default_runtime_paths},
 };

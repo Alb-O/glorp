@@ -1,7 +1,7 @@
 use {
 	clap::{Parser, Subcommand},
 	glorp_api::GlorpError,
-	glorp_runtime::{ConfigStore, RuntimeHost, RuntimeOptions, default_runtime_paths, export_surface_artifacts},
+	glorp_runtime::{RuntimeHost, RuntimeOptions, default_runtime_paths},
 	glorp_transport::{default_socket_path, start_server},
 	std::{path::PathBuf, process::ExitCode},
 };
@@ -30,7 +30,6 @@ fn run() -> Result<(), GlorpError> {
 
 	match cli.command.unwrap_or(Command::Serve) {
 		Command::Serve => serve(paths, socket_path),
-		Command::ExportSurface => export(paths),
 	}
 }
 
@@ -38,10 +37,6 @@ fn serve(paths: glorp_runtime::ConfigStorePaths, socket_path: PathBuf) -> Result
 	ensure_parent(&socket_path, "socket parent")?;
 	let host = RuntimeHost::new(RuntimeOptions { paths })?;
 	start_server(socket_path, host)?.wait()
-}
-
-fn export(paths: glorp_runtime::ConfigStorePaths) -> Result<(), GlorpError> {
-	export_surface_artifacts(&ConfigStore::new(paths))
 }
 
 fn ensure_parent(path: &std::path::Path, label: &str) -> Result<(), GlorpError> {
@@ -64,5 +59,4 @@ struct Cli {
 #[derive(Debug, Clone, Copy, Subcommand)]
 enum Command {
 	Serve,
-	ExportSurface,
 }

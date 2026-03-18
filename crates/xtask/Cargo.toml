@@ -1,0 +1,9 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+clap.workspace = true
+glorp_api_codegen = { path = "../api-codegen" }
+glorp_runtime = { path = "../runtime" }
