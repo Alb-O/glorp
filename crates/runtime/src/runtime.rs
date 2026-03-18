@@ -57,6 +57,29 @@ impl GlorpRuntime {
 			document_text: self.state.session.text().into(),
 		}
 	}
+
+	pub fn gui_transport_frame(&mut self) -> crate::GuiTransportFrame {
+		let snapshot = self.state.session.snapshot();
+		let editor = &snapshot.editor;
+
+		crate::GuiTransportFrame {
+			config: self.state.config.clone(),
+			ui: self.state.ui.clone(),
+			revisions: self.state.revisions,
+			snapshot: crate::GuiSnapshot {
+				editor: crate::GuiEditorPresentation {
+					revision: editor.revision,
+					viewport_metrics: editor.viewport_metrics,
+					editor: editor.editor.clone(),
+					editor_bytes: editor.editor_bytes,
+					undo_depth: editor.undo_depth,
+					redo_depth: editor.redo_depth,
+				},
+				scene: snapshot.scene.clone(),
+			},
+			document_text: self.state.session.text().into(),
+		}
+	}
 }
 
 impl GlorpHost for GlorpRuntime {

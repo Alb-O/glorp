@@ -13,7 +13,7 @@ mod state;
 
 pub use self::{
 	config_store::{ConfigStore, ConfigStorePaths},
-	gui::{GuiCommand, GuiRuntimeFrame, SidebarTab},
+	gui::{GuiCommand, GuiEditorPresentation, GuiRuntimeFrame, GuiSnapshot, GuiTransportFrame, SidebarTab},
 	host::RuntimeHost,
 	persistence::export_surface_artifacts,
 	runtime::{RuntimeOptions, default_runtime_paths},

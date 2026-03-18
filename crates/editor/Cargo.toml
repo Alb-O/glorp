@@ -7,5 +7,6 @@ edition.workspace = true
 cosmic-text.workspace = true
 glorp_api = { path = "../api" }
 iced.workspace = true
+serde = { workspace = true, features = ["rc"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 clap.workspace = true
+cosmic-text.workspace = true
 glorp_api = { path = "../api" }
 glorp_editor = { path = "../editor" }
 glorp_runtime = { path = "../runtime" }

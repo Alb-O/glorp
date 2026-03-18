@@ -24,7 +24,7 @@ pub use self::{
 
 pub type FontNameMap = Arc<[(cosmic_text::fontdb::ID, Arc<str>)]>;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct SceneConfig {
 	pub font_choice: FontChoice,
 	pub shaping: ShapingChoice,
@@ -41,7 +41,7 @@ impl SceneConfig {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DocumentLayout {
 	pub text: Arc<str>,
 	pub wrapping: WrapChoice,

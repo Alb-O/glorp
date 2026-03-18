@@ -1491,6 +1491,7 @@ dependencies = [
  "cosmic-text",
  "glorp_api",
  "iced",
+ "serde",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1500,6 +1501,7 @@ name = "glorp_gui"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "cosmic-text",
  "glorp_api",
  "glorp_editor",
  "glorp_runtime",

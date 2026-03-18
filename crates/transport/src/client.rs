@@ -1,10 +1,12 @@
 use {
-	crate::{TransportRequest, TransportResponse},
+	crate::{
+		GuiTransportRequest, GuiTransportResponse, ServerRequest, ServerResponse, TransportRequest, TransportResponse,
+	},
 	glorp_api::{
 		GlorpError, GlorpEvent, GlorpExec, GlorpHost, GlorpOutcome, GlorpQuery, GlorpQueryResult, GlorpStreamToken,
 		GlorpSubscription,
 	},
-	serde::de::DeserializeOwned,
+	serde::{Serialize, de::DeserializeOwned},
 	std::{
 		io::{BufRead, BufReader, Write},
 		os::unix::net::UnixStream,
@@ -36,9 +38,27 @@ pub fn socket_is_live(socket_path: &Path) -> bool {
 	}
 }
 
-pub fn transport_request<T>(socket_path: &Path, request: &TransportRequest) -> Result<T, GlorpError>
+pub fn transport_request(socket_path: &Path, request: &TransportRequest) -> Result<TransportResponse, GlorpError> {
+	let ServerResponse::Public(response) = request_response(socket_path, &ServerRequest::Public(request.clone()))?
+	else {
+		return Err(unexpected_response("public transport"));
+	};
+	Ok(response)
+}
+
+pub fn gui_transport_request(
+	socket_path: &Path, request: &GuiTransportRequest,
+) -> Result<GuiTransportResponse, GlorpError> {
+	let ServerResponse::Gui(response) = request_response(socket_path, &ServerRequest::Gui(request.clone()))? else {
+		return Err(unexpected_response("private gui transport"));
+	};
+	Ok(response)
+}
+
+fn request_response<Req, Resp>(socket_path: &Path, request: &Req) -> Result<Resp, GlorpError>
 where
-	T: DeserializeOwned, {
+	Req: Serialize,
+	Resp: DeserializeOwned, {
 	let mut stream = UnixStream::connect(socket_path)
 		.map_err(|error| GlorpError::transport(format!("failed to connect to {}: {error}", socket_path.display())))?;
 	let payload = serde_json::to_string(request)

@@ -1,6 +1,6 @@
 use std::{ops::Range, sync::Arc};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LayoutRun {
 	pub line_index: usize,
 	pub rtl: bool,
@@ -12,7 +12,7 @@ pub struct LayoutRun {
 	pub glyph_count: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LayoutCluster {
 	pub byte_range: Range<usize>,
 	pub glyph_count: usize,
@@ -31,7 +31,7 @@ impl LayoutCluster {
 	}
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct LayoutCaretMetrics {
 	pub run_index: usize,
 	pub x: f32,

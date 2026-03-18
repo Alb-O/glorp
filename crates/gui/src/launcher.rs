@@ -1,12 +1,21 @@
 use {
-	glorp_api::{GlorpError, GlorpHost, GlorpQuery, GlorpQueryResult},
-	glorp_runtime::{RuntimeHost, RuntimeOptions, default_runtime_paths},
+	cosmic_text::Buffer,
+	glorp_api::{EditorConfig, GlorpError, GlorpHost, GlorpQuery, GlorpQueryResult},
+	glorp_editor::{
+		EditorPresentation, EditorTextLayerState, SessionSnapshot, build_buffer, make_font_system, scene_config,
+	},
+	glorp_runtime::{
+		GuiCommand, GuiRuntimeFrame, GuiTransportFrame, RuntimeHost, RuntimeOptions, default_runtime_paths,
+	},
 	glorp_transport::{
-		IpcClient, IpcServerHandle, LocalClient, default_socket_path, socket_is_live, start_server_shared,
+		GuiTransportRequest, GuiTransportResponse, IpcClient, IpcServerHandle, default_socket_path,
+		gui_transport_request, socket_is_live, start_server_shared,
 	},
 	std::{
 		path::{Path, PathBuf},
 		sync::{Arc, Mutex},
+		thread,
+		time::{Duration, Instant},
 	},
 };
 
@@ -29,18 +38,31 @@ impl GuiLaunchOptions {
 
 pub struct GuiRuntimeSession {
 	socket_path: PathBuf,
-	host: Option<Arc<Mutex<RuntimeHost>>>,
 	server: Option<IpcServerHandle>,
 }
 
-#[derive(Clone)]
-pub enum GuiRuntimeClient {
-	Local(LocalClient),
-	Ipc(IpcClient),
+pub struct GuiRuntimeClient {
+	client: IpcClient,
+	socket_path: PathBuf,
+	text_layer: TextLayerCache,
+}
+
+#[derive(Default)]
+struct TextLayerCache {
+	key: Option<TextLayerKey>,
+	font_system: Option<cosmic_text::FontSystem>,
+	buffer: Option<Arc<Buffer>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct TextLayerKey {
+	document_text: String,
+	editor_config: EditorConfig,
+	layout_width_bits: u32,
 }
 
 impl GuiRuntimeSession {
-	pub fn start_owned(options: GuiLaunchOptions) -> Result<(Self, LocalClient), GlorpError> {
+	pub fn start_owned(options: GuiLaunchOptions) -> Result<(Self, GuiRuntimeClient), GlorpError> {
 		if socket_is_live(&options.socket_path) {
 			return Err(GlorpError::transport(format!(
 				"shared GUI socket already active at {}",
@@ -53,14 +75,15 @@ impl GuiRuntimeSession {
 		let host = Arc::new(Mutex::new(RuntimeHost::new(RuntimeOptions {
 			paths: default_runtime_paths(&options.repo_root),
 		})?));
-		let server = start_server_shared(options.socket_path.as_path(), Arc::clone(&host))?;
-		let mut client = LocalClient::shared(Arc::clone(&host));
+		let server = start_server_shared(options.socket_path.as_path(), host)?;
+		wait_for_socket(&options.socket_path)?;
+
+		let mut client = GuiRuntimeClient::new(options.socket_path.clone());
 		ensure_runtime_capabilities(&mut client, "unexpected capabilities response from GUI runtime")?;
 
 		Ok((
 			Self {
 				socket_path: options.socket_path,
-				host: Some(host),
 				server: Some(server),
 			},
 			client,
@@ -69,20 +92,18 @@ impl GuiRuntimeSession {
 
 	pub fn connect_or_start(options: GuiLaunchOptions) -> Result<(Self, GuiRuntimeClient), GlorpError> {
 		if !socket_is_live(&options.socket_path) {
-			let (session, client) = Self::start_owned(options)?;
-			return Ok((session, GuiRuntimeClient::Local(client)));
+			return Self::start_owned(options);
 		}
 
-		let mut client = IpcClient::new(options.socket_path.as_path());
+		let mut client = GuiRuntimeClient::new(options.socket_path.clone());
 		ensure_runtime_capabilities(&mut client, "unexpected capabilities response from shared GUI runtime")?;
 
 		Ok((
 			Self {
 				socket_path: options.socket_path,
-				host: None,
 				server: None,
 			},
-			GuiRuntimeClient::Ipc(client),
+			client,
 		))
 	}
 
@@ -92,21 +113,124 @@ impl GuiRuntimeSession {
 	}
 
 	#[must_use]
-	pub fn host(&self) -> Arc<Mutex<RuntimeHost>> {
-		Arc::clone(
-			self.host
-				.as_ref()
-				.expect("GUI runtime session does not own a local host"),
-		)
-	}
-
-	#[must_use]
 	pub const fn owns_server(&self) -> bool {
 		self.server.is_some()
 	}
 
 	pub fn shutdown(&mut self) -> Result<(), GlorpError> {
 		self.server.take().map_or(Ok(()), IpcServerHandle::shutdown)
+	}
+}
+
+impl GuiRuntimeClient {
+	#[must_use]
+	pub fn new(socket_path: impl Into<PathBuf>) -> Self {
+		let socket_path = socket_path.into();
+		Self {
+			client: IpcClient::new(socket_path.as_path()),
+			socket_path,
+			text_layer: TextLayerCache::default(),
+		}
+	}
+
+	pub fn execute_gui(&mut self, command: GuiCommand) -> Result<(), GlorpError> {
+		let GuiTransportResponse::ExecuteGui(result) =
+			gui_transport_request(&self.socket_path, &GuiTransportRequest::ExecuteGui(command))?
+		else {
+			return Err(GlorpError::transport("unexpected private gui execute response"));
+		};
+		result
+	}
+
+	pub fn gui_frame(&mut self) -> Result<GuiRuntimeFrame, GlorpError> {
+		let GuiTransportResponse::GuiFrame(result) =
+			gui_transport_request(&self.socket_path, &GuiTransportRequest::GuiFrame)?
+		else {
+			return Err(GlorpError::transport("unexpected private gui frame response"));
+		};
+		Ok(self.hydrate_frame((*result)?))
+	}
+
+	fn hydrate_frame(&mut self, frame: GuiTransportFrame) -> GuiRuntimeFrame {
+		let buffer = Arc::clone(self.text_layer.buffer(&frame));
+		let editor = frame.snapshot.editor;
+		let snapshot = SessionSnapshot {
+			editor: EditorPresentation::new(
+				editor.revision,
+				editor.viewport_metrics,
+				EditorTextLayerState {
+					buffer: Arc::downgrade(&buffer),
+					measured_height: editor.viewport_metrics.measured_height,
+				},
+				editor.editor,
+				editor.editor_bytes,
+				editor.undo_depth,
+				editor.redo_depth,
+			),
+			scene: frame.snapshot.scene,
+		};
+
+		GuiRuntimeFrame {
+			config: frame.config,
+			ui: frame.ui,
+			revisions: frame.revisions,
+			snapshot,
+			document_text: frame.document_text,
+		}
+	}
+}
+
+impl GlorpHost for GuiRuntimeClient {
+	fn execute(&mut self, exec: glorp_api::GlorpExec) -> Result<glorp_api::GlorpOutcome, GlorpError> {
+		self.client.execute(exec)
+	}
+
+	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
+		self.client.query(query)
+	}
+
+	fn subscribe(&mut self, request: glorp_api::GlorpSubscription) -> Result<glorp_api::GlorpStreamToken, GlorpError> {
+		self.client.subscribe(request)
+	}
+
+	fn next_event(&mut self, token: glorp_api::GlorpStreamToken) -> Result<Option<glorp_api::GlorpEvent>, GlorpError> {
+		self.client.next_event(token)
+	}
+
+	fn unsubscribe(&mut self, token: glorp_api::GlorpStreamToken) -> Result<(), GlorpError> {
+		self.client.unsubscribe(token)
+	}
+}
+
+impl TextLayerCache {
+	fn buffer(&mut self, frame: &GuiTransportFrame) -> &Arc<Buffer> {
+		let key = TextLayerKey {
+			document_text: frame.document_text.clone(),
+			editor_config: frame.config.editor.clone(),
+			layout_width_bits: frame.ui.layout_width.to_bits(),
+		};
+
+		if self.key.as_ref() != Some(&key) {
+			let font_system = self.font_system.get_or_insert_with(make_font_system);
+			let buffer = build_buffer(
+				font_system,
+				key.document_text.as_str(),
+				scene_config(
+					key.editor_config.font,
+					key.editor_config.shaping,
+					key.editor_config.wrapping,
+					key.editor_config.font_size,
+					key.editor_config.line_height,
+					frame.ui.layout_width,
+				),
+			);
+			self.buffer = Some(Arc::new(buffer));
+			self.key = Some(key);
+		}
+
+		self.buffer
+			.as_ref()
+			.expect("text layer cache should hold a buffer after hydration")
 	}
 }
 
@@ -126,35 +250,19 @@ fn ensure_runtime_capabilities(client: &mut impl GlorpHost, error: &'static str)
 	Ok(())
 }
 
-impl GuiRuntimeClient {
-	fn as_glorp_host(&mut self) -> &mut dyn GlorpHost {
-		match self {
-			Self::Local(client) => client,
-			Self::Ipc(client) => client,
+fn wait_for_socket(socket_path: &Path) -> Result<(), GlorpError> {
+	let deadline = Instant::now() + Duration::from_secs(5);
+	while Instant::now() < deadline {
+		if socket_is_live(socket_path) {
+			return Ok(());
 		}
-	}
-}
-
-impl GlorpHost for GuiRuntimeClient {
-	fn execute(&mut self, exec: glorp_api::GlorpExec) -> Result<glorp_api::GlorpOutcome, GlorpError> {
-		self.as_glorp_host().execute(exec)
+		thread::sleep(Duration::from_millis(10));
 	}
 
-	fn query(&mut self, query: GlorpQuery) -> Result<GlorpQueryResult, GlorpError> {
-		self.as_glorp_host().query(query)
-	}
-
-	fn subscribe(&mut self, request: glorp_api::GlorpSubscription) -> Result<glorp_api::GlorpStreamToken, GlorpError> {
-		self.as_glorp_host().subscribe(request)
-	}
-
-	fn next_event(&mut self, token: glorp_api::GlorpStreamToken) -> Result<Option<glorp_api::GlorpEvent>, GlorpError> {
-		self.as_glorp_host().next_event(token)
-	}
-
-	fn unsubscribe(&mut self, token: glorp_api::GlorpStreamToken) -> Result<(), GlorpError> {
-		self.as_glorp_host().unsubscribe(token)
-	}
+	Err(GlorpError::transport(format!(
+		"timed out waiting for GUI runtime at {}",
+		socket_path.display()
+	)))
 }
 
 impl Drop for GuiRuntimeSession {

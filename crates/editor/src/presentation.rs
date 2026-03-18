@@ -29,7 +29,7 @@ pub struct EditorPresentation {
 }
 
 /// Lazily-built scene snapshot used only by inspect/perf/debug consumers.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ScenePresentation {
 	/// Monotonic revision used by scene caches and invalidation.
 	pub revision: u64,

@@ -187,6 +187,13 @@ fn host_bin() -> PathBuf {
 	PathBuf::from(env!("CARGO_BIN_EXE_glorp_host"))
 }
 
+fn gui_options(harness: &Harness) -> GuiLaunchOptions {
+	GuiLaunchOptions {
+		repo_root: harness.root.clone(),
+		socket_path: default_socket_path(&harness.root),
+	}
+}
+
 fn set_host_bin() {
 	unsafe {
 		std::env::set_var("GLORP_HOST_BIN", host_bin());
@@ -369,10 +376,7 @@ fn private_viewport_resize_updates_public_editor_state() {
 #[test]
 fn gui_launcher_socket_contract_e2e() {
 	let mut harness = Harness::new();
-	let options = GuiLaunchOptions {
-		repo_root: harness.root.clone(),
-		socket_path: default_socket_path(&harness.root),
-	};
+	let options = gui_options(&harness);
 	let (mut launched, mut launched_client) =
 		GuiRuntimeSession::connect_or_start(options.clone()).expect("launcher should start runtime");
 	assert!(launched.owns_server());
@@ -390,6 +394,45 @@ fn gui_launcher_socket_contract_e2e() {
 		.execute(document_replace("attached"))
 		.expect("attached client should write");
 	assert_eq!(document_text(&mut harness.ipc_client()), "attached");
+}
+
+#[test]
+fn gui_private_state_survives_reconnect_e2e() {
+	let harness = Harness::new();
+	let options = gui_options(&harness);
+	let (mut owner, mut first) =
+		GuiRuntimeSession::connect_or_start(options.clone()).expect("first GUI session should start runtime");
+	assert!(owner.owns_server());
+
+	first
+		.execute_gui(GuiCommand::SidebarSelect(SidebarTab::Inspect))
+		.expect("sidebar update should succeed");
+	first
+		.execute_gui(GuiCommand::ShowBaselinesSet(true))
+		.expect("baseline toggle should succeed");
+	first
+		.execute_gui(GuiCommand::ViewportScrollTo { x: 0.0, y: 96.0 })
+		.expect("scroll update should succeed");
+	let first_frame = first.gui_frame().expect("first GUI frame should load");
+	assert_eq!(first_frame.ui.active_tab, SidebarTab::Inspect);
+	assert!(first_frame.ui.show_baselines);
+	assert!((first_frame.ui.canvas_scroll_y - 96.0).abs() <= f32::EPSILON);
+
+	let (attached, mut second) =
+		GuiRuntimeSession::connect_or_start(options).expect("second GUI session should attach");
+	assert!(!attached.owns_server());
+	let second_frame = second.gui_frame().expect("attached GUI frame should load");
+	assert_eq!(second_frame.ui.active_tab, SidebarTab::Inspect);
+	assert!(second_frame.ui.show_baselines);
+	assert!((second_frame.ui.canvas_scroll_y - 96.0).abs() <= f32::EPSILON);
+
+	second
+		.execute_gui(GuiCommand::ShowHitboxesSet(true))
+		.expect("attached GUI private update should succeed");
+	let updated_frame = first.gui_frame().expect("owner GUI frame should refresh");
+	assert!(updated_frame.ui.show_hitboxes);
+
+	owner.shutdown().expect("owner shutdown should succeed");
 }
 
 #[test]

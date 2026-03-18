@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct LayoutRect {
 	pub x: f32,
 	pub y: f32,
@@ -6,19 +6,19 @@ pub struct LayoutRect {
 	pub height: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum OverlaySpace {
 	Scene,
 	Viewport,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum OverlayLayer {
 	UnderText,
 	OverText,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum EditorOverlayTone {
 	Normal,
 	Insert,
@@ -33,7 +33,7 @@ impl From<crate::editor::EditorMode> for EditorOverlayTone {
 	}
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum OverlayRectKind {
 	EditorSelection,
 	EditorActive(EditorOverlayTone),
@@ -48,13 +48,13 @@ pub enum OverlayRectKind {
 	InspectGlyphHitboxSelected,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum OverlayLabelKind {
 	SceneFooter,
 	CanvasStatus,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct OverlayPrimitive {
 	pub rect: LayoutRect,
 	pub kind: OverlayRectKind,

@@ -19,13 +19,13 @@ use {
 		CanvasTarget, EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion,
 		EditorPointerIntent, EditorViewportMetrics, LayoutRect, sample_preset_text,
 	},
-	glorp_gui::{GuiLaunchOptions, GuiRuntimeSession},
-	glorp_runtime::{GuiCommand, GuiRuntimeFrame, RuntimeHost, SidebarTab},
+	glorp_gui::{GuiLaunchOptions, GuiRuntimeClient, GuiRuntimeSession},
+	glorp_runtime::{GuiCommand, GuiRuntimeFrame, SidebarTab},
 	iced::{
 		Element, Length, Size, Subscription, Theme, Vector,
 		widget::{container, pane_grid, responsive},
 	},
-	std::sync::{Arc, Mutex},
+	std::sync::Arc,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,7 +36,7 @@ enum ShellPane {
 
 pub struct RuntimeShell {
 	session: GuiRuntimeSession,
-	host: Arc<Mutex<RuntimeHost>>,
+	client: GuiRuntimeClient,
 	frame: GuiRuntimeFrame,
 	perf: PerfMonitor,
 	shell: pane_grid::State<ShellPane>,
@@ -45,17 +45,12 @@ pub struct RuntimeShell {
 
 impl RuntimeShell {
 	pub(crate) fn boot(options: GuiLaunchOptions) -> Self {
-		let (session, _client) = GuiRuntimeSession::start_owned(options).expect("GUI runtime should start");
-		let host = session.host();
-		let frame = {
-			let mut host = host
-				.lock()
-				.expect("GUI runtime lock should not be poisoned during boot");
-			host.gui_frame()
-		};
+		let (session, mut client) =
+			GuiRuntimeSession::connect_or_start(options).expect("GUI runtime should connect or start");
+		let frame = client.gui_frame().expect("GUI frame should load during boot");
 		let mut shell = Self {
 			session,
-			host,
+			client,
 			frame,
 			perf: PerfMonitor::default(),
 			shell: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
@@ -299,11 +294,11 @@ impl RuntimeShell {
 			}),
 			CanvasEvent::PointerSelectionStarted { target, intent } => {
 				let active_tab = self.frame.ui.active_tab;
-				self.mutate_host(|host| {
-					host.execute_gui(GuiCommand::CanvasFocusSet(true))?;
-					host.execute_gui(GuiCommand::InspectTargetSelect(inspect_target(active_tab, target)))?;
-					host.execute_gui(pointer_command(intent))
-				})
+				self.client.execute_gui(GuiCommand::CanvasFocusSet(true))?;
+				self.client
+					.execute_gui(GuiCommand::InspectTargetSelect(inspect_target(active_tab, target)))?;
+				self.client.execute_gui(pointer_command(intent))?;
+				self.refresh_frame()
 			}
 		}
 	}
@@ -316,52 +311,33 @@ impl RuntimeShell {
 	}
 
 	fn execute(&mut self, exec: GlorpExec) -> Result<(), GlorpError> {
-		self.mutate_host(|host| {
-			host.execute(exec)?;
-			Ok(())
-		})
+		self.client.execute(exec)?;
+		self.refresh_frame()
 	}
 
 	fn execute_gui(&mut self, command: GuiCommand) -> Result<(), GlorpError> {
-		self.mutate_host(|host| host.execute_gui(command))
+		self.client.execute_gui(command)?;
+		self.refresh_frame()
 	}
 
 	fn refresh_frame(&mut self) -> Result<(), GlorpError> {
 		self.perf.flush_canvas_metrics();
-		let mut frame = self.with_host(|host| {
-			let mut frame = host.gui_frame();
-			if scene_required(&frame) && frame.snapshot.scene.is_none() {
-				host.execute_gui(GuiCommand::SceneEnsure)?;
-				frame = host.gui_frame();
-			}
-			Ok(frame)
-		})?;
+		let mut frame = self.client.gui_frame()?;
+		if scene_required(&frame) && frame.snapshot.scene.is_none() {
+			self.client.execute_gui(GuiCommand::SceneEnsure)?;
+			frame = self.client.gui_frame()?;
+		}
 
 		if let Some(scroll) = reveal_scroll(&frame) {
-			frame = self.with_host(|host| {
-				host.execute_gui(GuiCommand::ViewportScrollTo {
-					x: scroll.x,
-					y: scroll.y,
-				})?;
-				Ok(host.gui_frame())
+			self.client.execute_gui(GuiCommand::ViewportScrollTo {
+				x: scroll.x,
+				y: scroll.y,
 			})?;
+			frame = self.client.gui_frame()?;
 		}
 
 		self.frame = frame;
 		Ok(())
-	}
-
-	fn mutate_host(&mut self, f: impl FnOnce(&mut RuntimeHost) -> Result<(), GlorpError>) -> Result<(), GlorpError> {
-		self.with_host(f)?;
-		self.refresh_frame()
-	}
-
-	fn with_host<T>(&self, f: impl FnOnce(&mut RuntimeHost) -> Result<T, GlorpError>) -> Result<T, GlorpError> {
-		let mut host = self
-			.host
-			.lock()
-			.map_err(|_| GlorpError::transport("GUI runtime lock poisoned"))?;
-		f(&mut host)
 	}
 }
 

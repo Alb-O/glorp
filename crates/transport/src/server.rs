@@ -1,5 +1,7 @@
 use {
-	crate::{TransportRequest, TransportResponse},
+	crate::{
+		GuiTransportRequest, GuiTransportResponse, ServerRequest, ServerResponse, TransportRequest, TransportResponse,
+	},
 	glorp_api::{GlorpError, GlorpHost},
 	glorp_runtime::RuntimeHost,
 	std::{
@@ -29,7 +31,7 @@ impl IpcServerHandle {
 
 	pub fn shutdown(mut self) -> Result<(), GlorpError> {
 		self.stop.store(true, Ordering::SeqCst);
-		let _ = super::transport_request::<TransportResponse>(&self.socket_path, &TransportRequest::Shutdown);
+		let _ = super::transport_request(&self.socket_path, &TransportRequest::Shutdown);
 		self.join()
 	}
 
@@ -108,7 +110,7 @@ fn handle_connection(
 	writeln!(stream, "{payload}").map_err(|error| GlorpError::transport(format!("failed to write response: {error}")))
 }
 
-fn read_request(stream: &UnixStream) -> Result<TransportRequest, GlorpError> {
+fn read_request(stream: &UnixStream) -> Result<ServerRequest, GlorpError> {
 	let mut line = String::new();
 	let mut reader = BufReader::new(stream);
 	reader
@@ -118,12 +120,21 @@ fn read_request(stream: &UnixStream) -> Result<TransportRequest, GlorpError> {
 }
 
 fn dispatch_request(
-	request: TransportRequest, host: &Arc<Mutex<RuntimeHost>>, stop: &Arc<AtomicBool>,
-) -> Result<TransportResponse, GlorpError> {
+	request: ServerRequest, host: &Arc<Mutex<RuntimeHost>>, stop: &Arc<AtomicBool>,
+) -> Result<ServerResponse, GlorpError> {
 	let mut host = host
 		.lock()
 		.map_err(|_| GlorpError::transport("runtime lock poisoned"))?;
 	Ok(match request {
+		ServerRequest::Public(request) => ServerResponse::Public(dispatch_public_request(request, &mut host, stop)),
+		ServerRequest::Gui(request) => ServerResponse::Gui(dispatch_gui_request(request, &mut host)),
+	})
+}
+
+fn dispatch_public_request(
+	request: TransportRequest, host: &mut RuntimeHost, stop: &Arc<AtomicBool>,
+) -> TransportResponse {
+	match request {
 		TransportRequest::Execute(command) => TransportResponse::Execute(host.execute(command)),
 		TransportRequest::Query(query) => TransportResponse::Query(Box::new(host.query(query))),
 		TransportRequest::Subscribe(request) => TransportResponse::Subscribe(host.subscribe(request)),
@@ -133,5 +144,12 @@ fn dispatch_request(
 			stop.store(true, Ordering::SeqCst);
 			TransportResponse::Shutdown(Ok(()))
 		}
-	})
+	}
+}
+
+fn dispatch_gui_request(request: GuiTransportRequest, host: &mut RuntimeHost) -> GuiTransportResponse {
+	match request {
+		GuiTransportRequest::ExecuteGui(command) => GuiTransportResponse::ExecuteGui(host.execute_gui(command)),
+		GuiTransportRequest::GuiFrame => GuiTransportResponse::GuiFrame(Box::new(Ok(host.gui_transport_frame()))),
+	}
 }

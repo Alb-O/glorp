@@ -33,7 +33,7 @@ use {
 	tracing::{debug, trace, trace_span, warn},
 };
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Default, PartialEq, Eq, Hash)]
 pub enum EditorMode {
 	#[default]
 	Normal,
@@ -49,7 +49,7 @@ impl Display for EditorMode {
 	}
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default, PartialEq)]
 pub struct EditorViewState {
 	pub mode: EditorMode,
 	pub selection: Option<Range<usize>>,
@@ -174,7 +174,7 @@ pub struct ApplyResult {
 	view_refreshed: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct EditorViewportMetrics {
 	pub wrapping: WrapChoice,
 	pub measured_width: f32,

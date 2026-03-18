@@ -43,7 +43,7 @@ pub struct DocumentSession {
 	font_system: cosmic_text::FontSystem,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct UiRuntimeState {
 	pub active_tab: SidebarTab,
 	pub hovered_target: Option<CanvasTarget>,

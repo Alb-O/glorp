@@ -1,7 +1,7 @@
 pub use glorp_api::{FontChoice, ShapingChoice, WrapChoice};
 use iced::Font;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
 pub enum CanvasTarget {
 	Run(usize),
 	Cluster(usize),
