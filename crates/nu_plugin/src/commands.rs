@@ -7,6 +7,7 @@ use {
 	glorp_transport::{IpcClient, default_socket_path, socket_is_live},
 	nu_plugin::{EvaluatedCall, PluginCommand},
 	nu_protocol::{Category, LabeledError, PipelineData, Record, Signature, Span, SyntaxShape, Type, Value},
+	nu_session_core::SessionRecord,
 	serde_json::Value as JsonValue,
 	std::{
 		path::{Path, PathBuf},
@@ -90,9 +91,11 @@ struct ResolvedSession {
 
 fn resolve_session(call: &EvaluatedCall) -> Result<ResolvedSession, LabeledError> {
 	if let Some(session) = call.get_flag::<Value>("session")? {
-		let socket = PathBuf::from(session_socket(&session)?);
-		let repo_root = session_repo_root(&session)?.map_or_else(repo_root_from_call, PathBuf::from);
-		return ensure_session(repo_root, socket);
+		let session = session_view(&session)?;
+		let record = session
+			.session_record()
+			.map_err(|error| LabeledError::new(format!("invalid session record: {error}")))?;
+		return ensure_session(session_repo_root(&record), PathBuf::from(&record.address.location));
 	}
 
 	if let Some(socket) = call.get_flag::<String>("socket")? {
@@ -170,35 +173,39 @@ fn repo_root_from_call() -> PathBuf {
 	std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
-fn session_socket(value: &Value) -> Result<&str, LabeledError> {
+fn session_view(value: &Value) -> Result<glorp_api::GlorpSessionView, LabeledError> {
 	let Value::Record { val, .. } = value else {
 		return Err(LabeledError::new(
 			"session flag must be a record returned by `glorp call session-attach`",
 		));
 	};
 
-	match val.get("socket") {
-		Some(Value::String { val, .. }) => Ok(val),
+	let socket = match val.get("socket") {
+		Some(Value::String { val, .. }) => Ok(val.clone()),
 		_ => Err(LabeledError::new(
 			"session record does not contain a string `socket` field",
 		)),
-	}
-}
-
-fn session_repo_root(value: &Value) -> Result<Option<&str>, LabeledError> {
-	let Value::Record { val, .. } = value else {
-		return Err(LabeledError::new(
-			"session flag must be a record returned by `glorp call session-attach`",
-		));
-	};
-
-	match val.get("repo_root") {
-		Some(Value::String { val, .. }) => Ok(Some(val)),
+	}?;
+	let repo_root = match val.get("repo_root") {
+		Some(Value::String { val, .. }) => Ok(Some(val.clone())),
 		Some(Value::Nothing { .. }) | None => Ok(None),
 		_ => Err(LabeledError::new(
 			"session record contains a non-string `repo_root` field",
 		)),
-	}
+	}?;
+
+	Ok(glorp_api::GlorpSessionView {
+		socket,
+		repo_root,
+		capabilities: glorp_api::GlorpCapabilities::default(),
+	})
+}
+
+fn session_repo_root(record: &SessionRecord) -> PathBuf {
+	record
+		.metadata
+		.get("repo_root")
+		.map_or_else(repo_root_from_call, PathBuf::from)
 }
 
 const fn value_pipeline(value: Value) -> PipelineData {
@@ -242,11 +249,12 @@ impl ClientCallDispatcher for PluginClientDispatcher<'_> {
 	fn session_attach(&mut self, _input: ()) -> Result<glorp_api::GlorpSessionView, GlorpError> {
 		let mut resolved = resolve_session(self.call).map_err(|error| GlorpError::transport(error.to_string()))?;
 		let capabilities = glorp_api::calls::Capabilities::call(&mut resolved.client, ())?;
-		Ok(glorp_api::GlorpSessionView {
+		let session = glorp_api::GlorpSessionView {
 			socket: resolved.socket.display().to_string(),
 			repo_root: Some(resolved.repo_root.display().to_string()),
 			capabilities,
-		})
+		};
+		glorp_api::GlorpSessionView::from_session_record(&session.session_record()?)
 	}
 
 	fn config_validate(&mut self, input: glorp_api::ConfigAssignment) -> Result<OkView, GlorpError> {

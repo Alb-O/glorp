@@ -1479,6 +1479,8 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 name = "glorp_api"
 version = "0.1.0"
 dependencies = [
+ "nu_session_core",
+ "nu_session_protocol_glorp",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1550,6 +1552,7 @@ dependencies = [
  "nu-plugin",
  "nu-plugin-test-support",
  "nu-protocol",
+ "nu_session_core",
  "serde_json",
 ]
 
@@ -2802,6 +2805,31 @@ dependencies = [
  "strip-ansi-escapes",
  "sys-locale",
  "unicase",
+]
+
+[[package]]
+name = "nu_session_core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "nu_session_protocol"
+version = "0.1.0"
+dependencies = [
+ "nu_session_core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "nu_session_protocol_glorp"
+version = "0.1.0"
+dependencies = [
+ "nu_session_core",
+ "nu_session_protocol",
+ "serde_json",
 ]
 
 [[package]]

@@ -13,6 +13,7 @@ glorp_api = { path = "../api" }
 glorp_transport = { path = "../transport" }
 nu-plugin.workspace = true
 nu-protocol.workspace = true
+nu_session_core = { path = "../../../nu_session/crates/core" }
 serde_json.workspace = true
 
 [dev-dependencies]

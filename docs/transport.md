@@ -8,6 +8,14 @@ Glorp ships two stable host access paths:
 IPC uses one-request/one-response JSON messages over a local Unix socket.
 The protocol carries the same command, query, and event types defined in `glorp_api`.
 
+The public `session-attach` surface stays Glorp-specific, but the resolved session
+metadata now round-trips through `nu_session` session records internally:
+
+- transport: `ipc`
+- protocol: `glorp-call`
+- address location: socket path
+- metadata: repo root when known
+
 The stable repo-local socket path is `glorp.sock` at the repo root. `glorp_gui`
 hosts or joins that socket, and the Nu/plugin surface auto-attaches to it when present.
 When no shared runtime is live, the plugin starts `glorp_host` for that repo root.

@@ -4,6 +4,8 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+nu_session_core = { path = "../../../nu_session/crates/core" }
+nu_session_protocol_glorp = { path = "../../../nu_session/crates/protocol_glorp" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
