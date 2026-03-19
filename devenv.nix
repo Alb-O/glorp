@@ -26,7 +26,7 @@ let
   };
 in
 {
-  imports = [ (inputs.ar_rust_env + "/devenv.nix") ];
+  imports = [ (inputs.ar_devenv_rust + "/devenv.nix") ];
 
   rustEnv.managedCargo.enable = true;
 
