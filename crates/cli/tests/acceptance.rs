@@ -316,6 +316,28 @@ fn gui_private_state_survives_reconnect_e2e() {
 }
 
 #[test]
+fn gui_owner_client_does_not_depend_on_socket_roundtrips() {
+	let harness = TestRepo::new("glorp-acceptance");
+	let options = gui_options(&harness);
+	let (mut owner, mut client) =
+		GuiRuntimeSession::connect_or_start(options).expect("owner GUI session should start runtime");
+	assert!(owner.owns_server());
+
+	std::fs::remove_file(owner.socket_path()).expect("socket path should be removable during the session");
+
+	client
+		.execute_gui(GuiCommand::SidebarSelect(SidebarTab::Inspect))
+		.expect("owned GUI state update should stay local");
+	let frame = client.gui_frame().expect("owned GUI frame should stay available");
+	assert_eq!(frame.ui.active_tab, SidebarTab::Inspect);
+
+	let _ = outcome(&mut client, document_replace("local-owned"));
+	assert_eq!(document_text(&mut client), "local-owned");
+
+	owner.shutdown().expect("owner shutdown should succeed");
+}
+
+#[test]
 fn editor_command_to_document_text_e2e() {
 	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let _ = outcome(&mut host, document_replace("abc"));

@@ -8,7 +8,7 @@ use {
 		GuiCommand, GuiRuntimeFrame, GuiTransportFrame, RuntimeHost, RuntimeOptions, default_runtime_paths,
 	},
 	glorp_transport::{
-		GuiTransportRequest, GuiTransportResponse, IpcClient, IpcServerHandle, default_socket_path,
+		GuiTransportRequest, GuiTransportResponse, IpcClient, IpcServerHandle, LocalClient, default_socket_path,
 		ensure_socket_parent, gui_transport_request, socket_is_live, start_server_shared, wait_for_socket,
 	},
 	std::{
@@ -40,9 +40,15 @@ pub struct GuiRuntimeSession {
 }
 
 pub struct GuiRuntimeClient {
-	client: IpcClient,
+	client: RuntimeClient,
 	socket_path: PathBuf,
 	text_layer: TextLayerCache,
+}
+
+#[derive(Clone)]
+enum RuntimeClient {
+	Ipc(IpcClient),
+	Local(LocalClient),
 }
 
 #[derive(Default)]
@@ -73,10 +79,10 @@ impl GuiRuntimeSession {
 		let host = Arc::new(Mutex::new(RuntimeHost::new(RuntimeOptions {
 			paths: default_runtime_paths(&options.repo_root),
 		})?));
-		let server = start_server_shared(options.socket_path.as_path(), host)?;
+		let server = start_server_shared(options.socket_path.as_path(), Arc::clone(&host))?;
 		wait_for_socket(&options.socket_path)?;
 
-		let mut client = GuiRuntimeClient::new(options.socket_path.clone());
+		let mut client = GuiRuntimeClient::new_local(options.socket_path.clone(), Arc::clone(&host));
 		ensure_runtime_capabilities(&mut client, "unexpected capabilities response from GUI runtime")?;
 
 		Ok((
@@ -93,7 +99,7 @@ impl GuiRuntimeSession {
 			return Self::start_owned(options);
 		}
 
-		let mut client = GuiRuntimeClient::new(options.socket_path.clone());
+		let mut client = GuiRuntimeClient::new_ipc(options.socket_path.clone());
 		ensure_runtime_capabilities(&mut client, "unexpected capabilities response from shared GUI runtime")?;
 
 		Ok((
@@ -122,31 +128,50 @@ impl GuiRuntimeSession {
 
 impl GuiRuntimeClient {
 	#[must_use]
-	pub fn new(socket_path: impl Into<PathBuf>) -> Self {
+	pub fn new_ipc(socket_path: impl Into<PathBuf>) -> Self {
 		let socket_path = socket_path.into();
 		Self {
-			client: IpcClient::new(socket_path.as_path()),
+			client: RuntimeClient::Ipc(IpcClient::new(socket_path.as_path())),
 			socket_path,
 			text_layer: TextLayerCache::default(),
 		}
 	}
 
+	#[must_use]
+	pub fn new_local(socket_path: impl Into<PathBuf>, host: Arc<Mutex<RuntimeHost>>) -> Self {
+		Self {
+			client: RuntimeClient::Local(LocalClient::shared(host)),
+			socket_path: socket_path.into(),
+			text_layer: TextLayerCache::default(),
+		}
+	}
+
 	pub fn execute_gui(&mut self, command: GuiCommand) -> Result<(), GlorpError> {
-		let GuiTransportResponse::ExecuteGui(result) =
-			gui_transport_request(&self.socket_path, GuiTransportRequest::ExecuteGui(command))?
-		else {
-			return Err(GlorpError::transport("unexpected private gui execute response"));
-		};
-		result
+		match &self.client {
+			RuntimeClient::Ipc(_) => {
+				let GuiTransportResponse::ExecuteGui(result) =
+					gui_transport_request(&self.socket_path, GuiTransportRequest::ExecuteGui(command))?
+				else {
+					return Err(GlorpError::transport("unexpected private gui execute response"));
+				};
+				result
+			}
+			RuntimeClient::Local(client) => with_local_runtime(client, |host| host.execute_gui(command)),
+		}
 	}
 
 	pub fn gui_frame(&mut self) -> Result<GuiRuntimeFrame, GlorpError> {
-		let GuiTransportResponse::GuiFrame(result) =
-			gui_transport_request(&self.socket_path, GuiTransportRequest::GuiFrame)?
-		else {
-			return Err(GlorpError::transport("unexpected private gui frame response"));
-		};
-		Ok(self.hydrate_frame((*result)?))
+		match &self.client {
+			RuntimeClient::Ipc(_) => {
+				let GuiTransportResponse::GuiFrame(result) =
+					gui_transport_request(&self.socket_path, GuiTransportRequest::GuiFrame)?
+				else {
+					return Err(GlorpError::transport("unexpected private gui frame response"));
+				};
+				Ok(self.hydrate_frame((*result)?))
+			}
+			RuntimeClient::Local(client) => with_local_runtime(client, |host| Ok(host.gui_frame())),
+		}
 	}
 
 	fn hydrate_frame(&mut self, frame: GuiTransportFrame) -> GuiRuntimeFrame {
@@ -180,8 +205,21 @@ impl GuiRuntimeClient {
 
 impl GlorpCaller for GuiRuntimeClient {
 	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
-		self.client.call(call)
+		match &mut self.client {
+			RuntimeClient::Ipc(client) => client.call(call),
+			RuntimeClient::Local(client) => client.call(call),
+		}
 	}
+}
+
+fn with_local_runtime<T>(
+	client: &LocalClient, f: impl FnOnce(&mut RuntimeHost) -> Result<T, GlorpError>,
+) -> Result<T, GlorpError> {
+	let host = client.host();
+	let mut host = host
+		.lock()
+		.map_err(|_| GlorpError::transport("local runtime lock poisoned"))?;
+	f(&mut host)
 }
 
 impl TextLayerCache {
