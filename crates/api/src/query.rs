@@ -1,7 +1,9 @@
 use {
 	crate::{EditorMode, GlorpError, GlorpRevisions, LayoutRectView, WrapChoice},
-	nu_session_core::{CapabilitySet, SessionAddress, SessionError, SessionId, SessionRecord},
-	nu_session_protocol_glorp::PROTOCOL_NAME,
+	nu_session_core::{CapabilitySet, SessionError, SessionRecord},
+	nu_session_protocol_glorp::{
+		PROTOCOL_NAME, repo_root as session_repo_root, session_record as glorp_session_record,
+	},
 };
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -66,21 +68,12 @@ pub struct GlorpSessionView {
 
 impl GlorpSessionView {
 	pub fn session_record(&self) -> Result<SessionRecord, GlorpError> {
-		let mut record = SessionRecord::new(
-			SessionId::new(self.socket.clone()).map_err(session_error)?,
-			SessionAddress::new("ipc", self.socket.clone()).map_err(session_error)?,
-			PROTOCOL_NAME,
+		glorp_session_record(
+			&self.socket,
+			self.repo_root.as_deref(),
+			Some(&self.capabilities.capability_set().map_err(session_error)?),
 		)
-		.map_err(session_error)?;
-		record
-			.capabilities
-			.merge(&self.capabilities.capability_set().map_err(session_error)?);
-		if let Some(repo_root) = &self.repo_root {
-			let _ = record
-				.insert_metadata("repo_root", repo_root.clone())
-				.map_err(session_error)?;
-		}
-		Ok(record)
+		.map_err(session_error)
 	}
 
 	pub fn from_session_record(record: &SessionRecord) -> Result<Self, GlorpError> {
@@ -88,7 +81,7 @@ impl GlorpSessionView {
 		record.require_protocol(PROTOCOL_NAME).map_err(session_error)?;
 		Ok(Self {
 			socket: record.address.location.clone(),
-			repo_root: record.metadata.get("repo_root").cloned(),
+			repo_root: session_repo_root(record).map(str::to_owned),
 			capabilities: GlorpCapabilities::from_capability_set(&record.capabilities),
 		})
 	}

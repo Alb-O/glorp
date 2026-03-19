@@ -2,7 +2,7 @@ use {
 	clap::{Parser, Subcommand},
 	glorp_api::GlorpError,
 	glorp_runtime::{RuntimeHost, RuntimeOptions, default_runtime_paths},
-	glorp_transport::{default_socket_path, start_server},
+	glorp_transport::{default_socket_path, ensure_socket_parent, start_server},
 	std::{path::PathBuf, process::ExitCode},
 };
 
@@ -34,16 +34,9 @@ fn run() -> Result<(), GlorpError> {
 }
 
 fn serve(paths: glorp_runtime::ConfigStorePaths, socket_path: PathBuf) -> Result<(), GlorpError> {
-	ensure_parent(&socket_path, "socket parent")?;
+	ensure_socket_parent(&socket_path)?;
 	let host = RuntimeHost::new(RuntimeOptions { paths })?;
 	start_server(socket_path, host)?.wait()
-}
-
-fn ensure_parent(path: &std::path::Path, label: &str) -> Result<(), GlorpError> {
-	path.parent().map_or(Ok(()), |parent| {
-		std::fs::create_dir_all(parent)
-			.map_err(|error| GlorpError::transport(format!("failed to create {label} {}: {error}", parent.display())))
-	})
 }
 
 #[derive(Debug, Parser)]

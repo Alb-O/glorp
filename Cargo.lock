@@ -1585,6 +1585,8 @@ version = "0.1.0"
 dependencies = [
  "glorp_api",
  "glorp_runtime",
+ "nu_session_ipc",
+ "nu_session_protocol_glorp",
  "serde",
  "serde_json",
 ]
@@ -2815,6 +2817,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "nu_session_ipc"
+version = "0.1.0"
+dependencies = [
+ "nu_session_core",
+ "nu_session_transport",
+]
+
+[[package]]
 name = "nu_session_protocol"
 version = "0.1.0"
 dependencies = [
@@ -2828,8 +2838,17 @@ name = "nu_session_protocol_glorp"
 version = "0.1.0"
 dependencies = [
  "nu_session_core",
+ "nu_session_ipc",
  "nu_session_protocol",
  "serde_json",
+]
+
+[[package]]
+name = "nu_session_transport"
+version = "0.1.0"
+dependencies = [
+ "nu_session_core",
+ "serde",
 ]
 
 [[package]]

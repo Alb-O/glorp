@@ -9,13 +9,11 @@ use {
 	},
 	glorp_transport::{
 		GuiTransportRequest, GuiTransportResponse, IpcClient, IpcServerHandle, default_socket_path,
-		gui_transport_request, socket_is_live, start_server_shared,
+		ensure_socket_parent, gui_transport_request, socket_is_live, start_server_shared, wait_for_socket,
 	},
 	std::{
 		path::{Path, PathBuf},
 		sync::{Arc, Mutex},
-		thread,
-		time::{Duration, Instant},
 	},
 };
 
@@ -218,33 +216,10 @@ impl TextLayerCache {
 	}
 }
 
-fn ensure_socket_parent(socket_path: &Path) -> Result<(), GlorpError> {
-	socket_path.parent().map_or(Ok(()), |parent| {
-		std::fs::create_dir_all(parent).map_err(|error| {
-			GlorpError::transport(format!("failed to create socket parent {}: {error}", parent.display()))
-		})
-	})
-}
-
 fn ensure_runtime_capabilities(client: &mut impl GlorpCaller, error: &'static str) -> Result<(), GlorpError> {
 	glorp_api::calls::Capabilities::call(client, ())
 		.map(|_| ())
 		.map_err(|_| GlorpError::transport(error))
-}
-
-fn wait_for_socket(socket_path: &Path) -> Result<(), GlorpError> {
-	let deadline = Instant::now() + Duration::from_secs(5);
-	while Instant::now() < deadline {
-		if socket_is_live(socket_path) {
-			return Ok(());
-		}
-		thread::sleep(Duration::from_millis(10));
-	}
-
-	Err(GlorpError::transport(format!(
-		"timed out waiting for GUI runtime at {}",
-		socket_path.display()
-	)))
 }
 
 impl Drop for GuiRuntimeSession {

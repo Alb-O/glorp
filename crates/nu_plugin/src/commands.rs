@@ -12,8 +12,6 @@ use {
 	std::{
 		path::{Path, PathBuf},
 		process::{Command, Stdio},
-		thread,
-		time::{Duration, Instant},
 	},
 };
 
@@ -155,18 +153,7 @@ fn host_binary_path() -> PathBuf {
 }
 
 fn wait_for_socket(socket: &Path) -> Result<(), LabeledError> {
-	let deadline = Instant::now() + Duration::from_secs(5);
-	while Instant::now() < deadline {
-		if socket_is_live(socket) {
-			return Ok(());
-		}
-		thread::sleep(Duration::from_millis(25));
-	}
-
-	Err(LabeledError::new(format!(
-		"timed out waiting for live runtime at {}",
-		socket.display()
-	)))
+	glorp_transport::wait_for_socket(socket).map_err(to_labeled_error)
 }
 
 fn repo_root_from_call() -> PathBuf {
