@@ -150,7 +150,7 @@ glorp/
       src/canvas.rs
       src/theme.rs
 
-    nu-plugin/
+    nu_plugin/
       src/lib.rs
       src/main.rs
       src/plugin.rs

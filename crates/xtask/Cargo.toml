@@ -5,5 +5,5 @@ edition.workspace = true
 
 [dependencies]
 clap.workspace = true
-glorp_api_codegen = { path = "../api-codegen" }
+glorp_api_codegen = { path = "../api_codegen" }
 glorp_runtime = { path = "../runtime" }

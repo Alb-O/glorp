@@ -89,7 +89,7 @@ impl Drop for TestRepo {
 pub fn workspace_root() -> PathBuf {
 	PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 		.parent()
-		.expect("test-support crate should have a parent")
+		.expect("test_support crate should have a parent")
 		.parent()
 		.expect("repo root should exist")
 		.to_path_buf()
