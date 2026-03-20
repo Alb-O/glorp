@@ -12,7 +12,7 @@ The public `session-attach` surface stays Glorp-specific, but the resolved sessi
 metadata now round-trips through `nu_session` session records internally:
 
 - transport: `ipc`
-- protocol: `glorp-call`
+- protocol: `semantic-call`
 - address location: socket path
 - metadata: repo root when known
 

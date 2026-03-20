@@ -22,7 +22,7 @@ pub use self::{
 };
 
 pub fn default_socket_path(repo_root: impl AsRef<Path>) -> PathBuf {
-	nu_session_protocol_glorp::default_socket_path(repo_root)
+	repo_root.as_ref().join("glorp.sock")
 }
 
 pub fn ensure_socket_parent(socket_path: &Path) -> Result<(), GlorpError> {

@@ -1516,7 +1516,7 @@ name = "glorp_api"
 version = "0.1.0"
 dependencies = [
  "nu_session_core",
- "nu_session_protocol_glorp",
+ "nu_session_protocol_semantic",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -1626,7 +1626,6 @@ dependencies = [
  "glorp_editor",
  "glorp_runtime",
  "nu_session_ipc",
- "nu_session_protocol_glorp",
  "postcard",
  "serde",
  "serde_json",
@@ -2898,11 +2897,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "nu_session_protocol_glorp"
+name = "nu_session_protocol_semantic"
 version = "0.1.0"
 dependencies = [
  "nu_session_core",
- "nu_session_ipc",
  "nu_session_protocol",
  "serde_json",
 ]
