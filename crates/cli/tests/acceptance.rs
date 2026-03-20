@@ -219,7 +219,18 @@ fn scene_fetch_does_not_emit_public_events() {
 	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let token = subscribe_changes(&mut host);
 
-	let scene = host.gui_scene_fetch();
+	let scene = match host.gui_scene_fetch(glorp_runtime::GuiSceneFetchRequest {
+		layout: glorp_runtime::GuiLayoutRequest { layout_width: 540.0 },
+		scene_revision: 0,
+	}) {
+		glorp_runtime::GuiSceneFetchResponse::NotModified => panic!("scene fetch should materialize a payload"),
+		glorp_runtime::GuiSceneFetchResponse::Payload(_) => {
+			host.gui_scene_payload_at(glorp_runtime::GuiSceneFetchRequest {
+				layout: glorp_runtime::GuiLayoutRequest { layout_width: 540.0 },
+				scene_revision: 0,
+			})
+		}
+	};
 
 	assert!(scene.layout.measured_height > 0.0);
 	assert!(next_event(&mut host, token).is_none());
@@ -370,6 +381,57 @@ fn attached_gui_receives_pushed_document_delta_e2e() {
 	);
 	assert_eq!(pushed.undo_depth, document_state(&mut primary).undo_depth);
 	assert!(pushed.scene_summary.revision > 0);
+	owner.shutdown().expect("owner shutdown should succeed");
+}
+
+#[test]
+fn attached_gui_receives_large_document_sync_e2e() {
+	let harness = TestRepo::new("glorp-acceptance");
+	let options = gui_options(&harness);
+	let (mut owner, mut primary) =
+		GuiRuntimeSession::connect_or_start(options.clone()).expect("owner GUI session should start runtime");
+	assert!(owner.owns_server());
+	let _ = primary.gui_frame().expect("primary GUI frame should load");
+
+	let (attached, mut secondary) =
+		GuiRuntimeSession::connect_or_start(options).expect("attached GUI session should connect");
+	assert!(!attached.owns_server());
+	let _ = secondary.gui_frame().expect("secondary GUI frame should load");
+	assert!(secondary.drain_events().is_empty());
+
+	let large = "attached sync line\n".repeat(800);
+	let _ = outcome(&mut primary, document_replace(&large));
+
+	let pushed = (0..20)
+		.find_map(|_| {
+			let event = secondary.drain_events().into_iter().find_map(|message| match message {
+				glorp_runtime::GuiSessionHostMessage::Changed(delta) => Some(delta),
+				_ => None,
+			});
+			if event.is_none() {
+				std::thread::sleep(std::time::Duration::from_millis(10));
+			}
+			event
+		})
+		.expect("attached GUI should receive a pushed sync delta");
+
+	assert!(pushed.outcome.document_edit.is_none());
+	let document_sync = pushed
+		.document_sync
+		.expect("large pushed change should arrive as a document sync");
+	assert_eq!(document_sync.revision, document_state(&mut primary).revisions.editor);
+	assert!(document_sync.bytes > glorp_runtime::LARGE_PAYLOAD_BYTES);
+
+	let (response, bytes) = secondary
+		.document_fetch(document_sync.revision)
+		.expect("attached GUI should fetch the synced document");
+	assert_eq!(response.revision, document_sync.revision);
+	assert_eq!(response.bytes, bytes.len());
+	assert_eq!(
+		String::from_utf8(bytes).expect("document payload should be valid UTF-8"),
+		large,
+	);
+
 	owner.shutdown().expect("owner shutdown should succeed");
 }
 

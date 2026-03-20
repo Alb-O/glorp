@@ -563,6 +563,8 @@ impl_named_record_schema!(crate::StreamTokenInput, "StreamTokenInput", "Subscrip
 impl_named_record_schema!(crate::GlorpCapabilities, "GlorpCapabilities", "Stable runtime capability flags.", {
 	"transactions" => bool: "Whether transactions are supported.",
 	"subscriptions" => bool: "Whether subscriptions are supported.",
+	"streaming" => bool: "Whether persistent streaming transport is supported.",
+	"binary_payloads" => bool: "Whether binary payload replies are supported.",
 	"transports" => Vec<String>: "Supported transport names.",
 });
 impl_named_record_schema!(crate::DocumentStateView, "DocumentStateView", "Stable shared document state view.", {

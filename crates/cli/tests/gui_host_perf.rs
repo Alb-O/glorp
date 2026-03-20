@@ -34,10 +34,11 @@ fn gui_host_perf_report() {
 			run_edit_only(transport, warmup, samples),
 			run_edit_with_frame_refresh(transport, warmup, samples),
 			run_scene_fetch_cold(transport, warmup, samples),
-			run_scene_fetch_warm(transport, warmup, samples),
+			run_scene_fetch_not_modified(transport, warmup, samples),
 		];
 		if matches!(transport, TransportKind::AttachedIpc) {
-			reports.push(run_push_propagation(warmup, samples));
+			reports.push(run_push_propagation_large_invalidate(warmup, samples));
+			reports.push(run_document_fetch_large(warmup, samples));
 		}
 		for report in reports {
 			report.print();
@@ -251,51 +252,66 @@ fn run_scene_fetch_cold(transport: TransportKind, warmup: usize, samples: usize)
 
 	for step in 0..warmup {
 		invalidate_scene(&mut harness.client, if step % 2 == 0 { &doc_a } else { &doc_b });
-		let _ = harness.client.scene_fetch().expect("warmup scene fetch should succeed");
+		let _ = harness
+			.client
+			.scene_fetch(0)
+			.expect("warmup scene fetch should succeed");
 	}
 
 	let mut results = Vec::with_capacity(samples);
 	for step in 0..samples {
 		invalidate_scene(&mut harness.client, if step % 2 == 0 { &doc_a } else { &doc_b });
 		results.push(measure(|| {
-			let _ = harness.client.scene_fetch().expect("scene fetch should succeed");
+			let _ = harness.client.scene_fetch(0).expect("scene fetch should succeed");
 		}));
 	}
 
 	ScenarioReport {
-		name: "scene-fetch-cold",
+		name: "scene-fetch-cold-binary",
 		transport,
 		samples: results,
 	}
 }
 
-fn run_scene_fetch_warm(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
+fn run_scene_fetch_not_modified(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
 	let mut harness = PerfHarness::new(transport);
 	harness.seed_document(&large_document());
 	let _ = harness
 		.client
-		.scene_fetch()
+		.scene_fetch(0)
 		.expect("initial scene fetch should succeed");
+	let revision = harness
+		.client
+		.gui_frame()
+		.expect("scene frame should load")
+		.scene_summary
+		.revision;
 
 	for _ in 0..warmup {
-		let _ = harness.client.scene_fetch().expect("warmup scene fetch should succeed");
+		let _ = harness
+			.client
+			.scene_fetch(revision)
+			.expect("warmup scene fetch should succeed");
 	}
 
 	let mut results = Vec::with_capacity(samples);
 	for _ in 0..samples {
 		results.push(measure(|| {
-			let _ = harness.client.scene_fetch().expect("scene fetch should succeed");
+			let _ = harness
+				.client
+				.scene_fetch(revision)
+				.expect("scene fetch should succeed");
 		}));
 	}
 
 	ScenarioReport {
-		name: "scene-fetch-warm",
+		name: "scene-fetch-not-modified",
 		transport,
 		samples: results,
 	}
 }
 
-fn run_push_propagation(warmup: usize, samples: usize) -> ScenarioReport {
+fn run_push_propagation_large_invalidate(warmup: usize, samples: usize) -> ScenarioReport {
 	let mut harness = PerfHarness::new(TransportKind::AttachedIpc);
 	let doc_a = large_document();
 	let doc_b = alternate_document();
@@ -338,7 +354,48 @@ fn run_push_propagation(warmup: usize, samples: usize) -> ScenarioReport {
 	}
 
 	ScenarioReport {
-		name: "push-propagation",
+		name: "push-propagation-large-invalidate",
+		transport: TransportKind::AttachedIpc,
+		samples: results,
+	}
+}
+
+fn run_document_fetch_large(warmup: usize, samples: usize) -> ScenarioReport {
+	let mut harness = PerfHarness::new(TransportKind::AttachedIpc);
+	let doc_a = large_document();
+	let doc_b = alternate_document();
+	let (owner, client) = {
+		let PerfHarness {
+			owner_client, client, ..
+		} = &mut harness;
+		(
+			owner_client
+				.as_mut()
+				.expect("attached transport should keep an owner client"),
+			client,
+		)
+	};
+	let _ = client.gui_frame().expect("attached frame should load");
+
+	for step in 0..warmup {
+		let text = if step % 2 == 0 { doc_a.clone() } else { doc_b.clone() };
+		let revision = replace_and_fetch_large(owner, client, text);
+		let _ = client
+			.document_fetch(revision)
+			.expect("warmup document fetch should succeed");
+	}
+
+	let mut results = Vec::with_capacity(samples);
+	for step in 0..samples {
+		let text = if step % 2 == 0 { doc_a.clone() } else { doc_b.clone() };
+		let revision = replace_and_fetch_large(owner, client, text);
+		results.push(measure(|| {
+			let _ = client.document_fetch(revision).expect("document fetch should succeed");
+		}));
+	}
+
+	ScenarioReport {
+		name: "document-fetch-large",
 		transport: TransportKind::AttachedIpc,
 		samples: results,
 	}
@@ -376,6 +433,16 @@ fn wait_for_pushed_delta(client: &mut GuiRuntimeClient) -> Option<glorp_runtime:
 		std::thread::sleep(Duration::from_millis(1));
 	}
 	None
+}
+
+fn replace_and_fetch_large(owner: &mut GuiRuntimeClient, client: &mut GuiRuntimeClient, text: String) -> u64 {
+	let _ =
+		glorp_api::calls::DocumentReplace::call(owner, TextInput { text }).expect("document replace should succeed");
+	wait_for_pushed_delta(client)
+		.expect("pushed delta should arrive")
+		.document_sync
+		.expect("large document replace should produce a document sync")
+		.revision
 }
 
 fn insert_context(selection_head: u64) -> EditorContextView {

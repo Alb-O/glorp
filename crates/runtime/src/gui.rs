@@ -1,7 +1,6 @@
-use {
-	glorp_api::{EditorContextView, EditorHistoryCommand, GlorpConfig, GlorpOutcome, GlorpRevisions},
-	glorp_editor::ScenePresentation,
-};
+use glorp_api::{EditorContextView, EditorHistoryCommand, GlorpConfig, GlorpOutcome, GlorpRevisions};
+
+pub const LARGE_PAYLOAD_BYTES: usize = 4096;
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq, Hash)]
 pub enum SidebarTab {
@@ -39,11 +38,62 @@ pub struct GuiEditResponse {
 	pub undo_depth: usize,
 	pub redo_depth: usize,
 	pub scene_summary: GuiSceneSummary,
+	pub document_sync: Option<GuiDocumentSyncRef>,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct GuiSceneSummary {
 	pub revision: u64,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub enum GuiDocumentSyncReason {
+	Bootstrap,
+	LargeEdit,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct GuiDocumentSyncRef {
+	pub revision: u64,
+	pub bytes: usize,
+	pub reason: GuiDocumentSyncReason,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub enum GuiPayloadCodec {
+	Utf8,
+	Postcard,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct GuiSceneFetchRef {
+	pub scene_revision: u64,
+	pub layout_width: f32,
+	pub bytes: usize,
+	pub codec: GuiPayloadCodec,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct GuiDocumentFetchRequest {
+	pub revision: u64,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct GuiDocumentFetchResponse {
+	pub revision: u64,
+	pub bytes: usize,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct GuiSceneFetchRequest {
+	pub layout: GuiLayoutRequest,
+	pub scene_revision: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub enum GuiSceneFetchResponse {
+	NotModified,
+	Payload(GuiSceneFetchRef),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -53,6 +103,7 @@ pub struct GuiSharedDelta {
 	pub redo_depth: usize,
 	pub config: Option<GlorpConfig>,
 	pub scene_summary: GuiSceneSummary,
+	pub document_sync: Option<GuiDocumentSyncRef>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -60,7 +111,8 @@ pub enum GuiSessionRequest {
 	Call(glorp_api::GlorpCall),
 	Edit(GuiEditRequest),
 	GuiFrame(GuiLayoutRequest),
-	SceneFetch(GuiLayoutRequest),
+	DocumentFetch(GuiDocumentFetchRequest),
+	SceneFetch(GuiSceneFetchRequest),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -68,7 +120,8 @@ pub enum GuiSessionResponse {
 	Call(Result<glorp_api::GlorpCallResult, glorp_api::GlorpError>),
 	Edit(Result<GuiEditResponse, glorp_api::GlorpError>),
 	GuiFrame(Result<GuiRuntimeFrame, glorp_api::GlorpError>),
-	SceneFetch(Result<ScenePresentation, glorp_api::GlorpError>),
+	DocumentFetch(Result<GuiDocumentFetchResponse, glorp_api::GlorpError>),
+	SceneFetch(Result<GuiSceneFetchResponse, glorp_api::GlorpError>),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -89,8 +142,9 @@ pub struct GuiRuntimeFrame {
 	pub config: GlorpConfig,
 	pub layout_width: f32,
 	pub revisions: GlorpRevisions,
-	pub document_text: String,
+	pub document_text: Option<String>,
 	pub undo_depth: usize,
 	pub redo_depth: usize,
 	pub scene_summary: GuiSceneSummary,
+	pub document_sync: Option<GuiDocumentSyncRef>,
 }

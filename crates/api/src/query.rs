@@ -10,6 +10,8 @@ use {
 pub struct GlorpCapabilities {
 	pub transactions: bool,
 	pub subscriptions: bool,
+	pub streaming: bool,
+	pub binary_payloads: bool,
 	pub transports: Vec<String>,
 }
 
@@ -23,6 +25,12 @@ impl GlorpCapabilities {
 		if self.subscriptions {
 			let _ = capabilities.add_feature("subscriptions")?;
 		}
+		if self.streaming {
+			let _ = capabilities.add_feature("streaming")?;
+		}
+		if self.binary_payloads {
+			let _ = capabilities.add_feature("binary-payloads")?;
+		}
 		Ok(capabilities)
 	}
 
@@ -31,6 +39,8 @@ impl GlorpCapabilities {
 		Self {
 			transactions: capabilities.supports_feature("transactions"),
 			subscriptions: capabilities.supports_feature("subscriptions"),
+			streaming: capabilities.supports_feature("streaming"),
+			binary_payloads: capabilities.supports_feature("binary-payloads"),
 			transports: capabilities.transports().into_iter().map(str::to_owned).collect(),
 		}
 	}
@@ -95,6 +105,8 @@ mod tests {
 			capabilities: GlorpCapabilities {
 				transactions: true,
 				subscriptions: true,
+				streaming: true,
+				binary_payloads: true,
 				transports: vec!["ipc".to_owned()],
 			},
 		};
@@ -104,6 +116,8 @@ mod tests {
 		assert_eq!(record.protocol, PROTOCOL_NAME);
 		assert!(record.supports_feature("transactions"));
 		assert!(record.supports_feature("subscriptions"));
+		assert!(record.supports_feature("streaming"));
+		assert!(record.supports_feature("binary-payloads"));
 		assert_eq!(record.metadata.get("repo_root"), Some(&"/tmp/repo".to_owned()));
 
 		let round_trip = GlorpSessionView::from_session_record(&record).expect("round trip");

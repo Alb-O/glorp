@@ -1,6 +1,6 @@
 use {
 	crate::{
-		GuiEditCommand, GuiEditRequest, GuiEditResponse, project,
+		GuiDocumentSyncReason, GuiDocumentSyncRef, GuiEditCommand, GuiEditRequest, GuiEditResponse, project,
 		runtime::GlorpRuntime,
 		state::{SessionDelta, SessionRequest},
 	},
@@ -33,13 +33,15 @@ pub fn execute_gui_edit(runtime: &mut GlorpRuntime, request: GuiEditRequest) -> 
 	let outcome = publish_session(runtime, SessionRequest::ApplyEditorIntent(intent));
 	let next_context = current_gui_context(runtime);
 	let (undo_depth, redo_depth) = runtime.state.session.history_depths();
+	let document_sync = private_document_sync_ref(&outcome, GuiDocumentSyncReason::LargeEdit);
 	Ok(GuiEditResponse {
 		revisions: outcome.revisions,
-		outcome,
+		outcome: private_outcome(&outcome, document_sync.is_some()),
 		next_context,
 		undo_depth,
 		redo_depth,
 		scene_summary: runtime.state.session.scene_summary(),
+		document_sync,
 	})
 }
 
@@ -73,6 +75,8 @@ fn capabilities() -> glorp_api::GlorpCapabilities {
 	glorp_api::GlorpCapabilities {
 		transactions: true,
 		subscriptions: true,
+		streaming: true,
+		binary_payloads: true,
 		transports: vec!["local".into(), "ipc".into()],
 	}
 }
@@ -228,13 +232,40 @@ fn outcome(
 
 pub fn gui_shared_delta(runtime: &GlorpRuntime, outcome: GlorpOutcome) -> crate::GuiSharedDelta {
 	let (undo_depth, redo_depth) = runtime.state.session.history_depths();
+	let document_sync = private_document_sync_ref(&outcome, GuiDocumentSyncReason::LargeEdit);
 	crate::GuiSharedDelta {
 		undo_depth,
 		redo_depth,
 		config: outcome.delta.config_changed.then(|| runtime.state.config.clone()),
 		scene_summary: runtime.state.session.scene_summary(),
-		outcome,
+		document_sync,
+		outcome: private_outcome(&outcome, document_sync.is_some()),
 	}
+}
+
+pub fn document_sync_ref(revision: u64, text: &str, reason: GuiDocumentSyncReason) -> Option<GuiDocumentSyncRef> {
+	(text.len() > crate::LARGE_PAYLOAD_BYTES).then_some(GuiDocumentSyncRef {
+		revision,
+		bytes: text.len(),
+		reason,
+	})
+}
+
+pub fn scene_payload_bytes(scene: &glorp_editor::ScenePresentation) -> usize {
+	postcard::to_allocvec(scene).expect("scene payload should encode").len()
+}
+
+fn private_document_sync_ref(outcome: &GlorpOutcome, reason: GuiDocumentSyncReason) -> Option<GuiDocumentSyncRef> {
+	let edit = outcome.document_edit.as_ref()?;
+	document_sync_ref(outcome.revisions.editor, edit.inserted.as_str(), reason)
+}
+
+fn private_outcome(outcome: &GlorpOutcome, strip_document_edit: bool) -> GlorpOutcome {
+	let mut outcome = outcome.clone();
+	if strip_document_edit {
+		outcome.document_edit = None;
+	}
+	outcome
 }
 
 fn flatten_patch(value: &glorp_api::GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {

@@ -56,6 +56,11 @@ struct InspectSceneState {
 	layout_width: f32,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct DocumentSyncState {
+	revision: u64,
+}
+
 pub struct RuntimeShell {
 	session: GuiRuntimeSession,
 	client: GuiRuntimeClient,
@@ -68,6 +73,7 @@ pub struct RuntimeShell {
 	inspect_scene: Option<InspectSceneState>,
 	scene_refresh_at: Option<Instant>,
 	scene_loading: bool,
+	document_sync: Option<DocumentSyncState>,
 	perf: PerfMonitor,
 	shell: pane_grid::State<ShellPane>,
 	last_error: Option<String>,
@@ -82,7 +88,10 @@ impl RuntimeShell {
 		let mut font_system = make_font_system();
 		let editor = EditorEngine::new(
 			&mut font_system,
-			frame.document_text.as_str(),
+			frame
+				.document_text
+				.as_deref()
+				.expect("GUI frame should be hydrated during boot"),
 			shell_scene_config(&frame),
 		);
 		let snapshot = build_snapshot(&editor, None, 1, frame.undo_depth, frame.redo_depth);
@@ -98,6 +107,7 @@ impl RuntimeShell {
 			inspect_scene: None,
 			scene_refresh_at: None,
 			scene_loading: false,
+			document_sync: None,
 			perf: PerfMonitor::default(),
 			shell: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
 				axis: pane_grid::Axis::Vertical,
@@ -333,14 +343,24 @@ impl RuntimeShell {
 			EditorIntent::Pointer(pointer) => self.apply_local_editor_intent(EditorIntent::Pointer(pointer)),
 			EditorIntent::Motion(motion) => self.apply_local_editor_intent(EditorIntent::Motion(motion)),
 			EditorIntent::Mode(mode) => self.apply_local_editor_intent(EditorIntent::Mode(mode)),
-			EditorIntent::Edit(edit) => self.execute_gui_edit(EditorIntent::Edit(edit.clone()), edit_command(edit)),
-			EditorIntent::History(history) => self.execute_gui_edit(
-				EditorIntent::History(history),
-				GuiEditCommand::History(match history {
-					EditorHistoryIntent::Undo => EditorHistoryCommand::Undo,
-					EditorHistoryIntent::Redo => EditorHistoryCommand::Redo,
-				}),
-			),
+			EditorIntent::Edit(edit) => {
+				if self.document_sync.is_some() {
+					return Ok(());
+				}
+				self.execute_gui_edit(EditorIntent::Edit(edit.clone()), edit_command(edit))
+			}
+			EditorIntent::History(history) => {
+				if self.document_sync.is_some() {
+					return Ok(());
+				}
+				self.execute_gui_edit(
+					EditorIntent::History(history),
+					GuiEditCommand::History(match history {
+						EditorHistoryIntent::Undo => EditorHistoryCommand::Undo,
+						EditorHistoryIntent::Redo => EditorHistoryCommand::Redo,
+					}),
+				)
+			}
 		}
 	}
 
@@ -372,6 +392,11 @@ impl RuntimeShell {
 		self.frame.undo_depth = response.undo_depth;
 		self.frame.redo_depth = response.redo_depth;
 		self.frame.scene_summary = response.scene_summary;
+		if let Some(document_sync) = response.document_sync {
+			self.document_sync = Some(DocumentSyncState {
+				revision: document_sync.revision,
+			});
+		}
 		self.apply_local_context(&response.next_context)?;
 		self.request_scene_refresh(Duration::from_millis(120));
 		Ok(())
@@ -484,6 +509,7 @@ impl RuntimeShell {
 				GuiSessionHostMessage::Ready { .. } | GuiSessionHostMessage::Reply { .. } => {}
 			}
 		}
+		self.maybe_sync_document()?;
 		self.maybe_fetch_scene()?;
 		Ok(())
 	}
@@ -513,6 +539,11 @@ impl RuntimeShell {
 		self.frame.undo_depth = delta.undo_depth;
 		self.frame.redo_depth = delta.redo_depth;
 		self.frame.scene_summary = delta.scene_summary;
+		if let Some(document_sync) = delta.document_sync {
+			self.document_sync = Some(DocumentSyncState {
+				revision: document_sync.revision,
+			});
+		}
 		self.request_scene_refresh(Duration::from_millis(120));
 		self.refresh_local_snapshot();
 		Ok(())
@@ -570,7 +601,15 @@ impl RuntimeShell {
 
 		self.scene_loading = true;
 		self.refresh_local_snapshot();
-		let scene = self.client.scene_fetch()?;
+		let scene = self
+			.client
+			.scene_fetch(self.active_scene().map_or(0, |scene| scene.revision))?;
+		let Some(scene) = scene else {
+			self.scene_loading = false;
+			self.scene_refresh_at = None;
+			self.refresh_local_snapshot();
+			return Ok(());
+		};
 		self.inspect_scene = Some(InspectSceneState {
 			layout_width: self.frame.layout_width,
 			scene,
@@ -585,6 +624,43 @@ impl RuntimeShell {
 			self.request_scene_refresh(Duration::ZERO);
 		}
 		self.refresh_local_snapshot();
+		Ok(())
+	}
+
+	fn maybe_sync_document(&mut self) -> Result<(), GlorpError> {
+		let Some(document_sync) = self.document_sync else {
+			return Ok(());
+		};
+		let (response, bytes) = self.client.document_fetch(document_sync.revision)?;
+		if response.revision < document_sync.revision {
+			return Ok(());
+		}
+
+		let text = String::from_utf8(bytes)
+			.map_err(|error| GlorpError::transport(format!("document payload is not valid UTF-8: {error}")))?;
+		let view = self.editor.view_state();
+		let selection = view.selection.map(|range| glorp_api::TextRange {
+			start: range.start.min(text.len()) as u64,
+			end: range.end.min(text.len()) as u64,
+		});
+		let selection_head = view.selection_head.map(|head| head.min(text.len()) as u64);
+		let _ = self.editor.apply_external_text_edit(
+			&mut self.font_system,
+			glorp_editor::TextEdit {
+				range: 0..self.editor.text().len(),
+				inserted: text,
+			},
+		);
+		self.frame.revisions.editor = response.revision;
+		self.document_sync = None;
+		self.apply_local_context(&EditorContextView {
+			mode: match view.mode {
+				EditorMode::Normal => glorp_api::EditorMode::Normal,
+				EditorMode::Insert => glorp_api::EditorMode::Insert,
+			},
+			selection,
+			selection_head,
+		})?;
 		Ok(())
 	}
 }

@@ -1125,6 +1125,24 @@
             "required": true
           },
           {
+            "name": "streaming",
+            "docs": "Whether persistent streaming transport is supported.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
+            "name": "binary_payloads",
+            "docs": "Whether binary payload replies are supported.",
+            "ty": {
+              "kind": "builtin",
+              "value": "bool"
+            },
+            "required": true
+          },
+          {
             "name": "transports",
             "docs": "Supported transport names.",
             "ty": {

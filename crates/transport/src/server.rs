@@ -1,13 +1,15 @@
 use {
 	crate::{
 		GuiTransportRequest, GuiTransportResponse, ServerRequest, ServerResponse, TransportRequest, TransportResponse,
+		ipc::{GuiPayloadKind, GuiSessionPayloadHeader, write_session_control_frame, write_session_payload_frame},
 	},
 	glorp_api::{
 		GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCallRoute, GlorpCaller, GlorpError, OkView,
 		TransportCallDispatcher, call_spec, dispatch_transport_call,
 	},
 	glorp_runtime::{
-		GuiSessionClientMessage, GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse, RuntimeHost,
+		GuiSceneFetchResponse, GuiSessionClientMessage, GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse,
+		RuntimeHost,
 	},
 	std::{
 		io::{BufRead, BufReader, Write},
@@ -21,6 +23,15 @@ use {
 		time::Duration,
 	},
 };
+
+enum GuiSessionDispatch {
+	Control(GuiSessionResponse),
+	WithPayload {
+		response: GuiSessionResponse,
+		kind: GuiPayloadKind,
+		bytes: Vec<u8>,
+	},
+}
 
 pub struct IpcServerHandle {
 	socket_path: PathBuf,
@@ -154,19 +165,17 @@ fn handle_gui_session(
 		while !stop_for_events.load(Ordering::SeqCst) && !closed_for_events.load(Ordering::SeqCst) {
 			match subscriptions_for_events.next_event_blocking(token, Duration::from_millis(100)) {
 				Ok(Some(glorp_api::GlorpEvent::Changed(outcome))) => {
-					let response = {
+					let delta = {
 						let host = match host_for_events.lock() {
 							Ok(host) => host,
 							Err(_) => break,
 						};
-						ServerResponse::GuiSessionMessage(GuiSessionHostMessage::Changed(
-							host.gui_shared_delta(outcome),
-						))
+						host.gui_shared_delta(outcome)
 					};
 					let Ok(writer) = writer_for_events.lock() else {
 						break;
 					};
-					if write_response(&writer, &response).is_err() {
+					if write_session_message(&mut &*writer, &GuiSessionHostMessage::Changed(delta)).is_err() {
 						break;
 					}
 				}
@@ -183,44 +192,35 @@ fn handle_gui_session(
 		if stop.load(Ordering::SeqCst) {
 			break;
 		}
-		let mut line = String::new();
-		match reader.read_line(&mut line) {
-			Ok(0) => break,
-			Ok(_) => {}
-			Err(error) => {
-				return Err(GlorpError::transport(format!(
-					"failed to read gui session request: {error}"
-				)));
-			}
-		}
-		let request = serde_json::from_str::<ServerRequest>(&line)
-			.map_err(|error| GlorpError::internal(format!("failed to decode request: {error}")))?;
-		let ServerRequest::GuiSessionMessage(GuiSessionClientMessage::Request { id, body }) = request else {
-			return Err(GlorpError::transport("unexpected gui session request"));
+		let Some(request) = crate::ipc::read_session_control_frame::<GuiSessionClientMessage>(&mut reader)? else {
+			break;
 		};
+		let GuiSessionClientMessage::Request { id, body } = request;
 		let reply = {
 			let mut host = host
 				.lock()
 				.map_err(|_| GlorpError::transport("runtime lock poisoned"))?;
-			GuiSessionHostMessage::Reply {
-				id,
-				body: dispatch_gui_session_request(body, &mut host, stop),
-			}
+			dispatch_gui_session_request(body, &mut host, stop)
 		};
-		let writer = writer
+		let mut writer = writer
 			.lock()
 			.map_err(|_| GlorpError::transport("gui session writer lock poisoned"))?;
-		write_response(&writer, &ServerResponse::GuiSessionMessage(reply))?;
+		match reply {
+			GuiSessionDispatch::Control(body) => {
+				write_session_message(&mut *writer, &GuiSessionHostMessage::Reply { id, body })?;
+			}
+			GuiSessionDispatch::WithPayload { response, kind, bytes } => {
+				write_session_message(&mut *writer, &GuiSessionHostMessage::Reply { id, body: response })?;
+				write_session_payload_frame(&mut *writer, &GuiSessionPayloadHeader { id, kind }, &bytes)?;
+			}
+		}
 	}
 
 	closed.store(true, Ordering::SeqCst);
 	let _ = subscriptions.unsubscribe(token);
 	let _ = events_thread.join();
 	if let Ok(writer) = writer.lock() {
-		let _ = write_response(
-			&writer,
-			&ServerResponse::GuiSessionMessage(GuiSessionHostMessage::Closed),
-		);
+		let _ = write_session_message(&mut &*writer, &GuiSessionHostMessage::Closed);
 	}
 	Ok(())
 }
@@ -265,20 +265,46 @@ fn dispatch_gui_request(request: GuiTransportRequest, host: &mut RuntimeHost) ->
 		GuiTransportRequest::GuiFrame(layout) => {
 			GuiTransportResponse::GuiFrame(Box::new(Ok(host.gui_frame_at(layout))))
 		}
-		GuiTransportRequest::SceneFetch(layout) => {
-			GuiTransportResponse::SceneFetch(Box::new(Ok(host.gui_scene_fetch_at(layout))))
+		GuiTransportRequest::SceneFetch(_layout) => {
+			GuiTransportResponse::SceneFetch(Box::new(Ok(host.gui_scene_fetch_legacy())))
 		}
 	}
 }
 
 fn dispatch_gui_session_request(
 	request: GuiSessionRequest, host: &mut RuntimeHost, stop: &Arc<AtomicBool>,
-) -> GuiSessionResponse {
+) -> GuiSessionDispatch {
 	match request {
-		GuiSessionRequest::Call(call) => GuiSessionResponse::Call(dispatch_public_call(call, host, stop)),
-		GuiSessionRequest::Edit(request) => GuiSessionResponse::Edit(host.gui_edit(request)),
-		GuiSessionRequest::GuiFrame(layout) => GuiSessionResponse::GuiFrame(Ok(host.gui_frame_at(layout))),
-		GuiSessionRequest::SceneFetch(layout) => GuiSessionResponse::SceneFetch(Ok(host.gui_scene_fetch_at(layout))),
+		GuiSessionRequest::Call(call) => {
+			GuiSessionDispatch::Control(GuiSessionResponse::Call(dispatch_public_call(call, host, stop)))
+		}
+		GuiSessionRequest::Edit(request) => {
+			GuiSessionDispatch::Control(GuiSessionResponse::Edit(host.gui_edit(request)))
+		}
+		GuiSessionRequest::GuiFrame(layout) => {
+			GuiSessionDispatch::Control(GuiSessionResponse::GuiFrame(Ok(host.gui_frame_at(layout))))
+		}
+		GuiSessionRequest::DocumentFetch(request) => {
+			let (response, text) = host.gui_document_fetch(request);
+			GuiSessionDispatch::WithPayload {
+				response: GuiSessionResponse::DocumentFetch(Ok(response)),
+				kind: GuiPayloadKind::DocumentText,
+				bytes: text.into_bytes(),
+			}
+		}
+		GuiSessionRequest::SceneFetch(request) => match host.gui_scene_fetch(request) {
+			GuiSceneFetchResponse::NotModified => {
+				GuiSessionDispatch::Control(GuiSessionResponse::SceneFetch(Ok(GuiSceneFetchResponse::NotModified)))
+			}
+			GuiSceneFetchResponse::Payload(response) => {
+				let scene = host.gui_scene_payload_at(request);
+				GuiSessionDispatch::WithPayload {
+					response: GuiSessionResponse::SceneFetch(Ok(GuiSceneFetchResponse::Payload(response))),
+					kind: GuiPayloadKind::Scene,
+					bytes: postcard::to_allocvec(&scene).expect("scene payload should encode"),
+				}
+			}
+		},
 	}
 }
 
@@ -304,6 +330,10 @@ fn write_response(stream: &UnixStream, response: &ServerResponse) -> Result<(), 
 		.map_err(|error| GlorpError::internal(format!("failed to encode response: {error}")))?;
 	let mut stream = stream;
 	writeln!(stream, "{payload}").map_err(|error| GlorpError::transport(format!("failed to write response: {error}")))
+}
+
+fn write_session_message(stream: &mut impl Write, message: &GuiSessionHostMessage) -> Result<(), GlorpError> {
+	write_session_control_frame(stream, message)
 }
 
 struct ServerTransportDispatcher<'a> {
