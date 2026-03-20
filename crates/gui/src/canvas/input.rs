@@ -3,9 +3,8 @@ use {
 		geometry::{scroll_delta, to_scene_local},
 		state::{CanvasIntent, DecodedEvent},
 	},
-	crate::{
-		editor::{EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorMode, EditorModeIntent, EditorMotion},
-		scene::DocumentLayout,
+	glorp_editor::{
+		DocumentLayout, EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorMode, EditorModeIntent, EditorMotion,
 	},
 	iced::{
 		Rectangle,

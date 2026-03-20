@@ -1,7 +1,7 @@
 use {
 	crate::{
-		types::Message,
-		ui::{CONTROL_RADIUS, panel_scrollable, panel_style},
+		app::Message,
+		panels::{CONTROL_RADIUS, panel_scrollable, panel_style},
 	},
 	iced::{
 		Element, Font, Length, Theme,

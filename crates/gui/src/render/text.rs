@@ -1,5 +1,6 @@
 use {
-	crate::{canvas_view::scene_origin, editor::EditorMode, presentation::SessionSnapshot, types::Message},
+	crate::{app::Message, canvas::scene_origin},
+	glorp_editor::{EditorMode, LayoutRect, SessionSnapshot},
 	iced::{
 		Color, Element, Length, Point, Rectangle, Size, Theme, Vector,
 		advanced::{Layout, Renderer as _, Widget, graphics::text::Renderer as _, layout, mouse, renderer},
@@ -168,9 +169,7 @@ impl From<SceneTextLayer> for Element<'_, Message> {
 	}
 }
 
-fn insert_repaint_clip(
-	origin: Point, mode: EditorMode, target: Option<crate::overlay::LayoutRect>,
-) -> Option<Rectangle> {
+fn insert_repaint_clip(origin: Point, mode: EditorMode, target: Option<LayoutRect>) -> Option<Rectangle> {
 	let target = target.filter(|_| matches!(mode, EditorMode::Insert))?;
 	Some(Rectangle::new(
 		Point::new(origin.x + target.x, origin.y + target.y),
@@ -182,7 +181,7 @@ fn insert_repaint_clip(
 mod tests {
 	use {
 		super::insert_repaint_clip,
-		crate::{editor::EditorMode, overlay::LayoutRect},
+		glorp_editor::{EditorMode, LayoutRect},
 		iced::{Point, Rectangle, Size},
 	};
 

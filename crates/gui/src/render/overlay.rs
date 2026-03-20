@@ -1,13 +1,8 @@
 use {
-	crate::{
-		canvas_view::scene_origin,
-		overlay::{
-			EditorOverlayTone, LayoutRect, OverlayLabelKind, OverlayLayer, OverlayPrimitive, OverlayRectKind,
-			OverlaySpace,
-		},
-		perf::CanvasPerfSink,
-		presentation::SessionSnapshot,
-		types::Message,
+	crate::{app::Message, canvas::scene_origin, perf::CanvasPerfSink},
+	glorp_editor::{
+		EditorOverlayTone, LayoutRect, OverlayLabelKind, OverlayLayer, OverlayPrimitive, OverlayRectKind, OverlaySpace,
+		SessionSnapshot,
 	},
 	iced::{
 		Color, Element, Font, Length, Pixels, Point, Rectangle, Size, Theme, Vector,
@@ -707,7 +702,7 @@ const fn selection_palette() -> SelectionPalette {
 mod tests {
 	use {
 		super::{OutlineSegment, merged_selection_outline},
-		crate::overlay::LayoutRect,
+		glorp_editor::LayoutRect,
 		iced::Point,
 	};
 

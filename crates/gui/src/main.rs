@@ -1,22 +1,15 @@
-mod canvas_view;
-mod editor;
-mod overlay;
-mod overlay_view;
+mod app;
+mod canvas;
+mod panels;
 mod perf;
-mod presentation;
-mod runtime_shell;
-mod scene;
-mod scene_view;
+mod render;
 mod telemetry;
-mod text_view;
-mod types;
-mod ui;
 
 use {
+	app::RuntimeShell,
 	clap::Parser,
 	glorp_api::GlorpError,
 	glorp_gui::GuiLaunchOptions,
-	runtime_shell::RuntimeShell,
 	std::{path::PathBuf, process::ExitCode, sync::Mutex},
 };
 

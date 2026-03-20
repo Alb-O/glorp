@@ -1,11 +1,11 @@
 use {
 	crate::{
-		types::{
+		app::{
 			ControlsMessage, FONT_CHOICES, FontChoice, Message, SAMPLE_PRESETS, SHAPING_CHOICES, SamplePreset,
 			ShapingChoice, WRAP_CHOICES, WrapChoice, font_choice_label, sample_preset_label, shaping_choice_label,
 			wrap_choice_label,
 		},
-		ui::{
+		panels::{
 			PICK_LIST_PADDING, control_row, panel_scrollable, panel_style, rounded_checkbox_style,
 			rounded_pick_list_menu_style, rounded_pick_list_style, rounded_slider_style,
 		},

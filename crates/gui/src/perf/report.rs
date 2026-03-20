@@ -3,7 +3,7 @@ use {
 		FRAME_BUDGET_MS, METRIC_WARNING_MS, MetricKind, PerfStore, RECENT_LIMIT, SEVERE_FRAME_MS, average_ms,
 		percentile_ms,
 	},
-	crate::editor::{EditorMode, EditorViewportMetrics},
+	glorp_editor::{EditorMode, EditorViewportMetrics},
 	std::{fmt::Write as _, sync::Arc},
 };
 
@@ -316,12 +316,13 @@ mod tests {
 	use {
 		super::{build_dashboard, graph_ceiling},
 		crate::{
-			editor::{EditorMode, EditorViewportMetrics},
+			app::{FontChoice, ShapingChoice, WrapChoice},
 			perf::{CanvasPerfSink, store::PerfStore},
-			scene::DocumentLayout,
-			types::{FontChoice, ShapingChoice, WrapChoice},
 		},
-		glorp_editor::{build_buffer, make_font_system, resolve_font_names_from_buffer, scene_config},
+		glorp_editor::{
+			DocumentLayout, EditorMode, EditorViewportMetrics, build_buffer, make_font_system,
+			resolve_font_names_from_buffer, scene_config,
+		},
 		std::time::Duration,
 	};
 

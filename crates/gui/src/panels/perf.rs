@@ -1,8 +1,8 @@
 use {
 	crate::{
+		app::Message,
+		panels::{panel_scrollable, panel_style},
 		perf::{PerfDashboard, PerfGraphSeries},
-		types::Message,
-		ui::{panel_scrollable, panel_style},
 	},
 	iced::{
 		Color, Element, Font, Length, Pixels, Point, Rectangle, Size, Theme,

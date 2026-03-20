@@ -2,10 +2,8 @@ use {
 	super::geometry::{
 		DOUBLE_CLICK_DISTANCE, DOUBLE_CLICK_INTERVAL, animate_scroll, clamp_scroll, point_distance, vector_length,
 	},
-	crate::{
-		editor::{EditorIntent, EditorPointerIntent},
-		types::{CanvasEvent, CanvasTarget, Message},
-	},
+	crate::app::{CanvasEvent, Message},
+	glorp_editor::{CanvasTarget, EditorIntent, EditorPointerIntent},
 	iced::{Point, Vector, widget::canvas},
 	std::time::Instant,
 };
@@ -207,10 +205,8 @@ impl CanvasState {
 mod tests {
 	use {
 		super::{CanvasAction, CanvasIntent, CanvasState, DecodedEvent},
-		crate::{
-			editor::{EditorIntent, EditorPointerIntent},
-			types::{CanvasEvent, CanvasTarget, Message},
-		},
+		crate::app::{CanvasEvent, Message},
+		glorp_editor::{CanvasTarget, EditorIntent, EditorPointerIntent},
 		iced::{Point, Vector},
 		std::time::{Duration, Instant},
 	};

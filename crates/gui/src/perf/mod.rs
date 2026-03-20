@@ -4,7 +4,7 @@ mod store;
 
 use {
 	self::{bridge::CanvasPerfSink as Sink, report::build_dashboard, store::PerfStore},
-	crate::editor::{EditorMode, EditorViewportMetrics},
+	glorp_editor::{EditorMode, EditorViewportMetrics},
 	std::{hash::Hash, time::Duration},
 };
 pub use {

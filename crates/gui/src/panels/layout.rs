@@ -1,15 +1,12 @@
 use {
 	crate::{
-		canvas_view::GlyphCanvas,
-		overlay::OverlayPrimitive,
-		overlay_view::{EditorUnderlayLayer, SceneOverlayLayer},
+		app::{Message, ViewportMessage},
+		canvas::GlyphCanvas,
+		panels::style::{SIDEBAR_WIDTH, surface_style},
 		perf::CanvasPerfSink,
-		presentation::SessionSnapshot,
-		scene_view::StaticSceneLayer,
-		text_view::SceneTextLayer,
-		types::{Message, ViewportMessage},
-		ui::tokens::{SIDEBAR_WIDTH, surface_style},
+		render::{EditorUnderlayLayer, SceneOverlayLayer, SceneTextLayer, StaticSceneLayer},
 	},
+	glorp_editor::{OverlayPrimitive, SessionSnapshot},
 	iced::{
 		Element, Length, Size, Vector,
 		widget::{Stack, canvas, column, container, sensor},

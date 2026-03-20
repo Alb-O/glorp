@@ -1,7 +1,7 @@
 use {
 	crate::{
-		types::{Message, SIDEBAR_TABS, SidebarTab},
-		ui::{surface_style, view_sidebar_tab},
+		app::{Message, SIDEBAR_TABS, SidebarTab},
+		panels::{surface_style, view_sidebar_tab},
 	},
 	iced::{
 		Element, Font, Length,
@@ -14,7 +14,7 @@ use {
 /// The parent supplies the active tab body.
 pub struct SidebarProps<'a> {
 	pub active_tab: SidebarTab,
-	pub editor_mode: crate::editor::EditorMode,
+	pub editor_mode: glorp_editor::EditorMode,
 	pub editor_bytes: usize,
 	pub undo_depth: usize,
 	pub redo_depth: usize,
@@ -60,7 +60,7 @@ fn view_sidebar_tabs(active_tab: SidebarTab) -> Element<'static, Message> {
 }
 
 fn view_editor_status(
-	mode: crate::editor::EditorMode, bytes: usize, undo_depth: usize, redo_depth: usize,
+	mode: glorp_editor::EditorMode, bytes: usize, undo_depth: usize, redo_depth: usize,
 ) -> Element<'static, Message> {
 	container(
 		text(format!(

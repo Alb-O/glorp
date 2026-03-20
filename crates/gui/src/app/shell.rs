@@ -1,24 +1,22 @@
 use {
+	super::{CanvasEvent, ControlsMessage, Message, PerfMessage, ShellMessage, SidebarMessage, ViewportMessage},
 	crate::{
-		canvas_view::scene_viewport_size,
-		editor::{EditorHistoryIntent, EditorIntent, EditorMode, EditorViewportMetrics},
-		overlay::OverlayPrimitive,
-		perf::PerfMonitor,
-		presentation::SessionSnapshot,
-		types::{CanvasEvent, ControlsMessage, Message, PerfMessage, ViewportMessage},
-		ui::{
+		canvas::scene_viewport_size,
+		panels::{
 			CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, default_sidebar_ratio,
 			is_stacked_shell, view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar,
 			view_stacked_shell,
 		},
+		perf::PerfMonitor,
 	},
 	glorp_api::{
 		ConfigAssignment, EnumValue, GlorpCall, GlorpCallDescriptor, GlorpCaller, GlorpError, GlorpTxn, GlorpValue,
 		TextInput, TextRange, WrapChoice,
 	},
 	glorp_editor::{
-		CanvasTarget, EditorEngine, EditorPresentation, EditorTextLayerState, LayoutRect, TextEdit, make_font_system,
-		sample_preset_text, scene_config,
+		CanvasTarget, EditorEngine, EditorHistoryIntent, EditorIntent, EditorMode, EditorPresentation,
+		EditorTextLayerState, EditorViewportMetrics, LayoutRect, OverlayPrimitive, SessionSnapshot, TextEdit,
+		make_font_system, sample_preset_text, scene_config,
 	},
 	glorp_gui::{GuiLaunchOptions, GuiRuntimeClient, GuiRuntimeSession},
 	glorp_runtime::{
@@ -144,7 +142,7 @@ impl RuntimeShell {
 	fn handle_message(&mut self, message: Message) -> Result<(), GlorpError> {
 		match message {
 			Message::Controls(message) => self.handle_controls(message),
-			Message::Sidebar(crate::types::SidebarMessage::SelectTab(tab)) => self.select_tab(tab),
+			Message::Sidebar(SidebarMessage::SelectTab(tab)) => self.select_tab(tab),
 			Message::Canvas(message) => self.handle_canvas(message),
 			Message::Editor(intent) => self.handle_editor(intent),
 			Message::Perf(PerfMessage::Tick(_)) => self.handle_tick(),
@@ -152,7 +150,7 @@ impl RuntimeShell {
 				let viewport = scene_viewport_size(size);
 				self.resize_viewport(viewport)
 			}
-			Message::Shell(crate::types::ShellMessage::PaneResized(event)) => self.resize_shell(event),
+			Message::Shell(ShellMessage::PaneResized(event)) => self.resize_shell(event),
 		}
 	}
 
@@ -184,9 +182,7 @@ impl RuntimeShell {
 				.height(Length::Fill)
 				.spacing(12)
 				.min_size(220)
-				.on_resize(12, |event| {
-					Message::Shell(crate::types::ShellMessage::PaneResized(event))
-				});
+				.on_resize(12, |event| Message::Shell(ShellMessage::PaneResized(event)));
 
 				container(grid)
 					.padding(16)

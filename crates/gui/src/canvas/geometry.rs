@@ -1,5 +1,6 @@
 use {
-	crate::{editor::EditorViewportMetrics, types::WrapChoice},
+	crate::app::WrapChoice,
+	glorp_editor::EditorViewportMetrics,
 	iced::{Point, Rectangle, Size, Vector, mouse},
 	std::time::Duration,
 };
@@ -72,7 +73,8 @@ const fn scene_content_width(metrics: EditorViewportMetrics, layout_width: f32) 
 mod tests {
 	use {
 		super::{clamp_scroll, max_scroll},
-		crate::{editor::EditorViewportMetrics, types::WrapChoice},
+		crate::app::WrapChoice,
+		glorp_editor::EditorViewportMetrics,
 		iced::{Rectangle, Vector},
 	};
 

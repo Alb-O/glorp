@@ -1,5 +1,5 @@
 use {
-	crate::types::{Message, SidebarTab, sidebar_tab_label},
+	crate::app::{Message, SidebarMessage, SidebarTab, sidebar_tab_label},
 	iced::{
 		Element, Length, Theme,
 		widget::{button, container, row, scrollable, text},
@@ -176,7 +176,7 @@ pub fn view_sidebar_tab(tab: SidebarTab, is_active: bool) -> Element<'static, Me
 					.center_x(Length::Fill)
 					.center_y(Length::Fill),
 			)
-			.on_press(Message::Sidebar(crate::types::SidebarMessage::SelectTab(tab)))
+			.on_press(Message::Sidebar(SidebarMessage::SelectTab(tab)))
 			.width(Length::Fill)
 			.height(Length::Fill)
 			.style(move |theme: &Theme, status| {

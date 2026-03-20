@@ -1,10 +1,10 @@
 use {
 	crate::{
-		canvas_view::scene_origin,
+		app::{Message, WrapChoice},
+		canvas::scene_origin,
 		perf::CanvasPerfSink,
-		presentation::ScenePresentation,
-		types::{Message, WrapChoice},
 	},
+	glorp_editor::{DocumentLayout, ScenePresentation},
 	iced::{
 		Element, Length, Point, Rectangle, Size, Theme, Vector,
 		advanced::{
@@ -197,7 +197,7 @@ fn draw_static_scene(frame: &mut canvas::Frame, layer: &StaticSceneLayer) {
 	}
 }
 
-const fn scene_content_width(layout: &crate::scene::DocumentLayout, layout_width: f32) -> f32 {
+const fn scene_content_width(layout: &DocumentLayout, layout_width: f32) -> f32 {
 	if matches!(layout.wrapping, WrapChoice::None) {
 		layout.measured_width.max(layout_width).max(1.0)
 	} else {

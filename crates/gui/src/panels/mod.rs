@@ -1,4 +1,4 @@
-//! UI composition rules for `glorp`.
+//! Panel composition rules for `glorp`.
 //!
 //! Reusable UI lives in normal Rust modules with explicit inputs. The app keeps
 //! state ownership in one place instead of turning each section into an
@@ -19,20 +19,27 @@
 //!
 //! In this repo:
 //!
-//! - `app.rs` owns state and update logic.
-//! - `ui::components` holds composed views and props structs.
-//! - `ui::tokens` holds theme-aware style helpers and tiny primitives.
+//! - `app` owns state and update logic.
+//! - `panels` holds composed views, layout helpers, and props structs.
+//! - `panels::style` holds theme-aware style helpers and tiny primitives.
 
-pub mod components;
-pub mod tokens;
+mod controls;
+mod inspect;
+mod layout;
+mod perf;
+mod sidebar;
+mod style;
 
-pub use {
-	components::{
-		CanvasDecorations, CanvasPaneProps, ControlsTabProps, InspectTabProps, SidebarProps, default_sidebar_ratio,
-		is_stacked_shell, view_canvas_pane, view_controls_tab, view_inspect_tab, view_perf_tab, view_sidebar,
+pub(crate) use self::{
+	controls::{ControlsTabProps, view_controls_tab},
+	inspect::{InspectTabProps, view_inspect_tab},
+	layout::{
+		CanvasDecorations, CanvasPaneProps, default_sidebar_ratio, is_stacked_shell, view_canvas_pane,
 		view_stacked_shell,
 	},
-	tokens::{
+	perf::view_perf_tab,
+	sidebar::{SidebarProps, view_sidebar},
+	style::{
 		CONTROL_RADIUS, PICK_LIST_PADDING, control_row, panel_scrollable, panel_style, rounded_checkbox_style,
 		rounded_pick_list_menu_style, rounded_pick_list_style, rounded_slider_style, surface_style, view_sidebar_tab,
 	},

@@ -4,12 +4,13 @@ mod state;
 
 use {
 	self::{geometry::max_scroll, input::decode_event},
-	crate::{perf::CanvasPerfSink, presentation::SessionSnapshot, types::Message},
+	crate::{app::Message, perf::CanvasPerfSink},
+	glorp_editor::{DocumentLayout, SessionSnapshot},
 	iced::{Rectangle, Theme, mouse, widget::canvas},
 	std::{sync::Arc, time::Instant},
 	tracing::trace_span,
 };
-pub use {
+pub(crate) use {
 	geometry::{scene_origin, scene_viewport_size},
 	state::CanvasState,
 };
@@ -23,7 +24,7 @@ pub struct GlyphCanvas {
 }
 
 impl GlyphCanvas {
-	fn inspect_layout(&self) -> Option<&crate::scene::DocumentLayout> {
+	fn inspect_layout(&self) -> Option<&DocumentLayout> {
 		// Scene data may already be materialized for debug/perf consumers, but
 		// inspect hit testing should still stay off unless the Inspect path is
 		// explicitly active.
@@ -82,14 +83,13 @@ mod tests {
 	use {
 		super::GlyphCanvas,
 		crate::{
-			editor::{EditorMode, EditorViewportMetrics},
+			app::{FontChoice, ShapingChoice, WrapChoice},
 			perf::CanvasPerfSink,
-			scene::DocumentLayout,
-			types::{FontChoice, ShapingChoice, WrapChoice},
 		},
 		glorp_editor::{
-			EditorPresentation, EditorTextLayerState, EditorViewState, ScenePresentation, SessionSnapshot,
-			build_buffer, make_font_system, resolve_font_names_from_buffer, scene_config,
+			DocumentLayout, EditorMode, EditorPresentation, EditorTextLayerState, EditorViewState,
+			EditorViewportMetrics, ScenePresentation, SessionSnapshot, build_buffer, make_font_system,
+			resolve_font_names_from_buffer, scene_config,
 		},
 		std::sync::Arc,
 	};
