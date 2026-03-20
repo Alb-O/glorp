@@ -261,12 +261,12 @@ fn dispatch_public_request(
 
 fn dispatch_gui_request(request: GuiTransportRequest, host: &mut RuntimeHost) -> GuiTransportResponse {
 	match request {
-		GuiTransportRequest::ExecuteGui { layout, command } => {
-			GuiTransportResponse::ExecuteGui(host.execute_gui_at(layout, command))
-		}
 		GuiTransportRequest::Edit(request) => GuiTransportResponse::Edit(Box::new(host.gui_edit(request))),
 		GuiTransportRequest::GuiFrame(layout) => {
 			GuiTransportResponse::GuiFrame(Box::new(Ok(host.gui_frame_at(layout))))
+		}
+		GuiTransportRequest::SceneFetch(layout) => {
+			GuiTransportResponse::SceneFetch(Box::new(Ok(host.gui_scene_fetch_at(layout))))
 		}
 	}
 }
@@ -276,11 +276,9 @@ fn dispatch_gui_session_request(
 ) -> GuiSessionResponse {
 	match request {
 		GuiSessionRequest::Call(call) => GuiSessionResponse::Call(dispatch_public_call(call, host, stop)),
-		GuiSessionRequest::ExecuteGui { layout, command } => {
-			GuiSessionResponse::ExecuteGui(host.execute_gui_at(layout, command))
-		}
 		GuiSessionRequest::Edit(request) => GuiSessionResponse::Edit(host.gui_edit(request)),
 		GuiSessionRequest::GuiFrame(layout) => GuiSessionResponse::GuiFrame(Ok(host.gui_frame_at(layout))),
+		GuiSessionRequest::SceneFetch(layout) => GuiSessionResponse::SceneFetch(Ok(host.gui_scene_fetch_at(layout))),
 	}
 }
 

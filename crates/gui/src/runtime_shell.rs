@@ -3,7 +3,7 @@ use {
 		canvas_view::scene_viewport_size,
 		editor::{EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorMode, EditorViewportMetrics},
 		overlay::OverlayPrimitive,
-		perf::{PerfMonitor, unavailable_dashboard},
+		perf::PerfMonitor,
 		presentation::SessionSnapshot,
 		types::{CanvasEvent, ControlsMessage, Message, PerfMessage, ViewportMessage},
 		ui::{
@@ -22,13 +22,16 @@ use {
 	},
 	glorp_gui::{GuiLaunchOptions, GuiRuntimeClient, GuiRuntimeSession},
 	glorp_runtime::{
-		GuiCommand, GuiEditCommand, GuiEditRequest, GuiRuntimeFrame, GuiSessionHostMessage, GuiSharedDelta, SidebarTab,
+		GuiEditCommand, GuiEditRequest, GuiRuntimeFrame, GuiSessionHostMessage, GuiSharedDelta, SidebarTab,
 	},
 	iced::{
 		Element, Length, Size, Subscription, Theme, Vector,
 		widget::{container, pane_grid, responsive},
 	},
-	std::sync::Arc,
+	std::{
+		sync::Arc,
+		time::{Duration, Instant},
+	},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,6 +51,11 @@ struct ShellState {
 	viewport_size: Size,
 }
 
+struct InspectSceneState {
+	scene: glorp_editor::ScenePresentation,
+	layout_width: f32,
+}
+
 pub struct RuntimeShell {
 	session: GuiRuntimeSession,
 	client: GuiRuntimeClient,
@@ -57,6 +65,9 @@ pub struct RuntimeShell {
 	editor_revision: u64,
 	snapshot: SessionSnapshot,
 	ui: ShellState,
+	inspect_scene: Option<InspectSceneState>,
+	scene_refresh_at: Option<Instant>,
+	scene_loading: bool,
 	perf: PerfMonitor,
 	shell: pane_grid::State<ShellPane>,
 	last_error: Option<String>,
@@ -74,7 +85,7 @@ impl RuntimeShell {
 			frame.document_text.as_str(),
 			shell_scene_config(&frame),
 		);
-		let snapshot = build_snapshot(&editor, &frame, 1);
+		let snapshot = build_snapshot(&editor, None, 1, frame.undo_depth, frame.redo_depth);
 		Self {
 			session,
 			client,
@@ -84,6 +95,9 @@ impl RuntimeShell {
 			editor_revision: 1,
 			snapshot,
 			ui,
+			inspect_scene: None,
+			scene_refresh_at: None,
+			scene_loading: false,
 			perf: PerfMonitor::default(),
 			shell: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
 				axis: pane_grid::Axis::Vertical,
@@ -215,7 +229,7 @@ impl RuntimeShell {
 			}),
 			SidebarTab::Inspect => {
 				let (warnings, interaction_details) = snapshot.scene.as_ref().map_or_else(
-					|| (Arc::<[String]>::from([]), Arc::<str>::from("derived scene unavailable")),
+					|| (Arc::<[String]>::from([]), self.inspect_status_text()),
 					|scene| {
 						let target = self.ui.selected_target.or(self.ui.hovered_target);
 						(
@@ -232,19 +246,16 @@ impl RuntimeShell {
 					interaction_details,
 				})
 			}
-			SidebarTab::Perf => snapshot.scene.as_ref().map_or_else(
-				|| {
-					let dashboard =
-						unavailable_dashboard(snapshot.mode(), snapshot.editor_bytes(), self.frame.layout_width);
-					view_perf_tab(&dashboard)
-				},
-				|scene| {
-					let dashboard = self
-						.perf
-						.dashboard(&scene.layout, snapshot.mode(), snapshot.editor_bytes());
-					view_perf_tab(&dashboard)
-				},
-			),
+			SidebarTab::Perf => {
+				let dashboard = self.perf.dashboard(
+					Some(self.frame.scene_summary),
+					snapshot.mode(),
+					self.editor.text(),
+					snapshot.editor.viewport_metrics,
+					self.frame.layout_width,
+				);
+				view_perf_tab(&dashboard)
+			}
 		};
 
 		view_sidebar(SidebarProps {
@@ -360,22 +371,9 @@ impl RuntimeShell {
 		self.frame.revisions = response.revisions;
 		self.frame.undo_depth = response.undo_depth;
 		self.frame.redo_depth = response.redo_depth;
-		if response.outcome.delta.text_changed || response.outcome.delta.config_changed {
-			self.frame.scene = None;
-		}
+		self.frame.scene_summary = response.scene_summary;
 		self.apply_local_context(&response.next_context)?;
-		if self.scene_required() && self.frame.scene.is_none() {
-			self.refresh_scene()?;
-		}
-		Ok(())
-	}
-
-	fn refresh_scene(&mut self) -> Result<(), GlorpError> {
-		self.client.execute_gui(GuiCommand::SceneEnsure)?;
-		let frame = self.client.gui_frame()?;
-		self.frame.scene = frame.scene;
-		self.frame.undo_depth = frame.undo_depth;
-		self.frame.redo_depth = frame.redo_depth;
+		self.request_scene_refresh(Duration::from_millis(120));
 		Ok(())
 	}
 
@@ -412,7 +410,13 @@ impl RuntimeShell {
 
 	fn refresh_local_snapshot(&mut self) {
 		self.editor_revision += 1;
-		self.snapshot = build_snapshot(&self.editor, &self.frame, self.editor_revision);
+		self.snapshot = build_snapshot(
+			&self.editor,
+			self.active_scene(),
+			self.editor_revision,
+			self.frame.undo_depth,
+			self.frame.redo_depth,
+		);
 	}
 
 	fn resize_viewport(&mut self, viewport: Size) -> Result<(), GlorpError> {
@@ -422,11 +426,11 @@ impl RuntimeShell {
 		}
 		self.client.set_layout_width(viewport.width);
 		self.frame.layout_width = viewport.width;
-		self.frame.scene = None;
 		let _ = self
 			.editor
 			.sync_buffer_config(&mut self.font_system, shell_scene_config(&self.frame));
 		self.refresh_local_snapshot();
+		self.request_scene_refresh(Duration::from_millis(120));
 		Ok(())
 	}
 
@@ -440,9 +444,8 @@ impl RuntimeShell {
 			return Ok(());
 		}
 		self.ui.active_tab = tab;
-		if self.scene_required() && self.frame.scene.is_none() {
-			self.refresh_scene()?;
-		}
+		self.refresh_local_snapshot();
+		self.request_scene_refresh(Duration::ZERO);
 		Ok(())
 	}
 
@@ -451,9 +454,8 @@ impl RuntimeShell {
 			return Ok(());
 		}
 		self.ui.show_baselines = show_baselines;
-		if self.scene_required() && self.frame.scene.is_none() {
-			self.refresh_scene()?;
-		}
+		self.refresh_local_snapshot();
+		self.request_scene_refresh(Duration::ZERO);
 		Ok(())
 	}
 
@@ -462,16 +464,13 @@ impl RuntimeShell {
 			return Ok(());
 		}
 		self.ui.show_hitboxes = show_hitboxes;
-		if self.scene_required() && self.frame.scene.is_none() {
-			self.refresh_scene()?;
-		}
+		self.refresh_local_snapshot();
+		self.request_scene_refresh(Duration::ZERO);
 		Ok(())
 	}
 
-	fn scene_required(&self) -> bool {
-		matches!(self.ui.active_tab, SidebarTab::Inspect | SidebarTab::Perf)
-			|| self.ui.show_baselines
-			|| self.ui.show_hitboxes
+	fn scene_consumer_active(&self) -> bool {
+		matches!(self.ui.active_tab, SidebarTab::Inspect) || self.ui.show_baselines || self.ui.show_hitboxes
 	}
 
 	fn handle_tick(&mut self) -> Result<(), GlorpError> {
@@ -485,6 +484,7 @@ impl RuntimeShell {
 				GuiSessionHostMessage::Ready { .. } | GuiSessionHostMessage::Reply { .. } => {}
 			}
 		}
+		self.maybe_fetch_scene()?;
 		Ok(())
 	}
 
@@ -512,11 +512,77 @@ impl RuntimeShell {
 		self.frame.revisions = revisions;
 		self.frame.undo_depth = delta.undo_depth;
 		self.frame.redo_depth = delta.redo_depth;
-		if delta.outcome.delta.text_changed || delta.outcome.delta.config_changed {
-			self.frame.scene = None;
+		self.frame.scene_summary = delta.scene_summary;
+		self.request_scene_refresh(Duration::from_millis(120));
+		self.refresh_local_snapshot();
+		Ok(())
+	}
+
+	fn active_scene(&self) -> Option<glorp_editor::ScenePresentation> {
+		let scene = self.inspect_scene.as_ref()?;
+		(self.scene_consumer_active()
+			&& (scene.layout_width - self.frame.layout_width).abs() <= f32::EPSILON
+			&& scene.scene.revision == self.frame.scene_summary.revision)
+			.then(|| scene.scene.clone())
+	}
+
+	fn inspect_status_text(&self) -> Arc<str> {
+		if self.scene_loading {
+			return Arc::<str>::from("scene loading");
 		}
-		if self.scene_required() && self.frame.scene.is_none() {
-			self.refresh_scene()?;
+		if self.inspect_scene.is_some() {
+			return Arc::<str>::from("scene stale");
+		}
+		Arc::<str>::from("scene unavailable")
+	}
+
+	fn request_scene_refresh(&mut self, delay: Duration) {
+		if !self.scene_consumer_active() {
+			self.scene_refresh_at = None;
+			self.scene_loading = false;
+			return;
+		}
+
+		let deadline = Instant::now() + delay;
+		self.scene_refresh_at = Some(self.scene_refresh_at.map_or(deadline, |current| current.min(deadline)));
+	}
+
+	fn maybe_fetch_scene(&mut self) -> Result<(), GlorpError> {
+		if !self.scene_consumer_active() {
+			self.scene_refresh_at = None;
+			self.scene_loading = false;
+			return Ok(());
+		}
+		if self.active_scene().is_some() {
+			self.scene_refresh_at = None;
+			self.scene_loading = false;
+			return Ok(());
+		}
+		if self.scene_loading {
+			return Ok(());
+		}
+		let Some(deadline) = self.scene_refresh_at else {
+			return Ok(());
+		};
+		if Instant::now() < deadline {
+			return Ok(());
+		}
+
+		self.scene_loading = true;
+		self.refresh_local_snapshot();
+		let scene = self.client.scene_fetch()?;
+		self.inspect_scene = Some(InspectSceneState {
+			layout_width: self.frame.layout_width,
+			scene,
+		});
+		self.scene_loading = false;
+		self.scene_refresh_at = None;
+		if self
+			.inspect_scene
+			.as_ref()
+			.is_some_and(|scene| scene.scene.revision != self.frame.scene_summary.revision)
+		{
+			self.request_scene_refresh(Duration::ZERO);
 		}
 		self.refresh_local_snapshot();
 		Ok(())
@@ -549,7 +615,10 @@ fn shell_scene_config(frame: &GuiRuntimeFrame) -> glorp_editor::SceneConfig {
 	)
 }
 
-fn build_snapshot(editor: &EditorEngine, frame: &GuiRuntimeFrame, revision: u64) -> SessionSnapshot {
+fn build_snapshot(
+	editor: &EditorEngine, scene: Option<glorp_editor::ScenePresentation>, revision: u64, undo_depth: usize,
+	redo_depth: usize,
+) -> SessionSnapshot {
 	let viewport_metrics = editor.viewport_metrics();
 	let text_layer = editor.text_layer_state();
 	let editor = EditorPresentation::new(
@@ -561,13 +630,10 @@ fn build_snapshot(editor: &EditorEngine, frame: &GuiRuntimeFrame, revision: u64)
 		},
 		editor.view_state(),
 		editor.text().len(),
-		frame.undo_depth,
-		frame.redo_depth,
+		undo_depth,
+		redo_depth,
 	);
-	SessionSnapshot {
-		editor,
-		scene: frame.scene.clone(),
-	}
+	SessionSnapshot { editor, scene }
 }
 
 fn edit_command(edit: EditorEditIntent) -> GuiEditCommand {

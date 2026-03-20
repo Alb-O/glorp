@@ -1,6 +1,6 @@
 use {
 	crate::{
-		GuiCommand, GuiEditCommand, GuiEditRequest, GuiEditResponse, project,
+		GuiEditCommand, GuiEditRequest, GuiEditResponse, project,
 		runtime::GlorpRuntime,
 		state::{SessionDelta, SessionRequest},
 	},
@@ -15,15 +15,6 @@ use {
 
 pub fn call(runtime: &mut GlorpRuntime, glorp_call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
 	dispatch_runtime_call(runtime, glorp_call)
-}
-
-pub fn execute_gui(runtime: &mut GlorpRuntime, layout_width: f32, command: GuiCommand) -> Result<(), GlorpError> {
-	sync_gui_layout(runtime, layout_width);
-	match command {
-		GuiCommand::SceneEnsure => execute_scene_ensure(runtime),
-	}
-
-	Ok(())
 }
 
 pub fn execute_gui_edit(runtime: &mut GlorpRuntime, request: GuiEditRequest) -> Result<GuiEditResponse, GlorpError> {
@@ -48,6 +39,7 @@ pub fn execute_gui_edit(runtime: &mut GlorpRuntime, request: GuiEditRequest) -> 
 		next_context,
 		undo_depth,
 		redo_depth,
+		scene_summary: runtime.state.session.scene_summary(),
 	})
 }
 
@@ -130,10 +122,6 @@ fn publish_config(runtime: &mut GlorpRuntime, changed_paths: Vec<ConfigPath>) ->
 	outcome.changed_config_paths = changed_paths;
 	runtime.publish_changed(&outcome);
 	Ok(outcome)
-}
-
-fn execute_scene_ensure(runtime: &mut GlorpRuntime) {
-	project::ensure_scene_materialized(&mut runtime.state);
 }
 
 pub(crate) fn sync_gui_layout(runtime: &mut GlorpRuntime, layout_width: f32) {
@@ -244,6 +232,7 @@ pub fn gui_shared_delta(runtime: &GlorpRuntime, outcome: GlorpOutcome) -> crate:
 		undo_depth,
 		redo_depth,
 		config: outcome.delta.config_changed.then(|| runtime.state.config.clone()),
+		scene_summary: runtime.state.session.scene_summary(),
 		outcome,
 	}
 }

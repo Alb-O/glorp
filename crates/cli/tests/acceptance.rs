@@ -2,7 +2,7 @@ use {
 	glorp_api::*,
 	glorp_gui::{GuiLaunchOptions, GuiRuntimeSession},
 	glorp_nu_plugin::GlorpPlugin,
-	glorp_runtime::{GuiCommand, GuiEditCommand, GuiEditRequest, RuntimeHost, RuntimeOptions},
+	glorp_runtime::{GuiEditCommand, GuiEditRequest, RuntimeHost, RuntimeOptions},
 	glorp_test_support::{
 		TestRepo, call_ok, config, config_set, document_replace, document_state, document_text, next_event, outcome,
 		run_standard_transcript, state_snapshot, subscribe_changes, txn, workspace_root,
@@ -215,14 +215,13 @@ fn ipc_transport_rejects_client_route_calls_e2e() {
 }
 
 #[test]
-fn scene_ensure_does_not_emit_public_events() {
+fn scene_fetch_does_not_emit_public_events() {
 	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let token = subscribe_changes(&mut host);
 
-	host.execute_gui(GuiCommand::SceneEnsure)
-		.expect("private scene ensure should succeed");
+	let scene = host.gui_scene_fetch();
 
-	assert!(host.gui_frame().scene.is_some());
+	assert!(scene.layout.measured_height > 0.0);
 	assert!(next_event(&mut host, token).is_none());
 }
 
@@ -370,6 +369,7 @@ fn attached_gui_receives_pushed_document_delta_e2e() {
 		})
 	);
 	assert_eq!(pushed.undo_depth, document_state(&mut primary).undo_depth);
+	assert!(pushed.scene_summary.revision > 0);
 	owner.shutdown().expect("owner shutdown should succeed");
 }
 

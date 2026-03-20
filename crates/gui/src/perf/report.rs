@@ -3,7 +3,8 @@ use {
 		FRAME_BUDGET_MS, METRIC_WARNING_MS, MetricKind, PerfStore, RECENT_LIMIT, SEVERE_FRAME_MS, average_ms,
 		percentile_ms,
 	},
-	crate::{editor::EditorMode, scene::DocumentLayout},
+	crate::editor::{EditorMode, EditorViewportMetrics},
+	glorp_runtime::GuiSceneSummary,
 	std::{fmt::Write as _, sync::Arc},
 };
 
@@ -51,11 +52,7 @@ pub struct PerfOverview {
 	pub editor_bytes: usize,
 	pub editor_chars: usize,
 	pub line_count: usize,
-	pub run_count: usize,
-	pub glyph_count: usize,
-	pub cluster_count: usize,
-	pub font_count: usize,
-	pub warning_count: usize,
+	pub scene_revision: Option<u64>,
 	pub scene_width: f32,
 	pub scene_height: f32,
 	pub layout_width: f32,
@@ -64,16 +61,13 @@ pub struct PerfOverview {
 impl PerfOverview {
 	pub fn text(&self) -> String {
 		format!(
-			"editor mode   {}\nbytes/chars   {} / {}\nlines         {}\nruns/glyphs   {} / {}\nclusters      {}\nfonts seen    {}\nwarnings      {}\nscene size    {:.1} x {:.1}\nlayout width  {:.1}",
+			"editor mode   {}\nbytes/chars   {} / {}\nlines         {}\nscene rev     {}\nscene size    {:.1} x {:.1}\nlayout width  {:.1}",
 			self.editor_mode,
 			self.editor_bytes,
 			self.editor_chars,
 			self.line_count,
-			self.run_count,
-			self.glyph_count,
-			self.cluster_count,
-			self.font_count,
-			self.warning_count,
+			self.scene_revision
+				.map_or_else(|| "-".to_owned(), |revision| revision.to_string()),
 			self.scene_width,
 			self.scene_height,
 			self.layout_width,
@@ -188,54 +182,9 @@ pub struct PerfDashboard {
 	pub graphs: Vec<PerfGraphSeries>,
 }
 
-pub fn unavailable_dashboard(editor_mode: EditorMode, editor_bytes: usize, layout_width: f32) -> PerfDashboard {
-	PerfDashboard {
-		overview: PerfOverview {
-			editor_mode,
-			editor_bytes,
-			editor_chars: 0,
-			line_count: 0,
-			run_count: 0,
-			glyph_count: 0,
-			cluster_count: 0,
-			font_count: 0,
-			warning_count: 0,
-			scene_width: 0.0,
-			scene_height: 0.0,
-			layout_width,
-		},
-		hot_paths: Vec::new(),
-		recent_activity: vec![PerfRecentActivity {
-			label: "scene",
-			recent_ms: Arc::from([]),
-		}],
-		frame_pacing: PerfFramePacingSummary {
-			fps: 0.0,
-			last_ms: 0.0,
-			avg_ms: 0.0,
-			max_ms: 0.0,
-			total_draws: 0,
-			over_budget: 0,
-			severe_jank: 0,
-			cache_hits: 0,
-			cache_misses: 0,
-			recent_ms: Arc::from([]),
-		},
-		graphs: vec![PerfGraphSeries {
-			title: "scene",
-			samples_ms: Arc::from([]),
-			ceiling_ms: 1.0,
-			latest_ms: 0.0,
-			avg_ms: 0.0,
-			p95_ms: 0.0,
-			warning_ms: None,
-			severe_ms: None,
-		}],
-	}
-}
-
 pub(super) fn build_dashboard(
-	store: &PerfStore, layout: &DocumentLayout, editor_mode: EditorMode, editor_bytes: usize,
+	store: &PerfStore, scene_summary: Option<GuiSceneSummary>, viewport_metrics: EditorViewportMetrics,
+	editor_mode: EditorMode, editor_text: &str, layout_width: f32,
 ) -> PerfDashboard {
 	// Summaries back both the table and the graphs; compute them once so a
 	// dashboard rebuild does not rescan the same metric windows twice.
@@ -254,17 +203,13 @@ pub(super) fn build_dashboard(
 	PerfDashboard {
 		overview: PerfOverview {
 			editor_mode,
-			editor_bytes,
-			editor_chars: layout.text.chars().count(),
-			line_count: layout.text.lines().count().max(1),
-			run_count: layout.runs.len(),
-			glyph_count: layout.glyph_count,
-			cluster_count: layout.cluster_count,
-			font_count: layout.font_count,
-			warning_count: layout.warnings.len(),
-			scene_width: layout.measured_width,
-			scene_height: layout.measured_height,
-			layout_width: layout.max_width,
+			editor_bytes: editor_text.len(),
+			editor_chars: editor_text.chars().count(),
+			line_count: editor_text.lines().count().max(1),
+			scene_revision: scene_summary.map(|summary| summary.revision),
+			scene_width: viewport_metrics.measured_width,
+			scene_height: viewport_metrics.measured_height,
+			layout_width,
 		},
 		hot_paths,
 		recent_activity,
@@ -372,29 +317,40 @@ mod tests {
 	use {
 		super::{build_dashboard, graph_ceiling},
 		crate::{
-			editor::EditorMode,
+			editor::{EditorMode, EditorViewportMetrics},
 			perf::{CanvasPerfSink, store::PerfStore},
 			scene::DocumentLayout,
 			types::{FontChoice, ShapingChoice, WrapChoice},
 		},
 		glorp_editor::{build_buffer, make_font_system, resolve_font_names_from_buffer, scene_config},
+		glorp_runtime::GuiSceneSummary,
 		std::time::Duration,
 	};
 
-	fn scene() -> DocumentLayout {
+	fn metrics() -> (EditorViewportMetrics, String, f32) {
 		let mut font_system = make_font_system();
+		let layout_width = 300.0;
 		let config = scene_config(
 			FontChoice::Monospace,
 			ShapingChoice::Auto,
 			WrapChoice::Word,
 			16.0,
 			20.0,
-			300.0,
+			layout_width,
 		);
 		let text = "abc\ndef";
 		let buffer = build_buffer(&mut font_system, text, config);
 		let font_names = resolve_font_names_from_buffer(&font_system, &buffer);
-		DocumentLayout::build(text, &buffer, config, font_names.as_ref())
+		let layout = DocumentLayout::build(text, &buffer, config, font_names.as_ref());
+		(
+			EditorViewportMetrics {
+				wrapping: WrapChoice::Word,
+				measured_width: layout.measured_width,
+				measured_height: layout.measured_height,
+			},
+			text.to_owned(),
+			layout_width,
+		)
 	}
 
 	#[test]
@@ -407,11 +363,20 @@ mod tests {
 		sink.record_canvas_draw(Duration::from_millis(5), Some(Duration::from_millis(3)), false);
 		store.flush_canvas_metrics(&sink);
 
-		let dashboard = build_dashboard(&store, &scene(), EditorMode::Normal, 7);
+		let (viewport_metrics, editor_text, layout_width) = metrics();
+		let dashboard = build_dashboard(
+			&store,
+			Some(GuiSceneSummary { revision: 7 }),
+			viewport_metrics,
+			EditorMode::Normal,
+			&editor_text,
+			layout_width,
+		);
 
 		assert!(!dashboard.graphs.is_empty());
 		assert_eq!(dashboard.recent_activity.len(), 10);
 		assert_eq!(dashboard.overview.editor_bytes, 7);
+		assert_eq!(dashboard.overview.scene_revision, Some(7));
 	}
 
 	#[test]
@@ -428,7 +393,15 @@ mod tests {
 		sink.record_canvas_update(Duration::from_millis(2));
 		store.flush_canvas_metrics(&sink);
 
-		let dashboard = build_dashboard(&store, &scene(), EditorMode::Insert, 7);
+		let (viewport_metrics, editor_text, layout_width) = metrics();
+		let dashboard = build_dashboard(
+			&store,
+			None,
+			viewport_metrics,
+			EditorMode::Insert,
+			&editor_text,
+			layout_width,
+		);
 		let update_line = dashboard
 			.recent_activity
 			.iter()

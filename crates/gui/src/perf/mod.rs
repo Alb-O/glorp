@@ -4,12 +4,13 @@ mod store;
 
 use {
 	self::{bridge::CanvasPerfSink as Sink, report::build_dashboard, store::PerfStore},
-	crate::{editor::EditorMode, scene::DocumentLayout},
+	crate::editor::{EditorMode, EditorViewportMetrics},
+	glorp_runtime::GuiSceneSummary,
 	std::{hash::Hash, time::Duration},
 };
 pub use {
 	bridge::CanvasPerfSink,
-	report::{PerfDashboard, PerfGraphSeries, PerfMetricSummary, PerfRecentActivity, unavailable_dashboard},
+	report::{PerfDashboard, PerfGraphSeries, PerfMetricSummary, PerfRecentActivity},
 };
 
 #[derive(Debug, Default)]
@@ -74,8 +75,18 @@ impl PerfMonitor {
 		self.store.flush_canvas_metrics(&self.sink);
 	}
 
-	pub fn dashboard(&self, layout: &DocumentLayout, editor_mode: EditorMode, editor_bytes: usize) -> PerfDashboard {
-		build_dashboard(&self.store, layout, editor_mode, editor_bytes)
+	pub fn dashboard(
+		&self, scene_summary: Option<GuiSceneSummary>, editor_mode: EditorMode, editor_text: &str,
+		viewport_metrics: EditorViewportMetrics, layout_width: f32,
+	) -> PerfDashboard {
+		build_dashboard(
+			&self.store,
+			scene_summary,
+			viewport_metrics,
+			editor_mode,
+			editor_text,
+			layout_width,
+		)
 	}
 
 	#[cfg(test)]

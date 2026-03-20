@@ -2,7 +2,7 @@ use {
 	crate::{perf::PerfProjection, scene::scene_config_from_runtime},
 	glorp_api::{GlorpConfig, GlorpDelta, GlorpRevisions, TextEditView},
 	glorp_editor::{EditorEngine, EditorIntent, ScenePresentation, TextEdit, make_font_system},
-	std::time::{Duration, Instant},
+	std::time::Instant,
 };
 
 pub const DEFAULT_LAYOUT_WIDTH: f32 = 540.0;
@@ -12,7 +12,6 @@ pub enum SessionRequest {
 	ReplaceDocument(String),
 	SyncConfig,
 	ApplyEditorIntent(EditorIntent),
-	EnsureScene,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -20,21 +19,20 @@ pub struct SessionDelta {
 	pub text_changed: bool,
 	pub view_changed: bool,
 	pub document_edit: Option<TextEdit>,
-	pub scene_materialized: Option<Duration>,
 }
 
 #[derive(Debug, Clone)]
 pub struct DocumentCheckpoint {
 	editor: EditorEngine,
 	scene: Option<ScenePresentation>,
-	next_scene_revision: u64,
+	scene_revision: u64,
 }
 
 #[derive(Debug)]
 pub struct DocumentSession {
 	editor: EditorEngine,
 	scene: Option<ScenePresentation>,
-	next_scene_revision: u64,
+	scene_revision: u64,
 	font_system: cosmic_text::FontSystem,
 }
 
@@ -55,25 +53,23 @@ impl DocumentSession {
 		Self {
 			editor,
 			scene: None,
-			next_scene_revision: 0,
+			scene_revision: 1,
 			font_system,
 		}
 	}
 
 	pub fn execute(&mut self, request: SessionRequest, config: &GlorpConfig, layout_width: f32) -> SessionDelta {
-		let ensure_scene = matches!(request, SessionRequest::EnsureScene);
-		let mut delta = match request {
+		match request {
 			SessionRequest::ReplaceDocument(text) => self.execute_replace_document(&text, config, layout_width),
 			SessionRequest::SyncConfig => self.execute_sync_config(config, layout_width),
 			SessionRequest::ApplyEditorIntent(intent) => self.execute_editor_intent(intent),
-			SessionRequest::EnsureScene => SessionDelta::default(),
-		};
-
-		if ensure_scene {
-			delta.scene_materialized = self.materialize_scene_if_needed();
 		}
+	}
 
-		delta
+	pub fn scene_summary(&self) -> crate::GuiSceneSummary {
+		crate::GuiSceneSummary {
+			revision: self.scene_revision,
+		}
 	}
 
 	pub fn text(&self) -> &str {
@@ -96,22 +92,30 @@ impl DocumentSession {
 		self.editor.history_depths()
 	}
 
-	pub const fn scene(&self) -> Option<&ScenePresentation> {
-		self.scene.as_ref()
+	pub fn fetch_scene(&mut self) -> (ScenePresentation, Option<std::time::Duration>) {
+		if let Some(scene) = self.scene.clone() {
+			return (scene, None);
+		}
+
+		let started = Instant::now();
+		let scene = ScenePresentation::new(self.scene_revision, self.editor.shared_document_layout());
+		let duration = started.elapsed();
+		self.scene = Some(scene.clone());
+		(scene, Some(duration))
 	}
 
 	pub fn checkpoint(&self) -> DocumentCheckpoint {
 		DocumentCheckpoint {
 			editor: self.editor.clone(),
 			scene: self.scene.clone(),
-			next_scene_revision: self.next_scene_revision,
+			scene_revision: self.scene_revision,
 		}
 	}
 
 	pub fn restore(&mut self, checkpoint: DocumentCheckpoint) {
 		self.editor = checkpoint.editor;
 		self.scene = checkpoint.scene;
-		self.next_scene_revision = checkpoint.next_scene_revision;
+		self.scene_revision = checkpoint.scene_revision;
 		self.font_system = make_font_system();
 	}
 
@@ -134,7 +138,6 @@ impl DocumentSession {
 				range: 0..previous_len,
 				inserted: text.to_owned(),
 			}),
-			scene_materialized: None,
 		}
 	}
 
@@ -164,24 +167,12 @@ impl DocumentSession {
 			text_changed,
 			view_changed: false,
 			document_edit: outcome.text_edit,
-			scene_materialized: None,
 		}
 	}
 
 	fn invalidate_scene(&mut self) {
 		self.scene = None;
-	}
-
-	fn materialize_scene_if_needed(&mut self) -> Option<Duration> {
-		if self.scene.is_some() {
-			return None;
-		}
-
-		let revision = self.next_scene_revision + 1;
-		let started = Instant::now();
-		self.scene = Some(ScenePresentation::new(revision, self.editor.shared_document_layout()));
-		self.next_scene_revision = revision;
-		Some(started.elapsed())
+		self.scene_revision = self.scene_revision.saturating_add(1);
 	}
 }
 
@@ -218,10 +209,6 @@ impl RuntimeState {
 		let view_changed = session_delta.view_changed;
 		if text_changed || view_changed {
 			self.revisions.editor += 1;
-		}
-
-		if let Some(duration) = session_delta.scene_materialized {
-			self.perf.record_scene_build(duration.as_secs_f64() * 1000.0);
 		}
 
 		GlorpDelta {

@@ -11,11 +11,6 @@ pub enum SidebarTab {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub enum GuiCommand {
-	SceneEnsure,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub enum GuiEditCommand {
 	InsertText(String),
 	Backspace,
@@ -43,6 +38,12 @@ pub struct GuiEditResponse {
 	pub revisions: GlorpRevisions,
 	pub undo_depth: usize,
 	pub redo_depth: usize,
+	pub scene_summary: GuiSceneSummary,
+}
+
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct GuiSceneSummary {
+	pub revision: u64,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -51,25 +52,23 @@ pub struct GuiSharedDelta {
 	pub undo_depth: usize,
 	pub redo_depth: usize,
 	pub config: Option<GlorpConfig>,
+	pub scene_summary: GuiSceneSummary,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub enum GuiSessionRequest {
 	Call(glorp_api::GlorpCall),
-	ExecuteGui {
-		layout: GuiLayoutRequest,
-		command: GuiCommand,
-	},
 	Edit(GuiEditRequest),
 	GuiFrame(GuiLayoutRequest),
+	SceneFetch(GuiLayoutRequest),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum GuiSessionResponse {
 	Call(Result<glorp_api::GlorpCallResult, glorp_api::GlorpError>),
-	ExecuteGui(Result<(), glorp_api::GlorpError>),
 	Edit(Result<GuiEditResponse, glorp_api::GlorpError>),
 	GuiFrame(Result<GuiRuntimeFrame, glorp_api::GlorpError>),
+	SceneFetch(Result<ScenePresentation, glorp_api::GlorpError>),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -93,5 +92,5 @@ pub struct GuiRuntimeFrame {
 	pub document_text: String,
 	pub undo_depth: usize,
 	pub redo_depth: usize,
-	pub scene: Option<ScenePresentation>,
+	pub scene_summary: GuiSceneSummary,
 }

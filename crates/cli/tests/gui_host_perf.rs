@@ -1,7 +1,7 @@
 use {
 	glorp_api::{EditorContextView, EditorMode, GlorpCallDescriptor, TextInput},
 	glorp_gui::{GuiLaunchOptions, GuiRuntimeClient, GuiRuntimeSession},
-	glorp_runtime::{GuiCommand, GuiEditCommand, GuiEditRequest, GuiLayoutRequest},
+	glorp_runtime::{GuiEditCommand, GuiEditRequest, GuiLayoutRequest},
 	glorp_test_support::TestRepo,
 	glorp_transport::default_socket_path,
 	std::{
@@ -33,7 +33,8 @@ fn gui_host_perf_report() {
 			run_resize_reflow(transport, warmup, samples),
 			run_edit_only(transport, warmup, samples),
 			run_edit_with_frame_refresh(transport, warmup, samples),
-			run_scene_ensure_refresh(transport, warmup, samples),
+			run_scene_fetch_cold(transport, warmup, samples),
+			run_scene_fetch_warm(transport, warmup, samples),
 		];
 		if matches!(transport, TransportKind::AttachedIpc) {
 			reports.push(run_push_propagation(warmup, samples));
@@ -243,34 +244,52 @@ fn run_edit_with_frame_refresh(transport: TransportKind, warmup: usize, samples:
 	}
 }
 
-fn run_scene_ensure_refresh(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
+fn run_scene_fetch_cold(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
 	let mut harness = PerfHarness::new(transport);
 	let doc_a = large_document();
 	let doc_b = alternate_document();
 
 	for step in 0..warmup {
 		invalidate_scene(&mut harness.client, if step % 2 == 0 { &doc_a } else { &doc_b });
-		let _ = harness
-			.client
-			.execute_gui(GuiCommand::SceneEnsure)
-			.expect("warmup scene ensure should succeed");
-		let _ = harness.client.gui_frame().expect("warmup scene frame should load");
+		let _ = harness.client.scene_fetch().expect("warmup scene fetch should succeed");
 	}
 
 	let mut results = Vec::with_capacity(samples);
 	for step in 0..samples {
 		invalidate_scene(&mut harness.client, if step % 2 == 0 { &doc_a } else { &doc_b });
 		results.push(measure(|| {
-			let _ = harness
-				.client
-				.execute_gui(GuiCommand::SceneEnsure)
-				.expect("scene ensure should succeed");
-			let _ = harness.client.gui_frame().expect("scene frame should load");
+			let _ = harness.client.scene_fetch().expect("scene fetch should succeed");
 		}));
 	}
 
 	ScenarioReport {
-		name: "scene-ensure",
+		name: "scene-fetch-cold",
+		transport,
+		samples: results,
+	}
+}
+
+fn run_scene_fetch_warm(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
+	let mut harness = PerfHarness::new(transport);
+	harness.seed_document(&large_document());
+	let _ = harness
+		.client
+		.scene_fetch()
+		.expect("initial scene fetch should succeed");
+
+	for _ in 0..warmup {
+		let _ = harness.client.scene_fetch().expect("warmup scene fetch should succeed");
+	}
+
+	let mut results = Vec::with_capacity(samples);
+	for _ in 0..samples {
+		results.push(measure(|| {
+			let _ = harness.client.scene_fetch().expect("scene fetch should succeed");
+		}));
+	}
+
+	ScenarioReport {
+		name: "scene-fetch-warm",
 		transport,
 		samples: results,
 	}

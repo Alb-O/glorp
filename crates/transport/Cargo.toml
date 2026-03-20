@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 glorp_api = { path = "../api" }
+glorp_editor = { path = "../editor" }
 glorp_runtime = { path = "../runtime" }
 nu_session_ipc = { path = "../../../nu_session/crates/ipc" }
 nu_session_protocol_glorp = { path = "../../../nu_session/crates/protocol_glorp" }

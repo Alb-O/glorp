@@ -1,7 +1,8 @@
 use {
 	glorp_api::{GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
+	glorp_editor::ScenePresentation,
 	glorp_runtime::{
-		DEFAULT_LAYOUT_WIDTH, GuiCommand, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame,
+		DEFAULT_LAYOUT_WIDTH, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame,
 		GuiSessionHostMessage, RuntimeHost, RuntimeOptions, default_runtime_paths,
 	},
 	glorp_transport::{
@@ -141,14 +142,6 @@ impl GuiRuntimeClient {
 		self.boot_frame = None;
 	}
 
-	pub fn execute_gui(&mut self, command: GuiCommand) -> Result<(), GlorpError> {
-		let layout = self.layout_request();
-		match &self.client {
-			RuntimeClient::Session(client) => client.execute_gui(layout, command),
-			RuntimeClient::Local(client) => with_local_runtime(client, |host| host.execute_gui_at(layout, command)),
-		}
-	}
-
 	pub fn gui_edit(&mut self, mut request: GuiEditRequest) -> Result<GuiEditResponse, GlorpError> {
 		request.layout = self.layout_request();
 		match &self.client {
@@ -165,6 +158,14 @@ impl GuiRuntimeClient {
 		match &self.client {
 			RuntimeClient::Session(client) => client.gui_frame(layout),
 			RuntimeClient::Local(client) => with_local_runtime(client, |host| Ok(host.gui_frame_at(layout))),
+		}
+	}
+
+	pub fn scene_fetch(&mut self) -> Result<ScenePresentation, GlorpError> {
+		let layout = self.layout_request();
+		match &self.client {
+			RuntimeClient::Session(client) => client.scene_fetch(layout),
+			RuntimeClient::Local(client) => with_local_runtime(client, |host| Ok(host.gui_scene_fetch_at(layout))),
 		}
 	}
 

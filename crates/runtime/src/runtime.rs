@@ -6,7 +6,7 @@ use {
 		state::RuntimeState,
 	},
 	glorp_api::{GlorpCall, GlorpCallResult, GlorpCaller, GlorpError, GlorpOutcome, SamplePreset},
-	glorp_editor::sample_preset_text,
+	glorp_editor::{ScenePresentation, sample_preset_text},
 };
 
 #[derive(Debug, Clone)]
@@ -49,21 +49,6 @@ impl GlorpRuntime {
 		self.subscriptions.publish_changed(outcome);
 	}
 
-	pub fn execute_gui(&mut self, command: crate::GuiCommand) -> Result<(), GlorpError> {
-		self.execute_gui_at(
-			crate::GuiLayoutRequest {
-				layout_width: crate::DEFAULT_LAYOUT_WIDTH,
-			},
-			command,
-		)
-	}
-
-	pub fn execute_gui_at(
-		&mut self, layout: crate::GuiLayoutRequest, command: crate::GuiCommand,
-	) -> Result<(), GlorpError> {
-		execute::execute_gui(self, layout.layout_width, command)
-	}
-
 	pub fn gui_edit(&mut self, request: crate::GuiEditRequest) -> Result<crate::GuiEditResponse, GlorpError> {
 		execute::execute_gui_edit(self, request)
 	}
@@ -84,8 +69,23 @@ impl GlorpRuntime {
 			document_text: self.state.session.text().into(),
 			undo_depth,
 			redo_depth,
-			scene: self.state.session.scene().cloned(),
+			scene_summary: self.state.session.scene_summary(),
 		}
+	}
+
+	pub fn gui_scene_fetch(&mut self) -> ScenePresentation {
+		self.gui_scene_fetch_at(crate::GuiLayoutRequest {
+			layout_width: crate::DEFAULT_LAYOUT_WIDTH,
+		})
+	}
+
+	pub fn gui_scene_fetch_at(&mut self, layout: crate::GuiLayoutRequest) -> ScenePresentation {
+		execute::sync_gui_layout(self, layout.layout_width);
+		let (scene, duration) = self.state.session.fetch_scene();
+		if let Some(duration) = duration {
+			self.state.perf.record_scene_build(duration.as_secs_f64() * 1000.0);
+		}
+		scene
 	}
 
 	pub fn gui_shared_delta(&self, outcome: glorp_api::GlorpOutcome) -> crate::GuiSharedDelta {

@@ -4,8 +4,9 @@ use {
 		TransportResponse,
 	},
 	glorp_api::{GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
+	glorp_editor::ScenePresentation,
 	glorp_runtime::{
-		GuiCommand, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame, GuiSessionClientMessage,
+		GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame, GuiSessionClientMessage,
 		GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse,
 	},
 	serde::{Serialize, de::DeserializeOwned},
@@ -77,13 +78,6 @@ impl GuiSessionClient {
 		))
 	}
 
-	pub fn execute_gui(&self, layout: GuiLayoutRequest, command: GuiCommand) -> Result<(), GlorpError> {
-		match self.request(GuiSessionRequest::ExecuteGui { layout, command })? {
-			GuiSessionResponse::ExecuteGui(result) => result,
-			_ => Err(unexpected_response("gui session execute")),
-		}
-	}
-
 	pub fn gui_edit(&self, request: GuiEditRequest) -> Result<GuiEditResponse, GlorpError> {
 		match self.request(GuiSessionRequest::Edit(request))? {
 			GuiSessionResponse::Edit(result) => result,
@@ -95,6 +89,13 @@ impl GuiSessionClient {
 		match self.request(GuiSessionRequest::GuiFrame(layout))? {
 			GuiSessionResponse::GuiFrame(result) => result,
 			_ => Err(unexpected_response("gui session frame")),
+		}
+	}
+
+	pub fn scene_fetch(&self, layout: GuiLayoutRequest) -> Result<ScenePresentation, GlorpError> {
+		match self.request(GuiSessionRequest::SceneFetch(layout))? {
+			GuiSessionResponse::SceneFetch(result) => result,
+			_ => Err(unexpected_response("gui session scene fetch")),
 		}
 	}
 

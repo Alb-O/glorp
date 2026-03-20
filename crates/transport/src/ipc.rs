@@ -1,7 +1,8 @@
 use {
 	glorp_api::{GlorpCall, GlorpCallResult, GlorpError},
+	glorp_editor::ScenePresentation,
 	glorp_runtime::{
-		GuiCommand, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame, GuiSessionClientMessage,
+		GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame, GuiSessionClientMessage,
 		GuiSessionHostMessage,
 	},
 };
@@ -18,19 +19,16 @@ pub enum TransportResponse {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum GuiTransportRequest {
-	ExecuteGui {
-		layout: GuiLayoutRequest,
-		command: GuiCommand,
-	},
 	Edit(GuiEditRequest),
 	GuiFrame(GuiLayoutRequest),
+	SceneFetch(GuiLayoutRequest),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum GuiTransportResponse {
-	ExecuteGui(Result<(), GlorpError>),
 	Edit(Box<Result<GuiEditResponse, GlorpError>>),
 	GuiFrame(Box<Result<GuiRuntimeFrame, GlorpError>>),
+	SceneFetch(Box<Result<ScenePresentation, GlorpError>>),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

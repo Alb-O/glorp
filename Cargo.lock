@@ -1585,6 +1585,7 @@ name = "glorp_transport"
 version = "0.1.0"
 dependencies = [
  "glorp_api",
+ "glorp_editor",
  "glorp_runtime",
  "nu_session_ipc",
  "nu_session_protocol_glorp",

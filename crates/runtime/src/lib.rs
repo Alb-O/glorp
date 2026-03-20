@@ -14,7 +14,7 @@ mod state;
 pub use self::{
 	config_store::{ConfigStore, ConfigStorePaths},
 	gui::{
-		GuiCommand, GuiEditCommand, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame,
+		GuiEditCommand, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame, GuiSceneSummary,
 		GuiSessionClientMessage, GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse, GuiSharedDelta,
 		SidebarTab,
 	},
