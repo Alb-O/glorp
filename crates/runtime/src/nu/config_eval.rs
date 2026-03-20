@@ -1,5 +1,5 @@
 use {
-	crate::ConfigStore,
+	crate::config::ConfigStore,
 	glorp_api::{GlorpConfig, GlorpError},
 };
 

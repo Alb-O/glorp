@@ -17,11 +17,11 @@
 //! fetches the text separately.
 
 use {
-	crate::{
-		GuiDocumentSyncReason, GuiDocumentSyncRef, GuiEditCommand, GuiEditRequest, GuiEditResponse, project,
-		runtime::GlorpRuntime,
-		state::{SessionDelta, SessionRequest},
+	super::{
+		GlorpRuntime, project,
+		state::{SessionDelta, SessionRequest, text_edit_view},
 	},
+	crate::{GuiDocumentSyncReason, GuiDocumentSyncRef, GuiEditCommand, GuiEditRequest, GuiEditResponse},
 	glorp_api::{
 		ConfigAssignment, ConfigPath, GlorpCall, GlorpCallResult, GlorpConfig, GlorpDelta, GlorpError, GlorpOutcome,
 		GlorpRevisions, GlorpSubscription, GlorpTxn, RuntimeCallDispatcher, TextRange, TokenAckView,
@@ -183,7 +183,7 @@ fn session_outcome(runtime: &mut GlorpRuntime, session_delta: SessionDelta) -> G
 	outcome(
 		runtime.state.revisions,
 		delta,
-		session_delta.document_edit.map(crate::state::text_edit_view),
+		session_delta.document_edit.map(text_edit_view),
 		vec![],
 	)
 }

@@ -15,9 +15,8 @@
 //!
 //! Important seams:
 //!
-//! - `runtime` holds the main host object and lifecycle
-//! - `execute` maps public calls to runtime behavior
-//! - `state` owns checkpointable canonical state
+//! - `host` holds the runtime object, execution path, checkpoints, and change streams
+//! - `config` owns durable config load/save and checked-in surface artifacts
 //! - `gui` defines the private GUI session protocol that sits beside the public API
 //! - [`nu`] holds embedded Nushell helpers for config evaluation and surface export
 //!
@@ -25,26 +24,20 @@
 //! `glorp_api`; if it only exists to make the editor window work, keep it in the
 //! private GUI/session path.
 
-mod config_store;
-mod events;
-mod execute;
+mod config;
 mod gui;
 mod host;
 pub mod nu;
-mod persistence;
-mod project;
-mod runtime;
-mod state;
 
 pub use self::{
-	config_store::{ConfigStore, ConfigStorePaths},
+	config::{
+		ConfigStore, ConfigStorePaths, ensure_surface_artifacts_current, export_surface_artifacts,
+		sync_surface_artifacts,
+	},
 	gui::{
 		GuiDocumentFetchRequest, GuiDocumentFetchResponse, GuiDocumentSyncReason, GuiDocumentSyncRef, GuiEditCommand,
 		GuiEditRequest, GuiEditResponse, GuiRuntimeFrame, GuiSessionClientMessage, GuiSessionHostMessage,
 		GuiSessionRequest, GuiSessionResponse, GuiSharedDelta, LARGE_PAYLOAD_BYTES, SidebarTab,
 	},
-	host::RuntimeHost,
-	persistence::{ensure_surface_artifacts_current, export_surface_artifacts, sync_surface_artifacts},
-	runtime::{RuntimeOptions, default_runtime_paths},
-	state::DEFAULT_LAYOUT_WIDTH,
+	host::{DEFAULT_LAYOUT_WIDTH, RuntimeHost, RuntimeOptions, default_runtime_paths},
 };

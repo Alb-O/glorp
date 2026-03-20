@@ -1,13 +1,19 @@
+mod events;
+mod execute;
+mod project;
+mod state;
+
 use {
-	crate::{
-		ConfigStore, ConfigStorePaths,
+	self::{
 		events::{GuiSubscriptionSet, SubscriptionCheckpoint, SubscriptionSet},
-		execute,
 		state::RuntimeState,
 	},
+	crate::config::{ConfigStore, ConfigStorePaths},
 	glorp_api::{GlorpCall, GlorpCallResult, GlorpCaller, GlorpError, GlorpOutcome, SamplePreset},
 	glorp_editor::sample_preset_text,
 };
+
+pub use self::{GlorpRuntime as RuntimeHost, state::DEFAULT_LAYOUT_WIDTH};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeOptions {

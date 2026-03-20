@@ -10,7 +10,7 @@
 // `ensure_surface_artifacts_current` turns drift into a validation error with a
 // concrete regeneration command.
 
-use {crate::ConfigStore, glorp_api::GlorpError};
+use {super::ConfigStore, glorp_api::GlorpError};
 
 struct SurfaceArtifact {
 	path: std::path::PathBuf,
