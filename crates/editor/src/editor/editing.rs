@@ -26,7 +26,6 @@ impl EditorEngine {
 			return ApplyResult::default();
 		};
 
-		let before = self.history_snapshot();
 		let selection_start = selection.start;
 		let text_edit = TextEdit::delete(selection);
 		let inverse = self.apply_document_edit(
@@ -39,7 +38,7 @@ impl EditorEngine {
 		let next_layout = self.document_layout();
 		self.set_selection(selection_near(&next_layout, selection_start));
 		self.set_preferred_x(None);
-		self.record_history(text_edit.clone(), inverse, before);
+		self.record_history(text_edit.clone(), inverse);
 
 		ApplyResult {
 			text_edit: Some(text_edit),
@@ -81,7 +80,6 @@ impl EditorEngine {
 			self.enter_insert_at(self.caret());
 		}
 
-		let before = self.history_snapshot();
 		let caret = clamp_char_boundary(self.text(), self.caret());
 		let text_edit = TextEdit::insert(caret, text);
 		let next_head = caret + text_edit.inserted.len();
@@ -89,40 +87,22 @@ impl EditorEngine {
 		let inverse = self.apply_document_edit(font_system, &text_edit, structural);
 		self.set_preferred_x(None);
 		self.clear_pointer_anchor();
-		self.finish_insert_edit(before, text_edit, inverse, next_head, structural)
-	}
-
-	fn replay_history(
-		&mut self, font_system: &mut FontSystem, text_edit: TextEdit, snapshot: &super::history::EditorSnapshot,
-	) -> ApplyResult {
-		self.apply_document_edit(
-			font_system,
-			&text_edit,
-			edit_changes_line_structure(self.text(), &text_edit),
-		);
-		self.restore_snapshot(snapshot);
-		ApplyResult {
-			text_edit: Some(text_edit),
-			layout: Some(self.document_layout()),
-			view_refreshed: false,
-		}
+		self.finish_insert_edit(text_edit, inverse, next_head, structural)
 	}
 
 	fn delete_insert_range(
 		&mut self, font_system: &mut FontSystem, range: std::ops::Range<usize>, next_head: usize,
 	) -> ApplyResult {
-		let before = self.history_snapshot();
 		let text_edit = TextEdit::delete(range);
 		let structural = edit_changes_line_structure(self.text(), &text_edit);
 		let inverse = self.apply_document_edit(font_system, &text_edit, structural);
 		self.set_preferred_x(None);
 		self.clear_pointer_anchor();
-		self.finish_insert_edit(before, text_edit, inverse, next_head, structural)
+		self.finish_insert_edit(text_edit, inverse, next_head, structural)
 	}
 
 	fn finish_insert_edit(
-		&mut self, before: super::history::EditorSnapshot, text_edit: TextEdit, inverse: TextEdit, next_head: usize,
-		structural: bool,
+		&mut self, text_edit: TextEdit, inverse: TextEdit, next_head: usize, structural: bool,
 	) -> ApplyResult {
 		let (layout, view_refreshed) = if structural {
 			let next_layout = self.document_layout();
@@ -133,7 +113,7 @@ impl EditorEngine {
 			self.refresh_insert_view_state_fast();
 			(None, true)
 		};
-		self.record_history(text_edit.clone(), inverse, before);
+		self.record_history(text_edit.clone(), inverse);
 		ApplyResult {
 			text_edit: Some(text_edit),
 			layout,
@@ -148,12 +128,44 @@ impl EditorEngine {
 			return ApplyResult::default();
 		};
 
-		let (text_edit, snapshot) = if undo {
-			(entry.inverse, entry.before)
-		} else {
-			(entry.forward, entry.after)
-		};
-		self.replay_history(font_system, text_edit, &snapshot)
+		let text_edit = if undo { entry.inverse } else { entry.forward };
+		self.apply_document_edit(
+			font_system,
+			&text_edit,
+			edit_changes_line_structure(self.text(), &text_edit),
+		);
+		self.rebase_context_after_history_edit(&text_edit);
+		ApplyResult {
+			text_edit: Some(text_edit),
+			layout: Some(self.document_layout()),
+			view_refreshed: false,
+		}
+	}
+
+	fn rebase_context_after_history_edit(&mut self, text_edit: &TextEdit) {
+		let head = rebase_byte(self.caret(), text_edit);
+		match self.mode() {
+			EditorMode::Insert => {
+				let layout = self.document_layout();
+				self.set_insert_head(&layout, head);
+			}
+			EditorMode::Normal => {
+				let layout = self.document_layout();
+				self.set_selection(selection_near(&layout, head));
+				self.set_mode(EditorMode::Normal);
+			}
+		}
+		self.set_preferred_x(None);
+		self.clear_pointer_anchor();
+	}
+}
+
+fn rebase_byte(byte: usize, text_edit: &TextEdit) -> usize {
+	let inserted = text_edit.inserted.len();
+	match byte {
+		byte if byte <= text_edit.range.start => byte,
+		byte if byte >= text_edit.range.end => text_edit.range.start + inserted + (byte - text_edit.range.end),
+		_ => text_edit.range.start + inserted,
 	}
 }
 

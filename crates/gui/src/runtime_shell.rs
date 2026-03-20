@@ -1,6 +1,7 @@
 use {
 	crate::{
 		canvas_view::scene_viewport_size,
+		editor::{EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorMode, EditorViewportMetrics},
 		overlay::OverlayPrimitive,
 		perf::{PerfMonitor, unavailable_dashboard},
 		presentation::SessionSnapshot,
@@ -12,15 +13,15 @@ use {
 		},
 	},
 	glorp_api::{
-		ConfigAssignment, EditorHistoryInput, EditorModeInput, EditorMotionInput, EnumValue, GlorpCall,
-		GlorpCallDescriptor, GlorpCaller, GlorpError, GlorpTxn, GlorpValue, TextInput, WrapChoice,
+		ConfigAssignment, EditorContextView, EditorHistoryCommand, EnumValue, GlorpCall, GlorpCallDescriptor,
+		GlorpCaller, GlorpError, GlorpTxn, GlorpValue, TextInput, WrapChoice,
 	},
 	glorp_editor::{
-		CanvasTarget, EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion,
-		EditorPointerIntent, EditorViewportMetrics, LayoutRect, sample_preset_text,
+		CanvasTarget, EditorEngine, EditorPresentation, EditorTextLayerState, LayoutRect, make_font_system,
+		sample_preset_text, scene_config,
 	},
 	glorp_gui::{GuiLaunchOptions, GuiRuntimeClient, GuiRuntimeSession},
-	glorp_runtime::{GuiCommand, GuiRuntimeFrame, SidebarTab},
+	glorp_runtime::{GuiCommand, GuiEditCommand, GuiEditRequest, GuiRuntimeFrame, SidebarTab},
 	iced::{
 		Element, Length, Size, Subscription, Theme, Vector,
 		widget::{container, pane_grid, responsive},
@@ -34,10 +35,26 @@ enum ShellPane {
 	Canvas,
 }
 
+struct ShellState {
+	active_tab: SidebarTab,
+	hovered_target: Option<CanvasTarget>,
+	selected_target: Option<CanvasTarget>,
+	canvas_focused: bool,
+	show_baselines: bool,
+	show_hitboxes: bool,
+	canvas_scroll: Vector,
+	viewport_size: Size,
+}
+
 pub struct RuntimeShell {
 	session: GuiRuntimeSession,
 	client: GuiRuntimeClient,
 	frame: GuiRuntimeFrame,
+	editor: EditorEngine,
+	font_system: cosmic_text::FontSystem,
+	editor_revision: u64,
+	snapshot: SessionSnapshot,
+	ui: ShellState,
 	perf: PerfMonitor,
 	shell: pane_grid::State<ShellPane>,
 	last_error: Option<String>,
@@ -48,10 +65,23 @@ impl RuntimeShell {
 		let (session, mut client) =
 			GuiRuntimeSession::connect_or_start(options).expect("GUI runtime should connect or start");
 		let frame = client.gui_frame().expect("GUI frame should load during boot");
+		let ui = ShellState::new(frame.layout_width);
+		let mut font_system = make_font_system();
+		let editor = EditorEngine::new(
+			&mut font_system,
+			frame.document_text.as_str(),
+			shell_scene_config(&frame),
+		);
+		let snapshot = build_snapshot(&editor, &frame, 1);
 		let mut shell = Self {
 			session,
 			client,
 			frame,
+			editor,
+			font_system,
+			editor_revision: 1,
+			snapshot,
+			ui,
 			perf: PerfMonitor::default(),
 			shell: pane_grid::State::with_configuration(pane_grid::Configuration::Split {
 				axis: pane_grid::Axis::Vertical,
@@ -76,24 +106,15 @@ impl RuntimeShell {
 	fn handle_message(&mut self, message: Message) -> Result<(), GlorpError> {
 		match message {
 			Message::Controls(message) => self.handle_controls(message),
-			Message::Sidebar(crate::types::SidebarMessage::SelectTab(tab)) => {
-				self.execute_gui(GuiCommand::SidebarSelect(tab))
-			}
+			Message::Sidebar(crate::types::SidebarMessage::SelectTab(tab)) => self.select_tab(tab),
 			Message::Canvas(message) => self.handle_canvas(message),
 			Message::Editor(intent) => self.handle_editor(intent),
 			Message::Perf(PerfMessage::Tick(_)) => self.refresh_frame(),
 			Message::Viewport(ViewportMessage::CanvasResized(size)) => {
 				let viewport = scene_viewport_size(size);
-				self.execute_gui(GuiCommand::ViewportMetricsSet {
-					layout_width: viewport.width,
-					viewport_width: viewport.width,
-					viewport_height: viewport.height,
-				})
+				self.resize_viewport(viewport)
 			}
-			Message::Shell(crate::types::ShellMessage::PaneResized(event)) => {
-				self.shell.resize(event.split, event.ratio);
-				self.execute_gui(GuiCommand::PaneRatioSet(event.ratio))
-			}
+			Message::Shell(crate::types::ShellMessage::PaneResized(event)) => self.resize_shell(event),
 		}
 	}
 
@@ -107,7 +128,7 @@ impl RuntimeShell {
 
 	pub(crate) fn view(&self) -> Element<'_, Message> {
 		responsive(move |size| {
-			let snapshot = Arc::new(self.frame.snapshot.clone());
+			let snapshot = Arc::new(self.snapshot.clone());
 			if is_stacked_shell(size) {
 				view_stacked_shell(
 					self.view_sidebar(snapshot.as_ref(), true),
@@ -142,16 +163,16 @@ impl RuntimeShell {
 	}
 
 	fn view_canvas(&self, snapshot: Arc<SessionSnapshot>, stacked: bool) -> Element<'static, Message> {
-		let inspect_targets_active = self.frame.ui.active_tab == SidebarTab::Inspect;
+		let inspect_targets_active = self.ui.active_tab == SidebarTab::Inspect;
 		let inspect_overlays = if inspect_targets_active {
 			snapshot.scene.as_ref().map_or_else(
 				|| Arc::<[OverlayPrimitive]>::from([]),
 				|scene| {
 					scene.layout.inspect_overlay_primitives(
-						self.frame.ui.hovered_target,
-						self.frame.ui.selected_target,
-						self.frame.ui.layout_width,
-						self.frame.ui.show_hitboxes,
+						self.ui.hovered_target,
+						self.ui.selected_target,
+						self.frame.layout_width,
+						self.ui.show_hitboxes,
 					)
 				},
 			)
@@ -161,22 +182,22 @@ impl RuntimeShell {
 
 		view_canvas_pane(CanvasPaneProps {
 			snapshot,
-			layout_width: self.frame.ui.layout_width,
+			layout_width: self.frame.layout_width,
 			decorations: CanvasDecorations {
-				show_baselines: self.frame.ui.show_baselines,
-				show_hitboxes: self.frame.ui.show_hitboxes,
+				show_baselines: self.ui.show_baselines,
+				show_hitboxes: self.ui.show_hitboxes,
 			},
 			inspect_overlays,
 			inspect_targets_active,
-			focused: self.frame.ui.canvas_focused,
-			scroll: Vector::new(self.frame.ui.canvas_scroll_x, self.frame.ui.canvas_scroll_y),
+			focused: self.ui.canvas_focused,
+			scroll: self.ui.canvas_scroll,
 			perf: self.perf.sink(),
 			stacked,
 		})
 	}
 
 	fn view_sidebar(&self, snapshot: &SessionSnapshot, stacked: bool) -> Element<'static, Message> {
-		let body = match self.frame.ui.active_tab {
+		let body = match self.ui.active_tab {
 			SidebarTab::Controls => view_controls_tab(ControlsTabProps {
 				preset: self
 					.frame
@@ -189,14 +210,14 @@ impl RuntimeShell {
 				wrapping: self.frame.config.editor.wrapping,
 				font_size: self.frame.config.editor.font_size,
 				line_height: self.frame.config.editor.line_height,
-				show_baselines: self.frame.ui.show_baselines,
-				show_hitboxes: self.frame.ui.show_hitboxes,
+				show_baselines: self.ui.show_baselines,
+				show_hitboxes: self.ui.show_hitboxes,
 			}),
 			SidebarTab::Inspect => {
 				let (warnings, interaction_details) = snapshot.scene.as_ref().map_or_else(
 					|| (Arc::<[String]>::from([]), Arc::<str>::from("derived scene unavailable")),
 					|scene| {
-						let target = self.frame.ui.selected_target.or(self.frame.ui.hovered_target);
+						let target = self.ui.selected_target.or(self.ui.hovered_target);
 						(
 							scene.layout.warnings.clone(),
 							scene
@@ -214,7 +235,7 @@ impl RuntimeShell {
 			SidebarTab::Perf => snapshot.scene.as_ref().map_or_else(
 				|| {
 					let dashboard =
-						unavailable_dashboard(snapshot.mode(), snapshot.editor_bytes(), self.frame.ui.layout_width);
+						unavailable_dashboard(snapshot.mode(), snapshot.editor_bytes(), self.frame.layout_width);
 					view_perf_tab(&dashboard)
 				},
 				|scene| {
@@ -227,11 +248,11 @@ impl RuntimeShell {
 		};
 
 		view_sidebar(SidebarProps {
-			active_tab: self.frame.ui.active_tab,
+			active_tab: self.ui.active_tab,
 			editor_mode: snapshot.mode(),
 			editor_bytes: snapshot.editor_bytes(),
-			undo_depth: snapshot.editor.undo_depth,
-			redo_depth: snapshot.editor.redo_depth,
+			undo_depth: self.frame.undo_depth,
+			redo_depth: self.frame.redo_depth,
 			body,
 			stacked,
 		})
@@ -250,7 +271,7 @@ impl RuntimeShell {
 				.collect();
 				self.execute(public_call::<glorp_api::calls::Txn>(GlorpTxn { calls }))?;
 				if preset != glorp_api::SamplePreset::Custom {
-					self.execute_gui(GuiCommand::ViewportScrollTo { x: 0.0, y: 0.0 })?;
+					self.ui.canvas_scroll = Vector::new(0.0, 0.0);
 				}
 				Ok(())
 			}
@@ -269,42 +290,53 @@ impl RuntimeShell {
 				"editor.line_height",
 				GlorpValue::from(serde_json::json!(line_height)),
 			)),
-			ControlsMessage::ShowBaselinesChanged(show_baselines) => {
-				self.execute_gui(GuiCommand::ShowBaselinesSet(show_baselines))
-			}
-			ControlsMessage::ShowHitboxesChanged(show_hitboxes) => {
-				self.execute_gui(GuiCommand::ShowHitboxesSet(show_hitboxes))
-			}
+			ControlsMessage::ShowBaselinesChanged(show_baselines) => self.set_show_baselines(show_baselines),
+			ControlsMessage::ShowHitboxesChanged(show_hitboxes) => self.set_show_hitboxes(show_hitboxes),
 		}
 	}
 
 	fn handle_canvas(&mut self, message: CanvasEvent) -> Result<(), GlorpError> {
 		match message {
-			CanvasEvent::Hovered(target) => self.execute_gui(GuiCommand::InspectTargetHover(inspect_target(
-				self.frame.ui.active_tab,
-				target,
-			))),
-			CanvasEvent::FocusChanged(focused) => self.execute_gui(GuiCommand::CanvasFocusSet(focused)),
-			CanvasEvent::ScrollChanged(scroll) => self.execute_gui(GuiCommand::ViewportScrollTo {
-				x: scroll.x,
-				y: scroll.y,
-			}),
+			CanvasEvent::Hovered(target) => {
+				self.ui.hovered_target = inspect_target(self.ui.active_tab, target);
+				Ok(())
+			}
+			CanvasEvent::FocusChanged(focused) => {
+				self.ui.canvas_focused = focused;
+				Ok(())
+			}
+			CanvasEvent::ScrollChanged(scroll) => {
+				self.ui.canvas_scroll = scroll;
+				Ok(())
+			}
 			CanvasEvent::PointerSelectionStarted { target, intent } => {
-				let active_tab = self.frame.ui.active_tab;
-				self.client.execute_gui(GuiCommand::CanvasFocusSet(true))?;
-				self.client
-					.execute_gui(GuiCommand::InspectTargetSelect(inspect_target(active_tab, target)))?;
-				self.client.execute_gui(pointer_command(intent))?;
-				self.refresh_frame()
+				self.ui.canvas_focused = true;
+				self.ui.selected_target = inspect_target(self.ui.active_tab, target);
+				self.apply_local_editor_intent(EditorIntent::Pointer(intent))
 			}
 		}
 	}
 
 	fn handle_editor(&mut self, intent: EditorIntent) -> Result<(), GlorpError> {
 		match intent {
-			EditorIntent::Pointer(pointer) => self.execute_gui(pointer_command(pointer)),
-			intent => self.execute(editor_intent_command(intent)),
+			EditorIntent::Pointer(pointer) => self.apply_local_editor_intent(EditorIntent::Pointer(pointer)),
+			EditorIntent::Motion(motion) => self.apply_local_editor_intent(EditorIntent::Motion(motion)),
+			EditorIntent::Mode(mode) => self.apply_local_editor_intent(EditorIntent::Mode(mode)),
+			EditorIntent::Edit(edit) => self.execute_gui_edit(edit_command(edit)),
+			EditorIntent::History(history) => self.execute_gui_edit(GuiEditCommand::History(match history {
+				EditorHistoryIntent::Undo => EditorHistoryCommand::Undo,
+				EditorHistoryIntent::Redo => EditorHistoryCommand::Redo,
+			})),
 		}
+	}
+
+	fn apply_local_editor_intent(&mut self, intent: EditorIntent) -> Result<(), GlorpError> {
+		let _ = self.editor.apply(&mut self.font_system, intent);
+		self.refresh_local_snapshot();
+		if let Some(scroll) = reveal_scroll(&self.snapshot, self.frame.layout_width, &self.ui) {
+			self.ui.canvas_scroll = scroll;
+		}
+		Ok(())
 	}
 
 	fn execute(&mut self, call: GlorpCall) -> Result<(), GlorpError> {
@@ -312,29 +344,184 @@ impl RuntimeShell {
 		self.refresh_frame()
 	}
 
-	fn execute_gui(&mut self, command: GuiCommand) -> Result<(), GlorpError> {
-		self.client.execute_gui(command)?;
-		self.refresh_frame()
+	fn execute_gui_edit(&mut self, command: GuiEditCommand) -> Result<(), GlorpError> {
+		let response = self.client.gui_edit(GuiEditRequest {
+			layout: glorp_runtime::GuiLayoutRequest {
+				layout_width: self.frame.layout_width,
+			},
+			context: self.local_context(),
+			command,
+		})?;
+		self.refresh_frame()?;
+		self.apply_local_context(&response.next_context)?;
+		Ok(())
 	}
 
 	fn refresh_frame(&mut self) -> Result<(), GlorpError> {
 		self.perf.flush_canvas_metrics();
 		let mut frame = self.client.gui_frame()?;
-		if scene_required(&frame) && frame.snapshot.scene.is_none() {
+		if self.scene_required() && frame.scene.is_none() {
 			self.client.execute_gui(GuiCommand::SceneEnsure)?;
 			frame = self.client.gui_frame()?;
 		}
 
-		if let Some(scroll) = reveal_scroll(&frame) {
-			self.client.execute_gui(GuiCommand::ViewportScrollTo {
-				x: scroll.x,
-				y: scroll.y,
-			})?;
-			frame = self.client.gui_frame()?;
+		self.sync_editor_from_frame(&frame)?;
+		self.frame = frame;
+		self.refresh_local_snapshot();
+		if let Some(scroll) = reveal_scroll(&self.snapshot, self.frame.layout_width, &self.ui) {
+			self.ui.canvas_scroll = scroll;
+		}
+		Ok(())
+	}
+
+	fn sync_editor_from_frame(&mut self, frame: &GuiRuntimeFrame) -> Result<(), GlorpError> {
+		let config = shell_scene_config(frame);
+		if self.editor.text() != frame.document_text {
+			let context = self.local_context();
+			self.editor
+				.reset(&mut self.font_system, frame.document_text.as_str(), config);
+			self.apply_local_context(&context)?;
+			return Ok(());
 		}
 
-		self.frame = frame;
+		let _ = self.editor.sync_buffer_config(&mut self.font_system, config);
 		Ok(())
+	}
+
+	fn apply_local_context(&mut self, context: &EditorContextView) -> Result<(), GlorpError> {
+		let layout = self.editor.document_layout();
+		let mode = match context.mode {
+			glorp_api::EditorMode::Normal => EditorMode::Normal,
+			glorp_api::EditorMode::Insert => EditorMode::Insert,
+		};
+		let selection = context
+			.selection
+			.as_ref()
+			.map(|range| range.start as usize..range.end as usize);
+		let selection_head = context.selection_head.map(|head| head as usize);
+		self.editor.replace_context(&layout, mode, selection, selection_head);
+		self.refresh_local_snapshot();
+		Ok(())
+	}
+
+	fn local_context(&self) -> EditorContextView {
+		let view = self.editor.view_state();
+		EditorContextView {
+			mode: match view.mode {
+				EditorMode::Normal => glorp_api::EditorMode::Normal,
+				EditorMode::Insert => glorp_api::EditorMode::Insert,
+			},
+			selection: view.selection.map(|range| glorp_api::TextRange {
+				start: range.start as u64,
+				end: range.end as u64,
+			}),
+			selection_head: view.selection_head.map(|head| head as u64),
+		}
+	}
+
+	fn refresh_local_snapshot(&mut self) {
+		self.editor_revision += 1;
+		self.snapshot = build_snapshot(&self.editor, &self.frame, self.editor_revision);
+	}
+
+	fn resize_viewport(&mut self, viewport: Size) -> Result<(), GlorpError> {
+		self.ui.viewport_size = viewport;
+		if (self.frame.layout_width - viewport.width).abs() <= f32::EPSILON {
+			return Ok(());
+		}
+		self.client.set_layout_width(viewport.width);
+		self.refresh_frame()
+	}
+
+	fn resize_shell(&mut self, event: iced::widget::pane_grid::ResizeEvent) -> Result<(), GlorpError> {
+		self.shell.resize(event.split, event.ratio);
+		Ok(())
+	}
+
+	fn select_tab(&mut self, tab: SidebarTab) -> Result<(), GlorpError> {
+		if self.ui.active_tab == tab {
+			return Ok(());
+		}
+		self.ui.active_tab = tab;
+		self.refresh_frame()
+	}
+
+	fn set_show_baselines(&mut self, show_baselines: bool) -> Result<(), GlorpError> {
+		if self.ui.show_baselines == show_baselines {
+			return Ok(());
+		}
+		self.ui.show_baselines = show_baselines;
+		self.refresh_frame()
+	}
+
+	fn set_show_hitboxes(&mut self, show_hitboxes: bool) -> Result<(), GlorpError> {
+		if self.ui.show_hitboxes == show_hitboxes {
+			return Ok(());
+		}
+		self.ui.show_hitboxes = show_hitboxes;
+		self.refresh_frame()
+	}
+
+	fn scene_required(&self) -> bool {
+		matches!(self.ui.active_tab, SidebarTab::Inspect | SidebarTab::Perf)
+			|| self.ui.show_baselines
+			|| self.ui.show_hitboxes
+	}
+}
+
+impl ShellState {
+	fn new(layout_width: f32) -> Self {
+		Self {
+			active_tab: SidebarTab::Controls,
+			hovered_target: None,
+			selected_target: None,
+			canvas_focused: false,
+			show_baselines: false,
+			show_hitboxes: false,
+			canvas_scroll: Vector::new(0.0, 0.0),
+			viewport_size: Size::new(layout_width, 320.0),
+		}
+	}
+}
+
+fn shell_scene_config(frame: &GuiRuntimeFrame) -> glorp_editor::SceneConfig {
+	scene_config(
+		frame.config.editor.font,
+		frame.config.editor.shaping,
+		frame.config.editor.wrapping,
+		frame.config.editor.font_size,
+		frame.config.editor.line_height,
+		frame.layout_width,
+	)
+}
+
+fn build_snapshot(editor: &EditorEngine, frame: &GuiRuntimeFrame, revision: u64) -> SessionSnapshot {
+	let viewport_metrics = editor.viewport_metrics();
+	let text_layer = editor.text_layer_state();
+	let editor = EditorPresentation::new(
+		revision,
+		viewport_metrics,
+		EditorTextLayerState {
+			buffer: text_layer.buffer,
+			measured_height: text_layer.measured_height,
+		},
+		editor.view_state(),
+		editor.text().len(),
+		frame.undo_depth,
+		frame.redo_depth,
+	);
+	SessionSnapshot {
+		editor,
+		scene: frame.scene.clone(),
+	}
+}
+
+fn edit_command(edit: EditorEditIntent) -> GuiEditCommand {
+	match edit {
+		EditorEditIntent::Backspace => GuiEditCommand::Backspace,
+		EditorEditIntent::DeleteForward => GuiEditCommand::DeleteForward,
+		EditorEditIntent::DeleteSelection => GuiEditCommand::DeleteSelection,
+		EditorEditIntent::InsertText(text) => GuiEditCommand::InsertText(text),
 	}
 }
 
@@ -359,18 +546,12 @@ fn inspect_target(active_tab: SidebarTab, target: Option<CanvasTarget>) -> Optio
 	target.filter(|_| active_tab == SidebarTab::Inspect)
 }
 
-const fn scene_required(frame: &GuiRuntimeFrame) -> bool {
-	matches!(frame.ui.active_tab, SidebarTab::Inspect | SidebarTab::Perf)
-		|| frame.ui.show_baselines
-		|| frame.ui.show_hitboxes
-}
-
-fn reveal_scroll(frame: &GuiRuntimeFrame) -> Option<Vector> {
-	let target = frame.snapshot.editor.editor.viewport_target?;
-	let metrics = frame.snapshot.editor.viewport_metrics;
-	let viewport = Size::new(frame.ui.viewport_width.max(1.0), frame.ui.viewport_height.max(1.0));
-	let current = Vector::new(frame.ui.canvas_scroll_x, frame.ui.canvas_scroll_y);
-	let next = reveal_target_scroll(current, target, metrics, frame.ui.layout_width, viewport);
+fn reveal_scroll(snapshot: &SessionSnapshot, layout_width: f32, ui: &ShellState) -> Option<Vector> {
+	let target = snapshot.editor.editor.viewport_target?;
+	let metrics = snapshot.editor.viewport_metrics;
+	let viewport = Size::new(ui.viewport_size.width.max(1.0), ui.viewport_size.height.max(1.0));
+	let current = ui.canvas_scroll;
+	let next = reveal_target_scroll(current, target, metrics, layout_width, viewport);
 	let delta = next - current;
 	(delta.x.abs() > 0.5 || delta.y.abs() > 0.5).then_some(next)
 }
@@ -411,58 +592,8 @@ fn clamp_scroll(scroll: Vector, metrics: EditorViewportMetrics, layout_width: f3
 	Vector::new(scroll.x.clamp(0.0, max_x), scroll.y.clamp(0.0, max_y))
 }
 
-fn editor_intent_command(intent: EditorIntent) -> GlorpCall {
-	match intent {
-		EditorIntent::Pointer(_) => unreachable!("pointer intents stay on the private GUI command path"),
-		EditorIntent::Motion(motion) => public_call::<glorp_api::calls::EditorMotion>(EditorMotionInput {
-			motion: match motion {
-				EditorMotion::Left => glorp_api::EditorMotion::Left,
-				EditorMotion::Right => glorp_api::EditorMotion::Right,
-				EditorMotion::Up => glorp_api::EditorMotion::Up,
-				EditorMotion::Down => glorp_api::EditorMotion::Down,
-				EditorMotion::LineStart => glorp_api::EditorMotion::LineStart,
-				EditorMotion::LineEnd => glorp_api::EditorMotion::LineEnd,
-			},
-		}),
-		EditorIntent::Mode(mode) => public_call::<glorp_api::calls::EditorMode>(EditorModeInput {
-			mode: match mode {
-				EditorModeIntent::EnterInsertBefore => glorp_api::EditorModeCommand::EnterInsertBefore,
-				EditorModeIntent::EnterInsertAfter => glorp_api::EditorModeCommand::EnterInsertAfter,
-				EditorModeIntent::ExitInsert => glorp_api::EditorModeCommand::ExitInsert,
-			},
-		}),
-		EditorIntent::Edit(edit) => match edit {
-			EditorEditIntent::Backspace => public_call::<glorp_api::calls::EditorBackspace>(()),
-			EditorEditIntent::DeleteForward => public_call::<glorp_api::calls::EditorDeleteForward>(()),
-			EditorEditIntent::DeleteSelection => public_call::<glorp_api::calls::EditorDeleteSelection>(()),
-			EditorEditIntent::InsertText(text) => public_call::<glorp_api::calls::EditorInsert>(TextInput { text }),
-		},
-		EditorIntent::History(history) => public_call::<glorp_api::calls::EditorHistory>(EditorHistoryInput {
-			action: match history {
-				EditorHistoryIntent::Undo => glorp_api::EditorHistoryCommand::Undo,
-				EditorHistoryIntent::Redo => glorp_api::EditorHistoryCommand::Redo,
-			},
-		}),
-	}
-}
-
 fn public_call<D>(input: D::Input) -> GlorpCall
 where
 	D: GlorpCallDescriptor, {
 	D::build(input).expect("GUI public call should encode")
-}
-
-fn pointer_command(pointer: EditorPointerIntent) -> GuiCommand {
-	match pointer {
-		EditorPointerIntent::Begin { position, select_word } => GuiCommand::EditorPointerBegin {
-			x: position.x,
-			y: position.y,
-			select_word,
-		},
-		EditorPointerIntent::Drag(position) => GuiCommand::EditorPointerDrag {
-			x: position.x,
-			y: position.y,
-		},
-		EditorPointerIntent::End => GuiCommand::EditorPointerEnd,
-	}
 }

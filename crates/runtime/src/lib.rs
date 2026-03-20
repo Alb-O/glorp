@@ -13,8 +13,9 @@ mod state;
 
 pub use self::{
 	config_store::{ConfigStore, ConfigStorePaths},
-	gui::{GuiCommand, GuiEditorPresentation, GuiRuntimeFrame, GuiSnapshot, GuiTransportFrame, SidebarTab},
+	gui::{GuiCommand, GuiEditCommand, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame, SidebarTab},
 	host::RuntimeHost,
 	persistence::{ensure_surface_artifacts_current, export_surface_artifacts, sync_surface_artifacts},
 	runtime::{RuntimeOptions, default_runtime_paths},
+	state::DEFAULT_LAYOUT_WIDTH,
 };

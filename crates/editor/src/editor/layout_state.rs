@@ -126,6 +126,10 @@ impl EditorLayout {
 		})
 	}
 
+	pub const fn layout_width(&self) -> f32 {
+		self.config.max_width
+	}
+
 	pub fn text_layer_state(&self) -> EditorTextLayerState {
 		let metrics = self.viewport_metrics();
 		EditorTextLayerState {

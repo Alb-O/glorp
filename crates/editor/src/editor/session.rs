@@ -1,4 +1,4 @@
-use super::{EditorMode, EditorSelection, history::EditorSnapshot};
+use super::{EditorMode, EditorSelection};
 
 #[derive(Debug, Clone, Default)]
 pub struct EditorSession {
@@ -63,23 +63,5 @@ impl EditorSession {
 
 	pub const fn set_pointer_anchor(&mut self, pointer_anchor: Option<usize>) {
 		self.pointer_anchor = pointer_anchor;
-	}
-
-	pub fn history_snapshot(&self) -> EditorSnapshot {
-		EditorSnapshot {
-			mode: self.mode,
-			selection: self.selection.clone(),
-			preferred_x: self.preferred_x,
-		}
-	}
-
-	pub fn restore_snapshot(&mut self, snapshot: &EditorSnapshot, document_len: usize) {
-		self.mode = snapshot.mode;
-		self.selection = snapshot
-			.selection
-			.as_ref()
-			.map(|selection| selection.clamped(document_len));
-		self.preferred_x = snapshot.preferred_x;
-		self.pointer_anchor = None;
 	}
 }

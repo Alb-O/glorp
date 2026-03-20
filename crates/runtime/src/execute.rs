@@ -1,67 +1,47 @@
 use {
 	crate::{
-		GuiCommand, project,
+		GuiCommand, GuiEditCommand, GuiEditRequest, GuiEditResponse, project,
 		runtime::GlorpRuntime,
 		state::{SessionDelta, SessionRequest},
 	},
 	glorp_api::{
-		ConfigAssignment, ConfigPath, EditorHistoryCommand, EditorModeCommand, EditorMotion, GlorpCall,
-		GlorpCallResult, GlorpConfig, GlorpDelta, GlorpError, GlorpOutcome, GlorpRevisions, GlorpSubscription,
-		GlorpTxn, RuntimeCallDispatcher, TokenAckView, decode_call_output, dispatch_runtime_call,
-		transactional_call_spec,
+		ConfigAssignment, ConfigPath, EditorContextView, EditorHistoryCommand, GlorpCall, GlorpCallResult, GlorpConfig,
+		GlorpDelta, GlorpError, GlorpOutcome, GlorpRevisions, GlorpSubscription, GlorpTxn, RuntimeCallDispatcher,
+		TokenAckView, decode_call_output, dispatch_runtime_call, transactional_call_spec,
 	},
-	glorp_editor::{
-		EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorModeIntent, EditorMotion as EngineMotion,
-		EditorPointerIntent,
-	},
+	glorp_editor::{EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorMode},
+	std::ops::Range,
 };
 
 pub fn call(runtime: &mut GlorpRuntime, glorp_call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
 	dispatch_runtime_call(runtime, glorp_call)
 }
 
-pub fn execute_gui(runtime: &mut GlorpRuntime, command: GuiCommand) -> Result<(), GlorpError> {
+pub fn execute_gui(runtime: &mut GlorpRuntime, layout_width: f32, command: GuiCommand) -> Result<(), GlorpError> {
+	sync_gui_layout(runtime, layout_width);
 	match command {
-		GuiCommand::SidebarSelect(tab) => execute_ui(runtime, |state| state.active_tab = tab),
-		GuiCommand::InspectTargetHover(target) => execute_ui(runtime, |state| state.hovered_target = target),
-		GuiCommand::InspectTargetSelect(target) => execute_ui(runtime, |state| state.selected_target = target),
-		GuiCommand::CanvasFocusSet(focused) => execute_ui(runtime, |state| state.canvas_focused = focused),
-		GuiCommand::ViewportScrollTo { x, y } => execute_ui(runtime, |state| {
-			state.canvas_scroll_x = x.max(0.0);
-			state.canvas_scroll_y = y.max(0.0);
-		}),
-		GuiCommand::ViewportMetricsSet {
-			layout_width,
-			viewport_width,
-			viewport_height,
-		} => publish_public_change(
-			execute_viewport_metrics(runtime, layout_width, viewport_width, viewport_height),
-			runtime,
-		),
-		GuiCommand::PaneRatioSet(ratio) => execute_ui(runtime, |state| state.pane_ratio = ratio.clamp(0.1, 0.9)),
-		GuiCommand::ShowBaselinesSet(show) => execute_ui(runtime, |state| state.show_baselines = show),
-		GuiCommand::ShowHitboxesSet(show) => execute_ui(runtime, |state| state.show_hitboxes = show),
-		GuiCommand::EditorPointerBegin { x, y, select_word } => publish_public_change(
-			execute_editor_pointer(
-				runtime,
-				EditorPointerIntent::Begin {
-					position: point(x, y),
-					select_word,
-				},
-			),
-			runtime,
-		),
-		GuiCommand::EditorPointerDrag { x, y } => publish_public_change(
-			execute_editor_pointer(runtime, EditorPointerIntent::Drag(point(x, y))),
-			runtime,
-		),
-		GuiCommand::EditorPointerEnd => {
-			publish_public_change(execute_editor_pointer(runtime, EditorPointerIntent::End), runtime)
-		}
 		GuiCommand::SceneEnsure => execute_scene_ensure(runtime),
 	}
 
 	Ok(())
+}
+
+pub fn execute_gui_edit(runtime: &mut GlorpRuntime, request: GuiEditRequest) -> Result<GuiEditResponse, GlorpError> {
+	sync_gui_layout(runtime, request.layout.layout_width);
+	apply_gui_context(runtime, &request.context);
+	let intent = match request.command {
+		GuiEditCommand::InsertText(text) => EditorIntent::Edit(EditorEditIntent::InsertText(text)),
+		GuiEditCommand::Backspace => EditorIntent::Edit(EditorEditIntent::Backspace),
+		GuiEditCommand::DeleteForward => EditorIntent::Edit(EditorEditIntent::DeleteForward),
+		GuiEditCommand::DeleteSelection => EditorIntent::Edit(EditorEditIntent::DeleteSelection),
+		GuiEditCommand::History(action) => EditorIntent::History(match action {
+			EditorHistoryCommand::Undo => EditorHistoryIntent::Undo,
+			EditorHistoryCommand::Redo => EditorHistoryIntent::Redo,
+		}),
+	};
+	let outcome = publish_session(runtime, SessionRequest::ApplyEditorIntent(intent));
+	let next_context = current_gui_context(runtime);
+	Ok(GuiEditResponse { outcome, next_context })
 }
 
 fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome, GlorpError> {
@@ -145,96 +125,70 @@ fn publish_config(runtime: &mut GlorpRuntime, changed_paths: Vec<ConfigPath>) ->
 	Ok(outcome)
 }
 
-fn execute_editor_motion(runtime: &mut GlorpRuntime, motion: EditorMotion) -> GlorpOutcome {
-	let motion = match motion {
-		EditorMotion::Left => EngineMotion::Left,
-		EditorMotion::Right => EngineMotion::Right,
-		EditorMotion::Up => EngineMotion::Up,
-		EditorMotion::Down => EngineMotion::Down,
-		EditorMotion::LineStart => EngineMotion::LineStart,
-		EditorMotion::LineEnd => EngineMotion::LineEnd,
-	};
-	publish_session(runtime, SessionRequest::ApplyEditorIntent(EditorIntent::Motion(motion)))
-}
-
-fn execute_editor_mode(runtime: &mut GlorpRuntime, mode: EditorModeCommand) -> GlorpOutcome {
-	let mode = match mode {
-		EditorModeCommand::EnterInsertBefore => EditorModeIntent::EnterInsertBefore,
-		EditorModeCommand::EnterInsertAfter => EditorModeIntent::EnterInsertAfter,
-		EditorModeCommand::ExitInsert => EditorModeIntent::ExitInsert,
-	};
-	publish_session(runtime, SessionRequest::ApplyEditorIntent(EditorIntent::Mode(mode)))
-}
-
-fn execute_editor_edit(runtime: &mut GlorpRuntime, edit: EditorEditIntent) -> GlorpOutcome {
-	publish_session(runtime, SessionRequest::ApplyEditorIntent(EditorIntent::Edit(edit)))
-}
-
-fn execute_editor_history(runtime: &mut GlorpRuntime, action: EditorHistoryCommand) -> GlorpOutcome {
-	let action = match action {
-		EditorHistoryCommand::Undo => EditorHistoryIntent::Undo,
-		EditorHistoryCommand::Redo => EditorHistoryIntent::Redo,
-	};
-	publish_session(
-		runtime,
-		SessionRequest::ApplyEditorIntent(EditorIntent::History(action)),
-	)
-}
-
-fn execute_editor_pointer(runtime: &mut GlorpRuntime, pointer: EditorPointerIntent) -> GlorpOutcome {
-	publish_session(
-		runtime,
-		SessionRequest::ApplyEditorIntent(EditorIntent::Pointer(pointer)),
-	)
-}
-
-fn execute_ui(runtime: &mut GlorpRuntime, update: impl FnOnce(&mut crate::state::UiRuntimeState)) {
-	update(&mut runtime.state.ui);
-}
-
-fn publish_public_change(outcome: GlorpOutcome, runtime: &mut GlorpRuntime) {
-	if public_delta_changed(&outcome.delta) {
-		runtime.publish_changed(&outcome);
-	}
-}
-
-fn execute_viewport_metrics(
-	runtime: &mut GlorpRuntime, layout_width: f32, viewport_width: f32, viewport_height: f32,
-) -> GlorpOutcome {
-	runtime.state.ui.layout_width = layout_width.max(1.0);
-	runtime.state.ui.viewport_width = viewport_width.max(1.0);
-	runtime.state.ui.viewport_height = viewport_height.max(1.0);
-	run_session(runtime, SessionRequest::SyncConfig)
-}
-
 fn execute_scene_ensure(runtime: &mut GlorpRuntime) {
 	project::ensure_scene_materialized(&mut runtime.state);
 }
 
-const fn point(x: f32, y: f32) -> iced::Point {
-	iced::Point::new(x, y)
+pub(crate) fn sync_gui_layout(runtime: &mut GlorpRuntime, layout_width: f32) {
+	let layout_width = layout_width.max(1.0);
+	let current = runtime.state.session.layout_width();
+	if (current - layout_width).abs() <= f32::EPSILON {
+		return;
+	}
+
+	runtime
+		.state
+		.session
+		.sync_layout_width(&runtime.state.config, layout_width);
+}
+
+fn apply_gui_context(runtime: &mut GlorpRuntime, context: &EditorContextView) {
+	let editor = runtime.state.session.editor_mut();
+	let layout = editor.document_layout();
+	let selection = context.selection.as_ref().map(text_range);
+	let selection_head = context.selection_head.map(|head| head as usize);
+	let mode = match context.mode {
+		glorp_api::EditorMode::Normal => EditorMode::Normal,
+		glorp_api::EditorMode::Insert => EditorMode::Insert,
+	};
+	editor.replace_context(&layout, mode, selection, selection_head);
+}
+
+fn current_gui_context(runtime: &GlorpRuntime) -> EditorContextView {
+	let view = runtime.state.session.editor().view_state();
+	EditorContextView {
+		mode: match view.mode {
+			EditorMode::Normal => glorp_api::EditorMode::Normal,
+			EditorMode::Insert => glorp_api::EditorMode::Insert,
+		},
+		selection: view.selection.as_ref().map(|range| glorp_api::TextRange {
+			start: range.start as u64,
+			end: range.end as u64,
+		}),
+		selection_head: view.selection_head.map(|head| head as u64),
+	}
 }
 
 fn merge_outcome(accumulated: &mut GlorpOutcome, outcome: GlorpOutcome) {
 	merge_delta(&mut accumulated.delta, &outcome.delta);
 	accumulated.changed_config_paths.extend(outcome.changed_config_paths);
 	accumulated.warnings.extend(outcome.warnings);
+	accumulated.document_edit = outcome.document_edit.or_else(|| accumulated.document_edit.take());
 	accumulated.revisions = outcome.revisions;
 }
 
 const fn merge_delta(accumulated: &mut GlorpDelta, delta: &GlorpDelta) {
 	accumulated.text_changed |= delta.text_changed;
 	accumulated.view_changed |= delta.view_changed;
-	accumulated.selection_changed |= delta.selection_changed;
-	accumulated.mode_changed |= delta.mode_changed;
 	accumulated.config_changed |= delta.config_changed;
 }
 
 fn run_session(runtime: &mut GlorpRuntime, request: SessionRequest) -> GlorpOutcome {
+	let layout_width = runtime.state.session.layout_width();
 	let delta = runtime
 		.state
 		.session
-		.execute(request, &runtime.state.config, runtime.state.ui.layout_width);
+		.execute(request, &runtime.state.config, layout_width);
 	session_outcome(runtime, &delta)
 }
 
@@ -245,22 +199,33 @@ fn publish_session(runtime: &mut GlorpRuntime, request: SessionRequest) -> Glorp
 
 fn session_outcome(runtime: &mut GlorpRuntime, session_delta: &SessionDelta) -> GlorpOutcome {
 	let delta = runtime.state.delta_from_session(session_delta);
-	outcome(runtime.state.revisions, delta, vec![])
+	outcome(
+		runtime.state.revisions,
+		delta,
+		session_delta.document_edit.as_ref().map(crate::state::text_edit_view),
+		vec![],
+	)
 }
 
 fn publish(runtime: &mut GlorpRuntime, outcome: GlorpOutcome) -> GlorpOutcome {
-	runtime.publish_changed(&outcome);
+	if public_delta_changed(&outcome.delta) {
+		runtime.publish_changed(&outcome);
+	}
 	outcome
 }
 
 const fn public_delta_changed(delta: &GlorpDelta) -> bool {
-	delta.text_changed || delta.view_changed || delta.selection_changed || delta.mode_changed || delta.config_changed
+	delta.text_changed || delta.view_changed || delta.config_changed
 }
 
-const fn outcome(revisions: GlorpRevisions, delta: GlorpDelta, changed_config_paths: Vec<ConfigPath>) -> GlorpOutcome {
+fn outcome(
+	revisions: GlorpRevisions, delta: GlorpDelta, document_edit: Option<glorp_api::TextEditView>,
+	changed_config_paths: Vec<ConfigPath>,
+) -> GlorpOutcome {
 	GlorpOutcome {
 		delta,
 		revisions,
+		document_edit,
 		changed_config_paths,
 		warnings: vec![],
 	}
@@ -287,6 +252,10 @@ fn flatten_patch_into(path: &str, value: &glorp_api::GlorpValue) -> Result<Vec<C
 			value: value.clone(),
 		}]),
 	}
+}
+
+fn text_range(range: &glorp_api::TextRange) -> Range<usize> {
+	range.start as usize..range.end as usize
 }
 
 impl RuntimeCallDispatcher for GlorpRuntime {
@@ -318,34 +287,6 @@ impl RuntimeCallDispatcher for GlorpRuntime {
 		Ok(publish_session(self, SessionRequest::ReplaceDocument(input.text)))
 	}
 
-	fn editor_motion(&mut self, input: glorp_api::EditorMotionInput) -> Result<GlorpOutcome, GlorpError> {
-		Ok(execute_editor_motion(self, input.motion))
-	}
-
-	fn editor_mode(&mut self, input: glorp_api::EditorModeInput) -> Result<GlorpOutcome, GlorpError> {
-		Ok(execute_editor_mode(self, input.mode))
-	}
-
-	fn editor_insert(&mut self, input: glorp_api::TextInput) -> Result<GlorpOutcome, GlorpError> {
-		Ok(execute_editor_edit(self, EditorEditIntent::InsertText(input.text)))
-	}
-
-	fn editor_backspace(&mut self, _input: ()) -> Result<GlorpOutcome, GlorpError> {
-		Ok(execute_editor_edit(self, EditorEditIntent::Backspace))
-	}
-
-	fn editor_delete_forward(&mut self, _input: ()) -> Result<GlorpOutcome, GlorpError> {
-		Ok(execute_editor_edit(self, EditorEditIntent::DeleteForward))
-	}
-
-	fn editor_delete_selection(&mut self, _input: ()) -> Result<GlorpOutcome, GlorpError> {
-		Ok(execute_editor_edit(self, EditorEditIntent::DeleteSelection))
-	}
-
-	fn editor_history(&mut self, input: glorp_api::EditorHistoryInput) -> Result<GlorpOutcome, GlorpError> {
-		Ok(execute_editor_history(self, input.action))
-	}
-
 	fn schema(&mut self, _input: ()) -> Result<glorp_api::GlorpSchema, GlorpError> {
 		Ok(glorp_api::glorp_schema())
 	}
@@ -358,8 +299,8 @@ impl RuntimeCallDispatcher for GlorpRuntime {
 		Ok(self.state.session.text().into())
 	}
 
-	fn editor(&mut self, _input: ()) -> Result<glorp_api::EditorStateView, GlorpError> {
-		Ok(project::editor_view_from_state(&self.state))
+	fn document(&mut self, _input: ()) -> Result<glorp_api::DocumentStateView, GlorpError> {
+		Ok(project::document_view_from_state(&self.state))
 	}
 
 	fn capabilities(&mut self, _input: ()) -> Result<glorp_api::GlorpCapabilities, GlorpError> {

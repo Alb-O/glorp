@@ -322,7 +322,7 @@ pub fn glorp_schema() -> GlorpSchema {
 	}
 
 	GlorpSchema {
-		version: 6,
+		version: 7,
 		types: registry.into_types(),
 		calls,
 		events,
@@ -378,8 +378,7 @@ fn register_type_ref(registry: &mut TypeRegistry, ty: &TypeRef) {
 				"GlorpConfig" => registry.register::<crate::GlorpConfig>(),
 				"EditorConfig" => registry.register::<crate::EditorConfig>(),
 				"GlorpCapabilities" => registry.register::<crate::GlorpCapabilities>(),
-				"EditorStateView" => registry.register::<crate::EditorStateView>(),
-				"EditorViewportView" => registry.register::<crate::EditorViewportView>(),
+				"DocumentStateView" => registry.register::<crate::DocumentStateView>(),
 				"GlorpSessionView" => registry.register::<crate::GlorpSessionView>(),
 				"GlorpEventStreamView" => registry.register::<crate::GlorpEventStreamView>(),
 				"OkView" => registry.register::<crate::OkView>(),
@@ -389,11 +388,11 @@ fn register_type_ref(registry: &mut TypeRegistry, ty: &TypeRef) {
 				"WrapChoice" => registry.register::<crate::WrapChoice>(),
 				"FontChoice" => registry.register::<crate::FontChoice>(),
 				"ShapingChoice" => registry.register::<crate::ShapingChoice>(),
-				"EditorMotion" => registry.register::<crate::EditorMotion>(),
-				"EditorModeCommand" => registry.register::<crate::EditorModeCommand>(),
 				"EditorHistoryCommand" => registry.register::<crate::EditorHistoryCommand>(),
 				"EditorMode" => registry.register::<crate::EditorMode>(),
+				"EditorContextView" => registry.register::<crate::EditorContextView>(),
 				"TextRange" => registry.register::<crate::TextRange>(),
+				"TextEditView" => registry.register::<crate::TextEditView>(),
 				"LayoutRectView" => registry.register::<crate::LayoutRectView>(),
 				other => panic!("unregistered schema type {other}"),
 			}
@@ -406,8 +405,6 @@ impl_named_enum_schema!(crate::SamplePreset, "SamplePreset", "Built-in sample do
 impl_named_enum_schema!(crate::WrapChoice, "WrapChoice", "Stable editor wrapping choices.");
 impl_named_enum_schema!(crate::FontChoice, "FontChoice", "Stable editor font families.");
 impl_named_enum_schema!(crate::ShapingChoice, "ShapingChoice", "Stable shaping choices.");
-impl_named_enum_schema!(crate::EditorMotion, "EditorMotion", "Typed editor motions.");
-impl_named_enum_schema!(crate::EditorModeCommand, "EditorModeCommand", "Typed mode transitions.");
 impl_named_enum_schema!(
 	crate::EditorHistoryCommand,
 	"EditorHistoryCommand",
@@ -554,12 +551,6 @@ impl_named_record_schema!(crate::ConfigPathInput, "ConfigPathInput", "One config
 impl_named_record_schema!(crate::TextInput, "TextInput", "One text input.", {
 	"text" => String: "Text input.",
 });
-impl_named_record_schema!(crate::EditorMotionInput, "EditorMotionInput", "One editor motion input.", {
-	"motion" => crate::EditorMotion: "Editor motion name.",
-});
-impl_named_record_schema!(crate::EditorModeInput, "EditorModeInput", "One editor mode input.", {
-	"mode" => crate::EditorModeCommand: "Editor mode command.",
-});
 impl_named_record_schema!(crate::EditorHistoryInput, "EditorHistoryInput", "One editor history input.", {
 	"action" => crate::EditorHistoryCommand: "Editor history action.",
 });
@@ -574,24 +565,17 @@ impl_named_record_schema!(crate::GlorpCapabilities, "GlorpCapabilities", "Stable
 	"subscriptions" => bool: "Whether subscriptions are supported.",
 	"transports" => Vec<String>: "Supported transport names.",
 });
-impl_named_record_schema!(crate::EditorStateView, "EditorStateView", "Stable editor state view.", {
+impl_named_record_schema!(crate::DocumentStateView, "DocumentStateView", "Stable shared document state view.", {
 	"revisions" => crate::GlorpRevisions: "Runtime revisions.",
-	"mode" => crate::EditorMode: "Editor mode.",
-	"selection" => Option<crate::TextRange>: "Current selection range.",
-	"selected_text" => Option<String>: "Selected text if any.",
-	"selection_head" => Option<u64>: "Selection head byte offset.",
-	"pointer_anchor" => Option<u64>: "Pointer anchor byte offset.",
 	"text_bytes" => usize: "Document size in bytes.",
 	"text_lines" => usize: "Document line count.",
 	"undo_depth" => usize: "Undo depth.",
 	"redo_depth" => usize: "Redo depth.",
-	"viewport" => crate::EditorViewportView: "Viewport-facing editor metrics.",
 });
-impl_named_record_schema!(crate::EditorViewportView, "EditorViewportView", "Viewport-facing editor metrics.", {
-	"wrapping" => crate::WrapChoice: "Current wrapping mode.",
-	"measured_width" => f32: "Measured content width.",
-	"measured_height" => f32: "Measured content height.",
-	"viewport_target" => Option<crate::LayoutRectView>: "Current viewport reveal target.",
+impl_named_record_schema!(crate::EditorContextView, "EditorContextView", "Client-local editor context.", {
+	"mode" => crate::EditorMode: "Editor mode.",
+	"selection" => Option<crate::TextRange>: "Current selection range.",
+	"selection_head" => Option<u64>: "Selection head byte offset.",
 });
 impl_named_record_schema!(crate::GlorpSessionView, "GlorpSessionView", "Resolved live session endpoint.", {
 	"socket" => String: "Socket path.",
@@ -612,6 +596,7 @@ impl_named_record_schema!(crate::TokenAckView, "TokenAckView", "Acknowledgement 
 impl_named_record_schema!(crate::GlorpOutcome, "GlorpOutcome", "Revisioned outcome for a successful command.", {
 	"delta" => crate::GlorpDelta: "Change flags.",
 	"revisions" => crate::GlorpRevisions: "Post-command revisions.",
+	"document_edit" => Option<crate::TextEditView>: "Document edit applied by the command.",
 	"changed_config_paths" => Vec<String>: "Config paths changed by the command.",
 	"warnings" => Vec<crate::GlorpWarning>: "Warnings emitted while handling the operation.",
 });
@@ -629,9 +614,7 @@ impl_named_record_schema!(crate::GlorpRevisions, "GlorpRevisions", "Runtime revi
 });
 impl_named_record_schema!(crate::GlorpDelta, "GlorpDelta", "Boolean change flags.", {
 	"text_changed" => bool: "Document text changed.",
-	"view_changed" => bool: "Editor view changed.",
-	"selection_changed" => bool: "Selection changed.",
-	"mode_changed" => bool: "Mode changed.",
+	"view_changed" => bool: "Shared document presentation changed.",
 	"config_changed" => bool: "Config changed.",
 });
 impl_named_record_schema!(crate::GlorpConfig, "GlorpConfig", "Stable runtime config.", {
@@ -648,6 +631,10 @@ impl_named_record_schema!(crate::EditorConfig, "EditorConfig", "Editor configura
 impl_named_record_schema!(crate::TextRange, "TextRange", "Byte range in the document.", {
 	"start" => u64: "Start byte offset.",
 	"end" => u64: "End byte offset.",
+});
+impl_named_record_schema!(crate::TextEditView, "TextEditView", "Text mutation view.", {
+	"range" => crate::TextRange: "Edited byte range.",
+	"inserted" => String: "Inserted text.",
 });
 impl_named_record_schema!(crate::LayoutRectView, "LayoutRectView", "Rectangle in layout coordinates.", {
 	"x" => f32: "Left position.",

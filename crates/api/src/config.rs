@@ -235,21 +235,6 @@ impl_enum_value!(crate::WrapChoice {
 	"word-or-glyph" => crate::WrapChoice::WordOrGlyph: "Prefer word boundaries, fall back to glyph boundaries.",
 });
 
-impl_enum_value!(crate::EditorMotion {
-	"left" => crate::EditorMotion::Left: "Move left.",
-	"right" => crate::EditorMotion::Right: "Move right.",
-	"up" => crate::EditorMotion::Up: "Move up.",
-	"down" => crate::EditorMotion::Down: "Move down.",
-	"line-start" => crate::EditorMotion::LineStart: "Move to line start.",
-	"line-end" => crate::EditorMotion::LineEnd: "Move to line end.",
-});
-
-impl_enum_value!(crate::EditorModeCommand {
-	"enter-insert-before" => crate::EditorModeCommand::EnterInsertBefore: "Enter insert mode before the selection.",
-	"enter-insert-after" => crate::EditorModeCommand::EnterInsertAfter: "Enter insert mode after the selection.",
-	"exit-insert" => crate::EditorModeCommand::ExitInsert: "Return to normal mode.",
-});
-
 impl_enum_value!(crate::EditorHistoryCommand {
 	"undo" => crate::EditorHistoryCommand::Undo: "Undo the most recent edit.",
 	"redo" => crate::EditorHistoryCommand::Redo: "Redo the most recent undone edit.",

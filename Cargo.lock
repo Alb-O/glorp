@@ -1530,6 +1530,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "glorp_api",
+ "glorp_editor",
  "glorp_gui",
  "glorp_nu_plugin",
  "glorp_runtime",

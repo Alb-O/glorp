@@ -1,11 +1,8 @@
 use {
-	cosmic_text::Buffer,
-	glorp_api::{EditorConfig, GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
-	glorp_editor::{
-		EditorPresentation, EditorTextLayerState, SessionSnapshot, build_buffer, make_font_system, scene_config,
-	},
+	glorp_api::{GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
 	glorp_runtime::{
-		GuiCommand, GuiRuntimeFrame, GuiTransportFrame, RuntimeHost, RuntimeOptions, default_runtime_paths,
+		DEFAULT_LAYOUT_WIDTH, GuiCommand, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame,
+		RuntimeHost, RuntimeOptions, default_runtime_paths,
 	},
 	glorp_transport::{
 		GuiTransportRequest, GuiTransportResponse, IpcClient, IpcServerHandle, LocalClient, default_socket_path,
@@ -42,27 +39,13 @@ pub struct GuiRuntimeSession {
 pub struct GuiRuntimeClient {
 	client: RuntimeClient,
 	socket_path: PathBuf,
-	text_layer: TextLayerCache,
+	layout_width: f32,
 }
 
 #[derive(Clone)]
 enum RuntimeClient {
 	Ipc(IpcClient),
 	Local(LocalClient),
-}
-
-#[derive(Default)]
-struct TextLayerCache {
-	key: Option<TextLayerKey>,
-	font_system: Option<cosmic_text::FontSystem>,
-	buffer: Option<Arc<Buffer>>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-struct TextLayerKey {
-	document_text: String,
-	editor_config: EditorConfig,
-	layout_width_bits: u32,
 }
 
 impl GuiRuntimeSession {
@@ -133,7 +116,7 @@ impl GuiRuntimeClient {
 		Self {
 			client: RuntimeClient::Ipc(IpcClient::new(socket_path.as_path())),
 			socket_path,
-			text_layer: TextLayerCache::default(),
+			layout_width: DEFAULT_LAYOUT_WIDTH,
 		}
 	}
 
@@ -142,63 +125,62 @@ impl GuiRuntimeClient {
 		Self {
 			client: RuntimeClient::Local(LocalClient::shared(host)),
 			socket_path: socket_path.into(),
-			text_layer: TextLayerCache::default(),
+			layout_width: DEFAULT_LAYOUT_WIDTH,
 		}
 	}
 
+	pub fn set_layout_width(&mut self, layout_width: f32) {
+		self.layout_width = layout_width.max(1.0);
+	}
+
 	pub fn execute_gui(&mut self, command: GuiCommand) -> Result<(), GlorpError> {
+		let layout = self.layout_request();
 		match &self.client {
 			RuntimeClient::Ipc(_) => {
 				let GuiTransportResponse::ExecuteGui(result) =
-					gui_transport_request(&self.socket_path, GuiTransportRequest::ExecuteGui(command))?
+					gui_transport_request(&self.socket_path, GuiTransportRequest::ExecuteGui { layout, command })?
 				else {
 					return Err(GlorpError::transport("unexpected private gui execute response"));
 				};
 				result
 			}
-			RuntimeClient::Local(client) => with_local_runtime(client, |host| host.execute_gui(command)),
+			RuntimeClient::Local(client) => with_local_runtime(client, |host| host.execute_gui_at(layout, command)),
+		}
+	}
+
+	pub fn gui_edit(&mut self, mut request: GuiEditRequest) -> Result<GuiEditResponse, GlorpError> {
+		request.layout = self.layout_request();
+		match &self.client {
+			RuntimeClient::Ipc(_) => {
+				let GuiTransportResponse::Edit(result) =
+					gui_transport_request(&self.socket_path, GuiTransportRequest::Edit(request))?
+				else {
+					return Err(GlorpError::transport("unexpected private gui edit response"));
+				};
+				*result
+			}
+			RuntimeClient::Local(client) => with_local_runtime(client, |host| host.gui_edit(request)),
 		}
 	}
 
 	pub fn gui_frame(&mut self) -> Result<GuiRuntimeFrame, GlorpError> {
+		let layout = self.layout_request();
 		match &self.client {
 			RuntimeClient::Ipc(_) => {
 				let GuiTransportResponse::GuiFrame(result) =
-					gui_transport_request(&self.socket_path, GuiTransportRequest::GuiFrame)?
+					gui_transport_request(&self.socket_path, GuiTransportRequest::GuiFrame(layout))?
 				else {
 					return Err(GlorpError::transport("unexpected private gui frame response"));
 				};
-				Ok(self.hydrate_frame((*result)?))
+				*result
 			}
-			RuntimeClient::Local(client) => with_local_runtime(client, |host| Ok(host.gui_frame())),
+			RuntimeClient::Local(client) => with_local_runtime(client, |host| Ok(host.gui_frame_at(layout))),
 		}
 	}
 
-	fn hydrate_frame(&mut self, frame: GuiTransportFrame) -> GuiRuntimeFrame {
-		let buffer = Arc::clone(self.text_layer.buffer(&frame));
-		let editor = frame.snapshot.editor;
-		let snapshot = SessionSnapshot {
-			editor: EditorPresentation::new(
-				editor.revision,
-				editor.viewport_metrics,
-				EditorTextLayerState {
-					buffer: Arc::downgrade(&buffer),
-					measured_height: editor.viewport_metrics.measured_height,
-				},
-				editor.editor,
-				editor.editor_bytes,
-				editor.undo_depth,
-				editor.redo_depth,
-			),
-			scene: frame.snapshot.scene,
-		};
-
-		GuiRuntimeFrame {
-			config: frame.config,
-			ui: frame.ui,
-			revisions: frame.revisions,
-			snapshot,
-			document_text: frame.document_text,
+	fn layout_request(&self) -> GuiLayoutRequest {
+		GuiLayoutRequest {
+			layout_width: self.layout_width,
 		}
 	}
 }
@@ -220,38 +202,6 @@ fn with_local_runtime<T>(
 		.lock()
 		.map_err(|_| GlorpError::transport("local runtime lock poisoned"))?;
 	f(&mut host)
-}
-
-impl TextLayerCache {
-	fn buffer(&mut self, frame: &GuiTransportFrame) -> &Arc<Buffer> {
-		let key = TextLayerKey {
-			document_text: frame.document_text.clone(),
-			editor_config: frame.config.editor.clone(),
-			layout_width_bits: frame.ui.layout_width.to_bits(),
-		};
-
-		if self.key.as_ref() != Some(&key) {
-			let font_system = self.font_system.get_or_insert_with(make_font_system);
-			let buffer = build_buffer(
-				font_system,
-				key.document_text.as_str(),
-				scene_config(
-					key.editor_config.font,
-					key.editor_config.shaping,
-					key.editor_config.wrapping,
-					key.editor_config.font_size,
-					key.editor_config.line_height,
-					frame.ui.layout_width,
-				),
-			);
-			self.buffer = Some(Arc::new(buffer));
-			self.key = Some(key);
-		}
-
-		self.buffer
-			.as_ref()
-			.expect("text layer cache should hold a buffer after hydration")
-	}
 }
 
 fn ensure_runtime_capabilities(client: &mut impl GlorpCaller, error: &'static str) -> Result<(), GlorpError> {

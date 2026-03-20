@@ -57,6 +57,10 @@ impl EditorEngine {
 		self.layout.viewport_metrics()
 	}
 
+	pub fn layout_width(&self) -> f32 {
+		self.layout.layout_width()
+	}
+
 	pub fn text_layer_state(&self) -> EditorTextLayerState {
 		self.layout.text_layer_state()
 	}

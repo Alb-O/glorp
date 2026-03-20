@@ -48,37 +48,8 @@ pub struct TextInput {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct EditorMotionInput {
-	pub motion: EditorMotion,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct EditorModeInput {
-	pub mode: EditorModeCommand,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct EditorHistoryInput {
 	pub action: EditorHistoryCommand,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum EditorMotion {
-	Left,
-	Right,
-	Up,
-	Down,
-	LineStart,
-	LineEnd,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub enum EditorModeCommand {
-	EnterInsertBefore,
-	EnterInsertAfter,
-	ExitInsert,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -140,6 +111,13 @@ pub enum WrapChoice {
 pub struct TextRange {
 	pub start: u64,
 	pub end: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct EditorContextView {
+	pub mode: EditorMode,
+	pub selection: Option<TextRange>,
+	pub selection_head: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]

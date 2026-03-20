@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "types": [
     {
       "name": "BuiltinType",
@@ -579,25 +579,7 @@
           },
           {
             "name": "view_changed",
-            "docs": "Editor view changed.",
-            "ty": {
-              "kind": "builtin",
-              "value": "bool"
-            },
-            "required": true
-          },
-          {
-            "name": "selection_changed",
-            "docs": "Selection changed.",
-            "ty": {
-              "kind": "builtin",
-              "value": "bool"
-            },
-            "required": true
-          },
-          {
-            "name": "mode_changed",
-            "docs": "Mode changed.",
+            "docs": "Shared document presentation changed.",
             "ty": {
               "kind": "builtin",
               "value": "bool"
@@ -637,6 +619,60 @@
             "ty": {
               "kind": "builtin",
               "value": "int"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "TextRange",
+      "docs": "Byte range in the document.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "start",
+            "docs": "Start byte offset.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          },
+          {
+            "name": "end",
+            "docs": "End byte offset.",
+            "ty": {
+              "kind": "builtin",
+              "value": "int"
+            },
+            "required": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "TextEditView",
+      "docs": "Text mutation view.",
+      "kind": {
+        "kind": "record",
+        "fields": [
+          {
+            "name": "range",
+            "docs": "Edited byte range.",
+            "ty": {
+              "kind": "named",
+              "value": "TextRange"
+            },
+            "required": true
+          },
+          {
+            "name": "inserted",
+            "docs": "Inserted text.",
+            "ty": {
+              "kind": "builtin",
+              "value": "string"
             },
             "required": true
           }
@@ -691,6 +727,18 @@
             "ty": {
               "kind": "named",
               "value": "GlorpRevisions"
+            },
+            "required": true
+          },
+          {
+            "name": "document_edit",
+            "docs": "Document edit applied by the command.",
+            "ty": {
+              "kind": "option",
+              "value": {
+                "kind": "named",
+                "value": "TextEditView"
+              }
             },
             "required": true
           },
@@ -796,131 +844,6 @@
             "ty": {
               "kind": "builtin",
               "value": "string"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "EditorMotion",
-      "docs": "Typed editor motions.",
-      "kind": {
-        "kind": "enum",
-        "variants": [
-          {
-            "name": "left",
-            "docs": "Move left."
-          },
-          {
-            "name": "right",
-            "docs": "Move right."
-          },
-          {
-            "name": "up",
-            "docs": "Move up."
-          },
-          {
-            "name": "down",
-            "docs": "Move down."
-          },
-          {
-            "name": "line-start",
-            "docs": "Move to line start."
-          },
-          {
-            "name": "line-end",
-            "docs": "Move to line end."
-          }
-        ]
-      }
-    },
-    {
-      "name": "EditorMotionInput",
-      "docs": "One editor motion input.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "motion",
-            "docs": "Editor motion name.",
-            "ty": {
-              "kind": "named",
-              "value": "EditorMotion"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "EditorModeCommand",
-      "docs": "Typed mode transitions.",
-      "kind": {
-        "kind": "enum",
-        "variants": [
-          {
-            "name": "enter-insert-before",
-            "docs": "Enter insert mode before the selection."
-          },
-          {
-            "name": "enter-insert-after",
-            "docs": "Enter insert mode after the selection."
-          },
-          {
-            "name": "exit-insert",
-            "docs": "Return to normal mode."
-          }
-        ]
-      }
-    },
-    {
-      "name": "EditorModeInput",
-      "docs": "One editor mode input.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "mode",
-            "docs": "Editor mode command.",
-            "ty": {
-              "kind": "named",
-              "value": "EditorModeCommand"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "EditorHistoryCommand",
-      "docs": "Typed undo/redo operations.",
-      "kind": {
-        "kind": "enum",
-        "variants": [
-          {
-            "name": "undo",
-            "docs": "Undo the most recent edit."
-          },
-          {
-            "name": "redo",
-            "docs": "Redo the most recent undone edit."
-          }
-        ]
-      }
-    },
-    {
-      "name": "EditorHistoryInput",
-      "docs": "One editor history input.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "action",
-            "docs": "Editor history action.",
-            "ty": {
-              "kind": "named",
-              "value": "EditorHistoryCommand"
             },
             "required": true
           }
@@ -1124,145 +1047,8 @@
       }
     },
     {
-      "name": "EditorMode",
-      "docs": "Stable editor modes.",
-      "kind": {
-        "kind": "enum",
-        "variants": [
-          {
-            "name": "normal",
-            "docs": "Normal mode."
-          },
-          {
-            "name": "insert",
-            "docs": "Insert mode."
-          }
-        ]
-      }
-    },
-    {
-      "name": "TextRange",
-      "docs": "Byte range in the document.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "start",
-            "docs": "Start byte offset.",
-            "ty": {
-              "kind": "builtin",
-              "value": "int"
-            },
-            "required": true
-          },
-          {
-            "name": "end",
-            "docs": "End byte offset.",
-            "ty": {
-              "kind": "builtin",
-              "value": "int"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "LayoutRectView",
-      "docs": "Rectangle in layout coordinates.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "x",
-            "docs": "Left position.",
-            "ty": {
-              "kind": "builtin",
-              "value": "float"
-            },
-            "required": true
-          },
-          {
-            "name": "y",
-            "docs": "Top position.",
-            "ty": {
-              "kind": "builtin",
-              "value": "float"
-            },
-            "required": true
-          },
-          {
-            "name": "width",
-            "docs": "Rectangle width.",
-            "ty": {
-              "kind": "builtin",
-              "value": "float"
-            },
-            "required": true
-          },
-          {
-            "name": "height",
-            "docs": "Rectangle height.",
-            "ty": {
-              "kind": "builtin",
-              "value": "float"
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "EditorViewportView",
-      "docs": "Viewport-facing editor metrics.",
-      "kind": {
-        "kind": "record",
-        "fields": [
-          {
-            "name": "wrapping",
-            "docs": "Current wrapping mode.",
-            "ty": {
-              "kind": "named",
-              "value": "WrapChoice"
-            },
-            "required": true
-          },
-          {
-            "name": "measured_width",
-            "docs": "Measured content width.",
-            "ty": {
-              "kind": "builtin",
-              "value": "float"
-            },
-            "required": true
-          },
-          {
-            "name": "measured_height",
-            "docs": "Measured content height.",
-            "ty": {
-              "kind": "builtin",
-              "value": "float"
-            },
-            "required": true
-          },
-          {
-            "name": "viewport_target",
-            "docs": "Current viewport reveal target.",
-            "ty": {
-              "kind": "option",
-              "value": {
-                "kind": "named",
-                "value": "LayoutRectView"
-              }
-            },
-            "required": true
-          }
-        ]
-      }
-    },
-    {
-      "name": "EditorStateView",
-      "docs": "Stable editor state view.",
+      "name": "DocumentStateView",
+      "docs": "Stable shared document state view.",
       "kind": {
         "kind": "record",
         "fields": [
@@ -1272,63 +1058,6 @@
             "ty": {
               "kind": "named",
               "value": "GlorpRevisions"
-            },
-            "required": true
-          },
-          {
-            "name": "mode",
-            "docs": "Editor mode.",
-            "ty": {
-              "kind": "named",
-              "value": "EditorMode"
-            },
-            "required": true
-          },
-          {
-            "name": "selection",
-            "docs": "Current selection range.",
-            "ty": {
-              "kind": "option",
-              "value": {
-                "kind": "named",
-                "value": "TextRange"
-              }
-            },
-            "required": true
-          },
-          {
-            "name": "selected_text",
-            "docs": "Selected text if any.",
-            "ty": {
-              "kind": "option",
-              "value": {
-                "kind": "builtin",
-                "value": "string"
-              }
-            },
-            "required": true
-          },
-          {
-            "name": "selection_head",
-            "docs": "Selection head byte offset.",
-            "ty": {
-              "kind": "option",
-              "value": {
-                "kind": "builtin",
-                "value": "int"
-              }
-            },
-            "required": true
-          },
-          {
-            "name": "pointer_anchor",
-            "docs": "Pointer anchor byte offset.",
-            "ty": {
-              "kind": "option",
-              "value": {
-                "kind": "builtin",
-                "value": "int"
-              }
             },
             "required": true
           },
@@ -1365,15 +1094,6 @@
             "ty": {
               "kind": "builtin",
               "value": "int"
-            },
-            "required": true
-          },
-          {
-            "name": "viewport",
-            "docs": "Viewport-facing editor metrics.",
-            "ty": {
-              "kind": "named",
-              "value": "EditorViewportView"
             },
             "required": true
           }
@@ -1704,102 +1424,6 @@
       "transactional": true
     },
     {
-      "id": "editor-motion",
-      "kind": "mutation",
-      "route": "runtime",
-      "docs": "Apply a typed editor motion.",
-      "input": {
-        "kind": "named",
-        "value": "EditorMotionInput"
-      },
-      "output": {
-        "kind": "named",
-        "value": "GlorpOutcome"
-      },
-      "transactional": true
-    },
-    {
-      "id": "editor-mode",
-      "kind": "mutation",
-      "route": "runtime",
-      "docs": "Apply a typed editor mode change.",
-      "input": {
-        "kind": "named",
-        "value": "EditorModeInput"
-      },
-      "output": {
-        "kind": "named",
-        "value": "GlorpOutcome"
-      },
-      "transactional": true
-    },
-    {
-      "id": "editor-insert",
-      "kind": "mutation",
-      "route": "runtime",
-      "docs": "Insert text at the current selection.",
-      "input": {
-        "kind": "named",
-        "value": "TextInput"
-      },
-      "output": {
-        "kind": "named",
-        "value": "GlorpOutcome"
-      },
-      "transactional": true
-    },
-    {
-      "id": "editor-backspace",
-      "kind": "mutation",
-      "route": "runtime",
-      "docs": "Delete backward.",
-      "input": null,
-      "output": {
-        "kind": "named",
-        "value": "GlorpOutcome"
-      },
-      "transactional": true
-    },
-    {
-      "id": "editor-delete-forward",
-      "kind": "mutation",
-      "route": "runtime",
-      "docs": "Delete forward.",
-      "input": null,
-      "output": {
-        "kind": "named",
-        "value": "GlorpOutcome"
-      },
-      "transactional": true
-    },
-    {
-      "id": "editor-delete-selection",
-      "kind": "mutation",
-      "route": "runtime",
-      "docs": "Delete the current selection.",
-      "input": null,
-      "output": {
-        "kind": "named",
-        "value": "GlorpOutcome"
-      },
-      "transactional": true
-    },
-    {
-      "id": "editor-history",
-      "kind": "mutation",
-      "route": "runtime",
-      "docs": "Apply editor history navigation.",
-      "input": {
-        "kind": "named",
-        "value": "EditorHistoryInput"
-      },
-      "output": {
-        "kind": "named",
-        "value": "GlorpOutcome"
-      },
-      "transactional": true
-    },
-    {
       "id": "schema",
       "kind": "read",
       "route": "runtime",
@@ -1836,14 +1460,14 @@
       "transactional": false
     },
     {
-      "id": "editor",
+      "id": "document",
       "kind": "read",
       "route": "runtime",
-      "docs": "Return the current editor read model.",
+      "docs": "Return the current shared document read model.",
       "input": null,
       "output": {
         "kind": "named",
-        "value": "EditorStateView"
+        "value": "DocumentStateView"
       },
       "transactional": false
     },

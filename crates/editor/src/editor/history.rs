@@ -1,23 +1,11 @@
-use {
-	super::{EditorMode, EditorSelection, TextEdit},
-	std::collections::VecDeque,
-};
+use {super::TextEdit, std::collections::VecDeque};
 
 const HISTORY_LIMIT: usize = 256;
-
-#[derive(Debug, Clone)]
-pub struct EditorSnapshot {
-	pub mode: EditorMode,
-	pub selection: Option<EditorSelection>,
-	pub preferred_x: Option<f32>,
-}
 
 #[derive(Debug, Clone)]
 pub struct HistoryEntry {
 	pub forward: TextEdit,
 	pub inverse: TextEdit,
-	pub before: EditorSnapshot,
-	pub after: EditorSnapshot,
 }
 
 #[derive(Debug, Clone, Default)]

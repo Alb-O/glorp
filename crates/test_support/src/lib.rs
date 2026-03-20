@@ -1,7 +1,6 @@
 use {
 	glorp_api::{
-		ConfigAssignment, EditorHistoryCommand, EditorHistoryInput, EditorModeCommand, EditorModeInput, EditorMotion,
-		EditorMotionInput, EditorStateView, GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpConfig,
+		ConfigAssignment, DocumentStateView, GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpConfig,
 		GlorpError, GlorpEvent, GlorpOutcome, GlorpValue, StreamTokenInput, TextInput, calls,
 	},
 	glorp_runtime::{ConfigStore, ConfigStorePaths, RuntimeHost, RuntimeOptions, export_surface_artifacts},
@@ -23,7 +22,7 @@ pub struct TestRepo {
 #[derive(Debug, Clone, PartialEq)]
 pub struct StateSnapshot {
 	pub text: String,
-	pub editor: EditorStateView,
+	pub document: DocumentStateView,
 	pub config: GlorpConfig,
 }
 
@@ -140,14 +139,14 @@ pub fn config(caller: &mut impl GlorpCaller) -> GlorpConfig {
 	call_ok::<calls::Config>(caller, ())
 }
 
-pub fn editor_state(caller: &mut impl GlorpCaller) -> EditorStateView {
-	call_ok::<calls::Editor>(caller, ())
+pub fn document_state(caller: &mut impl GlorpCaller) -> DocumentStateView {
+	call_ok::<calls::Document>(caller, ())
 }
 
 pub fn state_snapshot(caller: &mut impl GlorpCaller) -> StateSnapshot {
 	StateSnapshot {
 		text: document_text(caller),
-		editor: editor_state(caller),
+		document: document_state(caller),
 		config: config(caller),
 	}
 }
@@ -175,31 +174,12 @@ pub fn document_replace(text: &str) -> GlorpCall {
 	build_call::<calls::DocumentReplace>(TextInput { text: text.to_owned() })
 }
 
-pub fn editor_mode(mode: EditorModeCommand) -> GlorpCall {
-	build_call::<calls::EditorMode>(EditorModeInput { mode })
-}
-
-pub fn editor_motion(motion: EditorMotion) -> GlorpCall {
-	build_call::<calls::EditorMotion>(EditorMotionInput { motion })
-}
-
-pub fn editor_insert(text: &str) -> GlorpCall {
-	build_call::<calls::EditorInsert>(TextInput { text: text.to_owned() })
-}
-
-pub fn editor_history(action: EditorHistoryCommand) -> GlorpCall {
-	build_call::<calls::EditorHistory>(EditorHistoryInput { action })
-}
-
 pub fn run_standard_transcript(caller: &mut impl GlorpCaller) -> StateSnapshot {
 	let _ = outcome(
 		caller,
 		config_set("editor.wrapping", GlorpValue::String("word".to_owned())),
 	);
-	let _ = outcome(caller, document_replace("hello"));
-	let _ = outcome(caller, editor_mode(EditorModeCommand::EnterInsertAfter));
-	let _ = outcome(caller, editor_motion(EditorMotion::LineEnd));
-	let _ = outcome(caller, editor_insert(" world"));
+	let _ = outcome(caller, document_replace("hello world"));
 
 	state_snapshot(caller)
 }

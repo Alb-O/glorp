@@ -11,8 +11,15 @@ pub enum GlorpEvent {
 pub struct GlorpOutcome {
 	pub delta: GlorpDelta,
 	pub revisions: GlorpRevisions,
+	pub document_edit: Option<TextEditView>,
 	pub changed_config_paths: Vec<ConfigPath>,
 	pub warnings: Vec<GlorpWarning>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct TextEditView {
+	pub range: crate::TextRange,
+	pub inserted: String,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]

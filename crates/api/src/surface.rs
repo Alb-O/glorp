@@ -224,9 +224,7 @@ fn validate_catalog_invariants(specs: &[GlorpCallSpec]) -> Result<(), String> {
 mod tests {
 	use {
 		super::*,
-		crate::{
-			ConfigAssignment, EditorMotion, EditorMotionInput, GlorpEvent, GlorpNotice, StreamTokenInput, TextInput,
-		},
+		crate::{ConfigAssignment, GlorpEvent, GlorpNotice, StreamTokenInput, TextInput},
 	};
 
 	#[test]
@@ -284,7 +282,7 @@ mod tests {
 
 	#[test]
 	fn build_call_rejects_wrong_shape() {
-		let error = build_call("editor-backspace", Some(&GlorpValue::Bool(true))).expect_err("call should fail");
+		let error = build_call("document", Some(&GlorpValue::Bool(true))).expect_err("call should fail");
 		assert!(matches!(error, GlorpError::Validation { .. }));
 	}
 
@@ -307,9 +305,9 @@ mod tests {
 
 	#[test]
 	fn descriptor_metadata_matches_spec_table() {
-		let spec = call_spec(calls::EditorMotion::ID).expect("spec should exist");
-		assert_eq!(spec.route, calls::EditorMotion::ROUTE);
-		assert_eq!(spec.input, Some(named::<EditorMotionInput>()));
+		let spec = call_spec(calls::DocumentReplace::ID).expect("spec should exist");
+		assert_eq!(spec.route, calls::DocumentReplace::ROUTE);
+		assert_eq!(spec.input, Some(named::<TextInput>()));
 		assert_eq!(spec.output, named::<GlorpOutcome>());
 	}
 
@@ -323,8 +321,8 @@ mod tests {
 
 	#[test]
 	fn build_call_supports_nested_raw_transactions() {
-		let nested = calls::EditorMotion::build(EditorMotionInput {
-			motion: EditorMotion::LineEnd,
+		let nested = calls::DocumentReplace::build(TextInput {
+			text: "nested".to_owned(),
 		})
 		.expect("nested call should build");
 		let txn = calls::Txn::build(crate::GlorpTxn { calls: vec![nested] }).expect("txn should build");

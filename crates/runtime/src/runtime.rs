@@ -41,39 +41,41 @@ impl GlorpRuntime {
 	}
 
 	pub fn execute_gui(&mut self, command: crate::GuiCommand) -> Result<(), GlorpError> {
-		execute::execute_gui(self, command)
+		self.execute_gui_at(
+			crate::GuiLayoutRequest {
+				layout_width: crate::DEFAULT_LAYOUT_WIDTH,
+			},
+			command,
+		)
+	}
+
+	pub fn execute_gui_at(
+		&mut self, layout: crate::GuiLayoutRequest, command: crate::GuiCommand,
+	) -> Result<(), GlorpError> {
+		execute::execute_gui(self, layout.layout_width, command)
+	}
+
+	pub fn gui_edit(&mut self, request: crate::GuiEditRequest) -> Result<crate::GuiEditResponse, GlorpError> {
+		execute::execute_gui_edit(self, request)
 	}
 
 	pub fn gui_frame(&mut self) -> crate::GuiRuntimeFrame {
-		crate::GuiRuntimeFrame {
-			config: self.state.config.clone(),
-			ui: self.state.ui.clone(),
-			revisions: self.state.revisions,
-			snapshot: self.state.session.snapshot().clone(),
-			document_text: self.state.session.text().into(),
-		}
+		self.gui_frame_at(crate::GuiLayoutRequest {
+			layout_width: crate::DEFAULT_LAYOUT_WIDTH,
+		})
 	}
 
-	pub fn gui_transport_frame(&mut self) -> crate::GuiTransportFrame {
-		let snapshot = self.state.session.snapshot();
-		let editor = &snapshot.editor;
-
-		crate::GuiTransportFrame {
+	pub fn gui_frame_at(&mut self, layout: crate::GuiLayoutRequest) -> crate::GuiRuntimeFrame {
+		execute::sync_gui_layout(self, layout.layout_width);
+		let (undo_depth, redo_depth) = self.state.session.history_depths();
+		crate::GuiRuntimeFrame {
 			config: self.state.config.clone(),
-			ui: self.state.ui.clone(),
+			layout_width: self.state.session.layout_width(),
 			revisions: self.state.revisions,
-			snapshot: crate::GuiSnapshot {
-				editor: crate::GuiEditorPresentation {
-					revision: editor.revision,
-					viewport_metrics: editor.viewport_metrics,
-					editor: editor.editor.clone(),
-					editor_bytes: editor.editor_bytes,
-					undo_depth: editor.undo_depth,
-					redo_depth: editor.redo_depth,
-				},
-				scene: snapshot.scene.clone(),
-			},
 			document_text: self.state.session.text().into(),
+			undo_depth,
+			redo_depth,
+			scene: self.state.session.scene().cloned(),
 		}
 	}
 }

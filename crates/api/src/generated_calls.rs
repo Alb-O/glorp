@@ -67,69 +67,6 @@ static CALL_SPECS: LazyLock<Vec<GlorpCallSpec>> = LazyLock::new(|| {
 			transactional: true,
 		},
 		GlorpCallSpec {
-			id: "editor-motion".to_owned(),
-			kind: GlorpCallKind::Mutation,
-			route: GlorpCallRoute::Runtime,
-			docs: "Apply a typed editor motion.".to_owned(),
-			input: Some(named::<crate::EditorMotionInput>()),
-			output: named::<crate::GlorpOutcome>(),
-			transactional: true,
-		},
-		GlorpCallSpec {
-			id: "editor-mode".to_owned(),
-			kind: GlorpCallKind::Mutation,
-			route: GlorpCallRoute::Runtime,
-			docs: "Apply a typed editor mode change.".to_owned(),
-			input: Some(named::<crate::EditorModeInput>()),
-			output: named::<crate::GlorpOutcome>(),
-			transactional: true,
-		},
-		GlorpCallSpec {
-			id: "editor-insert".to_owned(),
-			kind: GlorpCallKind::Mutation,
-			route: GlorpCallRoute::Runtime,
-			docs: "Insert text at the current selection.".to_owned(),
-			input: Some(named::<crate::TextInput>()),
-			output: named::<crate::GlorpOutcome>(),
-			transactional: true,
-		},
-		GlorpCallSpec {
-			id: "editor-backspace".to_owned(),
-			kind: GlorpCallKind::Mutation,
-			route: GlorpCallRoute::Runtime,
-			docs: "Delete backward.".to_owned(),
-			input: None,
-			output: named::<crate::GlorpOutcome>(),
-			transactional: true,
-		},
-		GlorpCallSpec {
-			id: "editor-delete-forward".to_owned(),
-			kind: GlorpCallKind::Mutation,
-			route: GlorpCallRoute::Runtime,
-			docs: "Delete forward.".to_owned(),
-			input: None,
-			output: named::<crate::GlorpOutcome>(),
-			transactional: true,
-		},
-		GlorpCallSpec {
-			id: "editor-delete-selection".to_owned(),
-			kind: GlorpCallKind::Mutation,
-			route: GlorpCallRoute::Runtime,
-			docs: "Delete the current selection.".to_owned(),
-			input: None,
-			output: named::<crate::GlorpOutcome>(),
-			transactional: true,
-		},
-		GlorpCallSpec {
-			id: "editor-history".to_owned(),
-			kind: GlorpCallKind::Mutation,
-			route: GlorpCallRoute::Runtime,
-			docs: "Apply editor history navigation.".to_owned(),
-			input: Some(named::<crate::EditorHistoryInput>()),
-			output: named::<crate::GlorpOutcome>(),
-			transactional: true,
-		},
-		GlorpCallSpec {
 			id: "schema".to_owned(),
 			kind: GlorpCallKind::Read,
 			route: GlorpCallRoute::Runtime,
@@ -157,12 +94,12 @@ static CALL_SPECS: LazyLock<Vec<GlorpCallSpec>> = LazyLock::new(|| {
 			transactional: false,
 		},
 		GlorpCallSpec {
-			id: "editor".to_owned(),
+			id: "document".to_owned(),
 			kind: GlorpCallKind::Read,
 			route: GlorpCallRoute::Runtime,
-			docs: "Return the current editor read model.".to_owned(),
+			docs: "Return the current shared document read model.".to_owned(),
 			input: None,
-			output: named::<crate::EditorStateView>(),
+			output: named::<crate::DocumentStateView>(),
 			transactional: false,
 		},
 		GlorpCallSpec {
@@ -535,306 +472,6 @@ pub mod calls {
 	}
 
 	#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-	pub struct EditorMotion;
-
-	impl GlorpCallDescriptor for EditorMotion {
-		type Input = crate::EditorMotionInput;
-		type Output = crate::GlorpOutcome;
-
-		const ID: &'static str = "editor-motion";
-		const DOCS: &'static str = "Apply a typed editor motion.";
-		const KIND: GlorpCallKind = GlorpCallKind::Mutation;
-		const ROUTE: GlorpCallRoute = GlorpCallRoute::Runtime;
-		const TRANSACTIONAL: bool = true;
-
-		fn input_type() -> Option<TypeRef> {
-			Some(named::<crate::EditorMotionInput>())
-		}
-
-		fn output_type() -> TypeRef {
-			named::<crate::GlorpOutcome>()
-		}
-
-		fn build(input: Self::Input) -> Result<GlorpCall, GlorpError> {
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: Some(encode_value(Self::ID, "input", input)?),
-			})
-		}
-
-		fn build_raw(input: Option<&GlorpValue>) -> Result<GlorpCall, GlorpError> {
-			let input = decode_required::<crate::EditorMotionInput>(Self::ID, "input", input)?;
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: Some(encode_value(Self::ID, "input", input)?),
-			})
-		}
-
-		fn decode_call_input(call: &GlorpCall) -> Result<Self::Input, GlorpError> {
-			ensure_call_id(Self::ID, &call.id)?;
-			decode_required::<crate::EditorMotionInput>(Self::ID, "input", call.input.as_ref())
-		}
-	}
-
-	#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-	pub struct EditorMode;
-
-	impl GlorpCallDescriptor for EditorMode {
-		type Input = crate::EditorModeInput;
-		type Output = crate::GlorpOutcome;
-
-		const ID: &'static str = "editor-mode";
-		const DOCS: &'static str = "Apply a typed editor mode change.";
-		const KIND: GlorpCallKind = GlorpCallKind::Mutation;
-		const ROUTE: GlorpCallRoute = GlorpCallRoute::Runtime;
-		const TRANSACTIONAL: bool = true;
-
-		fn input_type() -> Option<TypeRef> {
-			Some(named::<crate::EditorModeInput>())
-		}
-
-		fn output_type() -> TypeRef {
-			named::<crate::GlorpOutcome>()
-		}
-
-		fn build(input: Self::Input) -> Result<GlorpCall, GlorpError> {
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: Some(encode_value(Self::ID, "input", input)?),
-			})
-		}
-
-		fn build_raw(input: Option<&GlorpValue>) -> Result<GlorpCall, GlorpError> {
-			let input = decode_required::<crate::EditorModeInput>(Self::ID, "input", input)?;
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: Some(encode_value(Self::ID, "input", input)?),
-			})
-		}
-
-		fn decode_call_input(call: &GlorpCall) -> Result<Self::Input, GlorpError> {
-			ensure_call_id(Self::ID, &call.id)?;
-			decode_required::<crate::EditorModeInput>(Self::ID, "input", call.input.as_ref())
-		}
-	}
-
-	#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-	pub struct EditorInsert;
-
-	impl GlorpCallDescriptor for EditorInsert {
-		type Input = crate::TextInput;
-		type Output = crate::GlorpOutcome;
-
-		const ID: &'static str = "editor-insert";
-		const DOCS: &'static str = "Insert text at the current selection.";
-		const KIND: GlorpCallKind = GlorpCallKind::Mutation;
-		const ROUTE: GlorpCallRoute = GlorpCallRoute::Runtime;
-		const TRANSACTIONAL: bool = true;
-
-		fn input_type() -> Option<TypeRef> {
-			Some(named::<crate::TextInput>())
-		}
-
-		fn output_type() -> TypeRef {
-			named::<crate::GlorpOutcome>()
-		}
-
-		fn build(input: Self::Input) -> Result<GlorpCall, GlorpError> {
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: Some(encode_value(Self::ID, "input", input)?),
-			})
-		}
-
-		fn build_raw(input: Option<&GlorpValue>) -> Result<GlorpCall, GlorpError> {
-			let input = decode_required::<crate::TextInput>(Self::ID, "input", input)?;
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: Some(encode_value(Self::ID, "input", input)?),
-			})
-		}
-
-		fn decode_call_input(call: &GlorpCall) -> Result<Self::Input, GlorpError> {
-			ensure_call_id(Self::ID, &call.id)?;
-			decode_required::<crate::TextInput>(Self::ID, "input", call.input.as_ref())
-		}
-	}
-
-	#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-	pub struct EditorBackspace;
-
-	impl GlorpCallDescriptor for EditorBackspace {
-		type Input = ();
-		type Output = crate::GlorpOutcome;
-
-		const ID: &'static str = "editor-backspace";
-		const DOCS: &'static str = "Delete backward.";
-		const KIND: GlorpCallKind = GlorpCallKind::Mutation;
-		const ROUTE: GlorpCallRoute = GlorpCallRoute::Runtime;
-		const TRANSACTIONAL: bool = true;
-
-		fn input_type() -> Option<TypeRef> {
-			None
-		}
-
-		fn output_type() -> TypeRef {
-			named::<crate::GlorpOutcome>()
-		}
-
-		fn build(input: Self::Input) -> Result<GlorpCall, GlorpError> {
-			let _ = input;
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: None,
-			})
-		}
-
-		fn build_raw(input: Option<&GlorpValue>) -> Result<GlorpCall, GlorpError> {
-			ensure_no_input(Self::ID, input)?;
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: None,
-			})
-		}
-
-		fn decode_call_input(call: &GlorpCall) -> Result<Self::Input, GlorpError> {
-			ensure_call_id(Self::ID, &call.id)?;
-			ensure_no_input(Self::ID, call.input.as_ref())?;
-			Ok(())
-		}
-	}
-
-	#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-	pub struct EditorDeleteForward;
-
-	impl GlorpCallDescriptor for EditorDeleteForward {
-		type Input = ();
-		type Output = crate::GlorpOutcome;
-
-		const ID: &'static str = "editor-delete-forward";
-		const DOCS: &'static str = "Delete forward.";
-		const KIND: GlorpCallKind = GlorpCallKind::Mutation;
-		const ROUTE: GlorpCallRoute = GlorpCallRoute::Runtime;
-		const TRANSACTIONAL: bool = true;
-
-		fn input_type() -> Option<TypeRef> {
-			None
-		}
-
-		fn output_type() -> TypeRef {
-			named::<crate::GlorpOutcome>()
-		}
-
-		fn build(input: Self::Input) -> Result<GlorpCall, GlorpError> {
-			let _ = input;
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: None,
-			})
-		}
-
-		fn build_raw(input: Option<&GlorpValue>) -> Result<GlorpCall, GlorpError> {
-			ensure_no_input(Self::ID, input)?;
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: None,
-			})
-		}
-
-		fn decode_call_input(call: &GlorpCall) -> Result<Self::Input, GlorpError> {
-			ensure_call_id(Self::ID, &call.id)?;
-			ensure_no_input(Self::ID, call.input.as_ref())?;
-			Ok(())
-		}
-	}
-
-	#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-	pub struct EditorDeleteSelection;
-
-	impl GlorpCallDescriptor for EditorDeleteSelection {
-		type Input = ();
-		type Output = crate::GlorpOutcome;
-
-		const ID: &'static str = "editor-delete-selection";
-		const DOCS: &'static str = "Delete the current selection.";
-		const KIND: GlorpCallKind = GlorpCallKind::Mutation;
-		const ROUTE: GlorpCallRoute = GlorpCallRoute::Runtime;
-		const TRANSACTIONAL: bool = true;
-
-		fn input_type() -> Option<TypeRef> {
-			None
-		}
-
-		fn output_type() -> TypeRef {
-			named::<crate::GlorpOutcome>()
-		}
-
-		fn build(input: Self::Input) -> Result<GlorpCall, GlorpError> {
-			let _ = input;
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: None,
-			})
-		}
-
-		fn build_raw(input: Option<&GlorpValue>) -> Result<GlorpCall, GlorpError> {
-			ensure_no_input(Self::ID, input)?;
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: None,
-			})
-		}
-
-		fn decode_call_input(call: &GlorpCall) -> Result<Self::Input, GlorpError> {
-			ensure_call_id(Self::ID, &call.id)?;
-			ensure_no_input(Self::ID, call.input.as_ref())?;
-			Ok(())
-		}
-	}
-
-	#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-	pub struct EditorHistory;
-
-	impl GlorpCallDescriptor for EditorHistory {
-		type Input = crate::EditorHistoryInput;
-		type Output = crate::GlorpOutcome;
-
-		const ID: &'static str = "editor-history";
-		const DOCS: &'static str = "Apply editor history navigation.";
-		const KIND: GlorpCallKind = GlorpCallKind::Mutation;
-		const ROUTE: GlorpCallRoute = GlorpCallRoute::Runtime;
-		const TRANSACTIONAL: bool = true;
-
-		fn input_type() -> Option<TypeRef> {
-			Some(named::<crate::EditorHistoryInput>())
-		}
-
-		fn output_type() -> TypeRef {
-			named::<crate::GlorpOutcome>()
-		}
-
-		fn build(input: Self::Input) -> Result<GlorpCall, GlorpError> {
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: Some(encode_value(Self::ID, "input", input)?),
-			})
-		}
-
-		fn build_raw(input: Option<&GlorpValue>) -> Result<GlorpCall, GlorpError> {
-			let input = decode_required::<crate::EditorHistoryInput>(Self::ID, "input", input)?;
-			Ok(GlorpCall {
-				id: Self::ID.to_owned(),
-				input: Some(encode_value(Self::ID, "input", input)?),
-			})
-		}
-
-		fn decode_call_input(call: &GlorpCall) -> Result<Self::Input, GlorpError> {
-			ensure_call_id(Self::ID, &call.id)?;
-			decode_required::<crate::EditorHistoryInput>(Self::ID, "input", call.input.as_ref())
-		}
-	}
-
-	#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 	pub struct Schema;
 
 	impl GlorpCallDescriptor for Schema {
@@ -967,14 +604,14 @@ pub mod calls {
 	}
 
 	#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-	pub struct Editor;
+	pub struct Document;
 
-	impl GlorpCallDescriptor for Editor {
+	impl GlorpCallDescriptor for Document {
 		type Input = ();
-		type Output = crate::EditorStateView;
+		type Output = crate::DocumentStateView;
 
-		const ID: &'static str = "editor";
-		const DOCS: &'static str = "Return the current editor read model.";
+		const ID: &'static str = "document";
+		const DOCS: &'static str = "Return the current shared document read model.";
 		const KIND: GlorpCallKind = GlorpCallKind::Read;
 		const ROUTE: GlorpCallRoute = GlorpCallRoute::Runtime;
 		const TRANSACTIONAL: bool = false;
@@ -984,7 +621,7 @@ pub mod calls {
 		}
 
 		fn output_type() -> TypeRef {
-			named::<crate::EditorStateView>()
+			named::<crate::DocumentStateView>()
 		}
 
 		fn build(input: Self::Input) -> Result<GlorpCall, GlorpError> {
@@ -1322,17 +959,10 @@ pub fn build_call(id: &str, input: Option<&GlorpValue>) -> Result<GlorpCall, Glo
 		"config-reload" => calls::ConfigReload::build_raw(input),
 		"config-persist" => calls::ConfigPersist::build_raw(input),
 		"document-replace" => calls::DocumentReplace::build_raw(input),
-		"editor-motion" => calls::EditorMotion::build_raw(input),
-		"editor-mode" => calls::EditorMode::build_raw(input),
-		"editor-insert" => calls::EditorInsert::build_raw(input),
-		"editor-backspace" => calls::EditorBackspace::build_raw(input),
-		"editor-delete-forward" => calls::EditorDeleteForward::build_raw(input),
-		"editor-delete-selection" => calls::EditorDeleteSelection::build_raw(input),
-		"editor-history" => calls::EditorHistory::build_raw(input),
 		"schema" => calls::Schema::build_raw(input),
 		"config" => calls::Config::build_raw(input),
 		"document-text" => calls::DocumentText::build_raw(input),
-		"editor" => calls::Editor::build_raw(input),
+		"document" => calls::Document::build_raw(input),
 		"capabilities" => calls::Capabilities::build_raw(input),
 		"session-attach" => calls::SessionAttach::build_raw(input),
 		"session-shutdown" => calls::SessionShutdown::build_raw(input),
@@ -1353,21 +983,10 @@ pub fn build_call_result(id: &str, output: &GlorpValue) -> Result<GlorpCallResul
 		"config-reload" => calls::ConfigReload::respond(calls::ConfigReload::decode_output(output)?),
 		"config-persist" => calls::ConfigPersist::respond(calls::ConfigPersist::decode_output(output)?),
 		"document-replace" => calls::DocumentReplace::respond(calls::DocumentReplace::decode_output(output)?),
-		"editor-motion" => calls::EditorMotion::respond(calls::EditorMotion::decode_output(output)?),
-		"editor-mode" => calls::EditorMode::respond(calls::EditorMode::decode_output(output)?),
-		"editor-insert" => calls::EditorInsert::respond(calls::EditorInsert::decode_output(output)?),
-		"editor-backspace" => calls::EditorBackspace::respond(calls::EditorBackspace::decode_output(output)?),
-		"editor-delete-forward" => {
-			calls::EditorDeleteForward::respond(calls::EditorDeleteForward::decode_output(output)?)
-		}
-		"editor-delete-selection" => {
-			calls::EditorDeleteSelection::respond(calls::EditorDeleteSelection::decode_output(output)?)
-		}
-		"editor-history" => calls::EditorHistory::respond(calls::EditorHistory::decode_output(output)?),
 		"schema" => calls::Schema::respond(calls::Schema::decode_output(output)?),
 		"config" => calls::Config::respond(calls::Config::decode_output(output)?),
 		"document-text" => calls::DocumentText::respond(calls::DocumentText::decode_output(output)?),
-		"editor" => calls::Editor::respond(calls::Editor::decode_output(output)?),
+		"document" => calls::Document::respond(calls::Document::decode_output(output)?),
 		"capabilities" => calls::Capabilities::respond(calls::Capabilities::decode_output(output)?),
 		"session-attach" => calls::SessionAttach::respond(calls::SessionAttach::decode_output(output)?),
 		"session-shutdown" => calls::SessionShutdown::respond(calls::SessionShutdown::decode_output(output)?),
@@ -1401,27 +1020,6 @@ pub trait RuntimeCallDispatcher {
 	fn document_replace(
 		&mut self, input: <calls::DocumentReplace as GlorpCallDescriptor>::Input,
 	) -> Result<<calls::DocumentReplace as GlorpCallDescriptor>::Output, GlorpError>;
-	fn editor_motion(
-		&mut self, input: <calls::EditorMotion as GlorpCallDescriptor>::Input,
-	) -> Result<<calls::EditorMotion as GlorpCallDescriptor>::Output, GlorpError>;
-	fn editor_mode(
-		&mut self, input: <calls::EditorMode as GlorpCallDescriptor>::Input,
-	) -> Result<<calls::EditorMode as GlorpCallDescriptor>::Output, GlorpError>;
-	fn editor_insert(
-		&mut self, input: <calls::EditorInsert as GlorpCallDescriptor>::Input,
-	) -> Result<<calls::EditorInsert as GlorpCallDescriptor>::Output, GlorpError>;
-	fn editor_backspace(
-		&mut self, input: <calls::EditorBackspace as GlorpCallDescriptor>::Input,
-	) -> Result<<calls::EditorBackspace as GlorpCallDescriptor>::Output, GlorpError>;
-	fn editor_delete_forward(
-		&mut self, input: <calls::EditorDeleteForward as GlorpCallDescriptor>::Input,
-	) -> Result<<calls::EditorDeleteForward as GlorpCallDescriptor>::Output, GlorpError>;
-	fn editor_delete_selection(
-		&mut self, input: <calls::EditorDeleteSelection as GlorpCallDescriptor>::Input,
-	) -> Result<<calls::EditorDeleteSelection as GlorpCallDescriptor>::Output, GlorpError>;
-	fn editor_history(
-		&mut self, input: <calls::EditorHistory as GlorpCallDescriptor>::Input,
-	) -> Result<<calls::EditorHistory as GlorpCallDescriptor>::Output, GlorpError>;
 	fn schema(
 		&mut self, input: <calls::Schema as GlorpCallDescriptor>::Input,
 	) -> Result<<calls::Schema as GlorpCallDescriptor>::Output, GlorpError>;
@@ -1431,9 +1029,9 @@ pub trait RuntimeCallDispatcher {
 	fn document_text(
 		&mut self, input: <calls::DocumentText as GlorpCallDescriptor>::Input,
 	) -> Result<<calls::DocumentText as GlorpCallDescriptor>::Output, GlorpError>;
-	fn editor(
-		&mut self, input: <calls::Editor as GlorpCallDescriptor>::Input,
-	) -> Result<<calls::Editor as GlorpCallDescriptor>::Output, GlorpError>;
+	fn document(
+		&mut self, input: <calls::Document as GlorpCallDescriptor>::Input,
+	) -> Result<<calls::Document as GlorpCallDescriptor>::Output, GlorpError>;
 	fn capabilities(
 		&mut self, input: <calls::Capabilities as GlorpCallDescriptor>::Input,
 	) -> Result<<calls::Capabilities as GlorpCallDescriptor>::Output, GlorpError>;
@@ -1469,33 +1067,12 @@ pub fn dispatch_runtime_call(
 		"document-replace" => calls::DocumentReplace::respond(
 			dispatcher.document_replace(calls::DocumentReplace::decode_call_input(&call)?)?,
 		),
-		"editor-motion" => {
-			calls::EditorMotion::respond(dispatcher.editor_motion(calls::EditorMotion::decode_call_input(&call)?)?)
-		}
-		"editor-mode" => {
-			calls::EditorMode::respond(dispatcher.editor_mode(calls::EditorMode::decode_call_input(&call)?)?)
-		}
-		"editor-insert" => {
-			calls::EditorInsert::respond(dispatcher.editor_insert(calls::EditorInsert::decode_call_input(&call)?)?)
-		}
-		"editor-backspace" => calls::EditorBackspace::respond(
-			dispatcher.editor_backspace(calls::EditorBackspace::decode_call_input(&call)?)?,
-		),
-		"editor-delete-forward" => calls::EditorDeleteForward::respond(
-			dispatcher.editor_delete_forward(calls::EditorDeleteForward::decode_call_input(&call)?)?,
-		),
-		"editor-delete-selection" => calls::EditorDeleteSelection::respond(
-			dispatcher.editor_delete_selection(calls::EditorDeleteSelection::decode_call_input(&call)?)?,
-		),
-		"editor-history" => {
-			calls::EditorHistory::respond(dispatcher.editor_history(calls::EditorHistory::decode_call_input(&call)?)?)
-		}
 		"schema" => calls::Schema::respond(dispatcher.schema(calls::Schema::decode_call_input(&call)?)?),
 		"config" => calls::Config::respond(dispatcher.config(calls::Config::decode_call_input(&call)?)?),
 		"document-text" => {
 			calls::DocumentText::respond(dispatcher.document_text(calls::DocumentText::decode_call_input(&call)?)?)
 		}
-		"editor" => calls::Editor::respond(dispatcher.editor(calls::Editor::decode_call_input(&call)?)?),
+		"document" => calls::Document::respond(dispatcher.document(calls::Document::decode_call_input(&call)?)?),
 		"capabilities" => {
 			calls::Capabilities::respond(dispatcher.capabilities(calls::Capabilities::decode_call_input(&call)?)?)
 		}
@@ -1532,17 +1109,10 @@ pub fn dispatch_transport_call(
 		"config-reload" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
 		"config-persist" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
 		"document-replace" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
-		"editor-motion" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
-		"editor-mode" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
-		"editor-insert" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
-		"editor-backspace" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
-		"editor-delete-forward" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
-		"editor-delete-selection" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
-		"editor-history" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
 		"schema" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
 		"config" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
 		"document-text" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
-		"editor" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
+		"document" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
 		"capabilities" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
 		"session-attach" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Transport)),
 		"session-shutdown" => calls::SessionShutdown::respond(
@@ -1576,17 +1146,10 @@ pub fn dispatch_client_call(
 		"config-reload" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
 		"config-persist" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
 		"document-replace" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
-		"editor-motion" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
-		"editor-mode" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
-		"editor-insert" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
-		"editor-backspace" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
-		"editor-delete-forward" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
-		"editor-delete-selection" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
-		"editor-history" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
 		"schema" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
 		"config" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
 		"document-text" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
-		"editor" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
+		"document" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
 		"capabilities" => Err(route_dispatch_error(&call.id, GlorpCallRoute::Client)),
 		"session-attach" => {
 			calls::SessionAttach::respond(dispatcher.session_attach(calls::SessionAttach::decode_call_input(&call)?)?)
@@ -1628,20 +1191,8 @@ pub(crate) fn register_call_schema_type(registry: &mut crate::TypeRegistry, name
 			registry.register::<crate::ConfigPathInput>();
 			true
 		}
-		"EditorHistoryInput" => {
-			registry.register::<crate::EditorHistoryInput>();
-			true
-		}
-		"EditorModeInput" => {
-			registry.register::<crate::EditorModeInput>();
-			true
-		}
-		"EditorMotionInput" => {
-			registry.register::<crate::EditorMotionInput>();
-			true
-		}
-		"EditorStateView" => {
-			registry.register::<crate::EditorStateView>();
+		"DocumentStateView" => {
+			registry.register::<crate::DocumentStateView>();
 			true
 		}
 		"GlorpCall" => {

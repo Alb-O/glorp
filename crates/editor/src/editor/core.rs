@@ -1,8 +1,6 @@
 use {
 	super::{
-		EditorEngine, EditorMode, EditorSelection, TextEdit,
-		document::DocumentState,
-		history::{EditorSnapshot, HistoryEntry},
+		EditorEngine, EditorMode, EditorSelection, TextEdit, document::DocumentState, history::HistoryEntry,
 		session::EditorSession,
 	},
 	crate::scene::{DocumentLayout, LayoutCluster, SceneConfig},
@@ -80,21 +78,8 @@ impl EditorEngine {
 		layout.cluster(self.active_selection_index(layout)?)
 	}
 
-	pub fn history_snapshot(&self) -> EditorSnapshot {
-		self.core.session.history_snapshot()
-	}
-
-	pub fn restore_snapshot(&mut self, snapshot: &EditorSnapshot) {
-		self.core.session.restore_snapshot(snapshot, self.core.document.len());
-	}
-
-	pub fn record_history(&mut self, forward: TextEdit, inverse: TextEdit, before: EditorSnapshot) {
-		self.core.document.record_history(HistoryEntry {
-			forward,
-			inverse,
-			before,
-			after: self.history_snapshot(),
-		});
+	pub fn record_history(&mut self, forward: TextEdit, inverse: TextEdit) {
+		self.core.document.record_history(HistoryEntry { forward, inverse });
 	}
 
 	pub const fn selection(&self) -> Option<&EditorSelection> {
@@ -154,12 +139,48 @@ impl EditorEngine {
 		self.core.session.enter_insert(Self::insert_selection(layout, head));
 	}
 
+	pub fn replace_context(
+		&mut self, layout: &DocumentLayout, mode: EditorMode, selection: Option<Range<usize>>,
+		selection_head: Option<usize>,
+	) {
+		match mode {
+			EditorMode::Insert => {
+				let head = selection_head
+					.or_else(|| selection.as_ref().map(|range| range.end))
+					.unwrap_or_default()
+					.min(self.core.document.len());
+				self.set_insert_head(layout, head);
+			}
+			EditorMode::Normal => {
+				let selection = selection
+					.and_then(|range| self.selection_from_range(range, selection_head))
+					.or_else(|| layout.cluster(0).map(selection_at_cluster_start));
+				if let Some(selection) = selection {
+					self.core.session.set_normal_selection(selection, None, None);
+				} else {
+					self.set_mode(EditorMode::Normal);
+					self.set_selection(None);
+				}
+			}
+		}
+		self.set_preferred_x(None);
+		self.clear_pointer_anchor();
+		self.refresh_view_state(Some(layout.clone()));
+	}
+
 	pub fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
 		let text = text.into();
 		self.core.reset(&text);
 		self.layout.reset(font_system, &text, config);
 		self.reset_normal_selection();
 		self.refresh_view_state(None);
+	}
+
+	pub fn selection_from_range(&self, range: Range<usize>, head: Option<usize>) -> Option<EditorSelection> {
+		let start = range.start.min(self.core.document.len());
+		let end = range.end.min(self.core.document.len()).max(start);
+		let head = head.unwrap_or(start).min(self.core.document.len());
+		(start < end).then_some(EditorSelection::new(start..end, head))
 	}
 }
 

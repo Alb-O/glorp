@@ -2,11 +2,10 @@ use {
 	glorp_api::*,
 	glorp_gui::{GuiLaunchOptions, GuiRuntimeSession},
 	glorp_nu_plugin::GlorpPlugin,
-	glorp_runtime::{GuiCommand, RuntimeHost, RuntimeOptions, SidebarTab},
+	glorp_runtime::{GuiCommand, GuiEditCommand, GuiEditRequest, RuntimeHost, RuntimeOptions},
 	glorp_test_support::{
-		TestRepo, call_ok, config, config_set, document_replace, document_text, editor_history, editor_insert,
-		editor_mode, editor_motion, editor_state, next_event, outcome, run_standard_transcript, state_snapshot,
-		subscribe_changes, txn, workspace_root,
+		TestRepo, call_ok, config, config_set, document_replace, document_state, document_text, next_event, outcome,
+		run_standard_transcript, state_snapshot, subscribe_changes, txn, workspace_root,
 	},
 	glorp_transport::default_socket_path,
 	nu_plugin_test_support::PluginTest,
@@ -64,19 +63,15 @@ fn schema_export_smoke_test() {
 
 	let schema = call_ok::<calls::Schema>(&mut host, ());
 
-	assert_eq!(schema.version, 6);
-	assert!(schema.calls.iter().any(|operation| operation.id == "editor"));
+	assert_eq!(schema.version, 7);
+	assert!(schema.calls.iter().any(|operation| operation.id == "document"));
 	assert!(schema.calls.iter().all(|operation| operation.id != "snapshot"));
 	assert!(schema.calls.iter().all(|operation| operation.id != "selection"));
 	assert!(schema.calls.iter().all(|operation| operation.id != "scene-ensure"));
 	assert!(schema.calls.iter().all(|operation| operation.id != "ui-sidebar-select"));
-	assert!(
-		schema
-			.calls
-			.iter()
-			.all(|operation| operation.id != "editor-pointer-begin")
-	);
-	assert!(schema.types.iter().any(|ty| ty.name == "EditorStateView"));
+	assert!(schema.calls.iter().all(|operation| operation.id != "editor-mode"));
+	assert!(schema.calls.iter().all(|operation| operation.id != "editor-insert"));
+	assert!(schema.types.iter().any(|ty| ty.name == "DocumentStateView"));
 	assert!(schema.types.iter().all(|ty| ty.name != "GlorpSnapshot"));
 	assert!(schema.types.iter().all(|ty| ty.name != "InspectConfig"));
 	assert!(harness.paths.schema_path.exists());
@@ -111,7 +106,7 @@ fn nu_plugin_roundtrip_smoke_test() {
 fn invalid_config_rejection_e2e() {
 	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let before_text = document_text(&mut host);
-	let before_editor = editor_state(&mut host);
+	let before_document = document_state(&mut host);
 	let before_config = calls::Config::call(&mut host, ()).expect("config should succeed");
 
 	let error = host
@@ -132,7 +127,7 @@ fn invalid_config_rejection_e2e() {
 	}
 
 	assert_eq!(before_text, document_text(&mut host));
-	assert_eq!(before_editor, editor_state(&mut host));
+	assert_eq!(before_document, document_state(&mut host));
 	let after_config = calls::Config::call(&mut host, ()).expect("config should succeed");
 	assert_eq!(before_config, after_config);
 }
@@ -142,7 +137,7 @@ fn transaction_atomicity_e2e() {
 	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let token = subscribe_changes(&mut host);
 	let before_text = document_text(&mut host);
-	let before_editor = editor_state(&mut host);
+	let before_document = document_state(&mut host);
 
 	let error = host
 		.call(txn(vec![
@@ -154,7 +149,7 @@ fn transaction_atomicity_e2e() {
 	assert!(matches!(error, GlorpError::Validation { .. }));
 
 	assert_eq!(before_text, document_text(&mut host));
-	assert_eq!(before_editor, editor_state(&mut host));
+	assert_eq!(before_document, document_state(&mut host));
 	assert!(next_event(&mut host, token).is_none());
 }
 
@@ -220,41 +215,42 @@ fn ipc_transport_rejects_client_route_calls_e2e() {
 }
 
 #[test]
-fn private_gui_state_does_not_emit_public_events() {
+fn scene_ensure_does_not_emit_public_events() {
 	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let token = subscribe_changes(&mut host);
 
-	host.execute_gui(GuiCommand::SidebarSelect(SidebarTab::Inspect))
-		.expect("private sidebar update should succeed");
-	host.execute_gui(GuiCommand::ViewportScrollTo { x: 0.0, y: 120.0 })
-		.expect("private scroll update should succeed");
+	host.execute_gui(GuiCommand::SceneEnsure)
+		.expect("private scene ensure should succeed");
 
-	let frame = host.gui_frame();
-	assert_eq!(frame.ui.active_tab, SidebarTab::Inspect);
-	assert!((frame.ui.canvas_scroll_y - 120.0).abs() <= f32::EPSILON);
+	assert!(host.gui_frame().scene.is_some());
 	assert!(next_event(&mut host, token).is_none());
 }
 
 #[test]
-fn private_viewport_resize_updates_public_editor_state() {
-	let mut host = TestRepo::new("glorp-acceptance").runtime();
-	let before = editor_state(&mut host);
-	let token = subscribe_changes(&mut host);
+fn gui_clients_keep_request_scoped_layout_width_e2e() {
+	let harness = TestRepo::new("glorp-acceptance");
+	let options = gui_options(&harness);
+	let (mut owner, mut first) =
+		GuiRuntimeSession::connect_or_start(options.clone()).expect("first GUI session should start runtime");
+	assert!(owner.owns_server());
 
-	host.execute_gui(GuiCommand::ViewportMetricsSet {
-		layout_width: 240.0,
-		viewport_width: 240.0,
-		viewport_height: 200.0,
-	})
-	.expect("private viewport resize should succeed");
+	first.set_layout_width(240.0);
+	let first_frame = first.gui_frame().expect("first GUI frame should load");
+	assert!((first_frame.layout_width - 240.0).abs() <= f32::EPSILON);
 
-	let after = editor_state(&mut host);
-	assert_ne!(before.revisions.editor, after.revisions.editor);
-	assert!(after.viewport.measured_width > 0.0);
-	let Some(GlorpEvent::Changed(event)) = next_event(&mut host, token) else {
-		panic!("expected one public changed event");
-	};
-	assert!(event.delta.view_changed);
+	let (attached, mut second) =
+		GuiRuntimeSession::connect_or_start(options).expect("second GUI session should attach");
+	assert!(!attached.owns_server());
+	second.set_layout_width(420.0);
+	let second_frame = second.gui_frame().expect("second GUI frame should load");
+	assert!((second_frame.layout_width - 420.0).abs() <= f32::EPSILON);
+
+	let first_again = first
+		.gui_frame()
+		.expect("first GUI frame should preserve its request width");
+	assert!((first_again.layout_width - 240.0).abs() <= f32::EPSILON);
+
+	owner.shutdown().expect("owner shutdown should succeed");
 }
 
 #[test]
@@ -277,45 +273,6 @@ fn gui_launcher_socket_contract_e2e() {
 }
 
 #[test]
-fn gui_private_state_survives_reconnect_e2e() {
-	let harness = TestRepo::new("glorp-acceptance");
-	let options = gui_options(&harness);
-	let (mut owner, mut first) =
-		GuiRuntimeSession::connect_or_start(options.clone()).expect("first GUI session should start runtime");
-	assert!(owner.owns_server());
-
-	first
-		.execute_gui(GuiCommand::SidebarSelect(SidebarTab::Inspect))
-		.expect("sidebar update should succeed");
-	first
-		.execute_gui(GuiCommand::ShowBaselinesSet(true))
-		.expect("baseline toggle should succeed");
-	first
-		.execute_gui(GuiCommand::ViewportScrollTo { x: 0.0, y: 96.0 })
-		.expect("scroll update should succeed");
-	let first_frame = first.gui_frame().expect("first GUI frame should load");
-	assert_eq!(first_frame.ui.active_tab, SidebarTab::Inspect);
-	assert!(first_frame.ui.show_baselines);
-	assert!((first_frame.ui.canvas_scroll_y - 96.0).abs() <= f32::EPSILON);
-
-	let (attached, mut second) =
-		GuiRuntimeSession::connect_or_start(options).expect("second GUI session should attach");
-	assert!(!attached.owns_server());
-	let second_frame = second.gui_frame().expect("attached GUI frame should load");
-	assert_eq!(second_frame.ui.active_tab, SidebarTab::Inspect);
-	assert!(second_frame.ui.show_baselines);
-	assert!((second_frame.ui.canvas_scroll_y - 96.0).abs() <= f32::EPSILON);
-
-	second
-		.execute_gui(GuiCommand::ShowHitboxesSet(true))
-		.expect("attached GUI private update should succeed");
-	let updated_frame = first.gui_frame().expect("owner GUI frame should refresh");
-	assert!(updated_frame.ui.show_hitboxes);
-
-	owner.shutdown().expect("owner shutdown should succeed");
-}
-
-#[test]
 fn gui_owner_client_does_not_depend_on_socket_roundtrips() {
 	let harness = TestRepo::new("glorp-acceptance");
 	let options = gui_options(&harness);
@@ -325,11 +282,9 @@ fn gui_owner_client_does_not_depend_on_socket_roundtrips() {
 
 	std::fs::remove_file(owner.socket_path()).expect("socket path should be removable during the session");
 
-	client
-		.execute_gui(GuiCommand::SidebarSelect(SidebarTab::Inspect))
-		.expect("owned GUI state update should stay local");
+	client.set_layout_width(420.0);
 	let frame = client.gui_frame().expect("owned GUI frame should stay available");
-	assert_eq!(frame.ui.active_tab, SidebarTab::Inspect);
+	assert!((frame.layout_width - 420.0).abs() <= f32::EPSILON);
 
 	let _ = outcome(&mut client, document_replace("local-owned"));
 	assert_eq!(document_text(&mut client), "local-owned");
@@ -338,26 +293,45 @@ fn gui_owner_client_does_not_depend_on_socket_roundtrips() {
 }
 
 #[test]
-fn editor_command_to_document_text_e2e() {
-	let mut host = TestRepo::new("glorp-acceptance").runtime();
-	let _ = outcome(&mut host, document_replace("abc"));
-	let _ = outcome(&mut host, editor_mode(EditorModeCommand::EnterInsertAfter));
-	let _ = outcome(&mut host, editor_motion(EditorMotion::LineEnd));
-	let _ = outcome(&mut host, editor_insert("!"));
+fn gui_edit_command_to_document_text_e2e() {
+	let harness = TestRepo::new("glorp-acceptance");
+	let options = gui_options(&harness);
+	let (mut owner, mut client) =
+		GuiRuntimeSession::connect_or_start(options).expect("GUI session should start runtime");
+	let _ = outcome(&mut client, document_replace("abc"));
 
-	assert_eq!(document_text(&mut host), "abc!");
-	let editor = editor_state(&mut host);
-	assert!(editor.undo_depth > 0);
-	assert_eq!(editor.mode, EditorMode::Insert);
+	let response = client
+		.gui_edit(GuiEditRequest {
+			layout: glorp_runtime::GuiLayoutRequest { layout_width: 540.0 },
+			context: EditorContextView {
+				mode: EditorMode::Insert,
+				selection: None,
+				selection_head: Some(3),
+			},
+			command: GuiEditCommand::InsertText("!".to_owned()),
+		})
+		.expect("GUI edit should succeed");
 
-	let _ = outcome(&mut host, editor_history(EditorHistoryCommand::Undo));
-	assert_eq!(document_text(&mut host), "abc");
+	assert_eq!(document_text(&mut client), "abc!");
+	assert!(response.outcome.document_edit.is_some());
+	assert!(document_state(&mut client).undo_depth > 0);
+
+	let undo = client
+		.gui_edit(GuiEditRequest {
+			layout: glorp_runtime::GuiLayoutRequest { layout_width: 540.0 },
+			context: response.next_context,
+			command: GuiEditCommand::History(EditorHistoryCommand::Undo),
+		})
+		.expect("GUI undo should succeed");
+	assert_eq!(document_text(&mut client), "abc");
+	assert!(undo.outcome.document_edit.is_some());
+	owner.shutdown().expect("owner shutdown should succeed");
 }
 
 #[test]
 fn revision_monotonicity_test() {
 	let mut host = TestRepo::new("glorp-acceptance").runtime();
-	let initial = editor_state(&mut host).revisions;
+	let initial = document_state(&mut host).revisions;
 
 	let config = outcome(
 		&mut host,
@@ -393,28 +367,7 @@ fn ipc_client_parity_test() {
 	let _ = eval_to_value(
 		&mut plugin_test,
 		&format!(
-			r#"glorp call document-replace {{text: "hello"}} --socket "{}""#,
-			plugin_harness.socket_path.display()
-		),
-	);
-	let _ = eval_to_value(
-		&mut plugin_test,
-		&format!(
-			r#"glorp call editor-mode {{mode: "enter-insert-after"}} --socket "{}""#,
-			plugin_harness.socket_path.display()
-		),
-	);
-	let _ = eval_to_value(
-		&mut plugin_test,
-		&format!(
-			r#"glorp call editor-motion {{motion: "line-end"}} --socket "{}""#,
-			plugin_harness.socket_path.display()
-		),
-	);
-	let _ = eval_to_value(
-		&mut plugin_test,
-		&format!(
-			r#"glorp call editor-insert {{text: " world"}} --socket "{}""#,
+			r#"glorp call document-replace {{text: "hello world"}} --socket "{}""#,
 			plugin_harness.socket_path.display()
 		),
 	);
@@ -422,8 +375,8 @@ fn ipc_client_parity_test() {
 	let plugin = state_snapshot(&mut plugin_harness.ipc_client());
 	assert_eq!(ipc.text, direct.text);
 	assert_eq!(plugin.text, direct.text);
-	assert_eq!(ipc.editor.mode, direct.editor.mode);
-	assert_eq!(plugin.editor.mode, direct.editor.mode);
+	assert_eq!(ipc.document.undo_depth, direct.document.undo_depth);
+	assert_eq!(plugin.document.undo_depth, direct.document.undo_depth);
 	assert_eq!(ipc.config.editor.wrapping, direct.config.editor.wrapping);
 	assert_eq!(plugin.config.editor.wrapping, direct.config.editor.wrapping);
 }
@@ -516,33 +469,20 @@ fn plugin_transcript_smoke_test() {
 	);
 	let _ = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp call document-replace {{text: "hello"}} --repo-root "{repo_root}""#),
-	);
-	let _ = eval_to_value(
-		&mut plugin_test,
-		&format!(r#"glorp call editor-mode {{mode: "enter-insert-after"}} --repo-root "{repo_root}""#),
-	);
-	let _ = eval_to_value(
-		&mut plugin_test,
-		&format!(r#"glorp call editor-motion {{motion: "line-end"}} --repo-root "{repo_root}""#),
-	);
-	let _ = eval_to_value(
-		&mut plugin_test,
-		&format!(r#"glorp call editor-insert {{text: " world"}} --repo-root "{repo_root}""#),
+		&format!(r#"glorp call document-replace {{text: "hello world"}} --repo-root "{repo_root}""#),
 	);
 
 	let text = eval_to_value(
 		&mut plugin_test,
 		&format!(r#"glorp call document-text --repo-root "{repo_root}""#),
 	);
-	let editor = eval_to_value(
+	let document = eval_to_value(
 		&mut plugin_test,
-		&format!(r#"glorp call editor --repo-root "{repo_root}""#),
+		&format!(r#"glorp call document --repo-root "{repo_root}""#),
 	);
 
 	assert_eq!(text.coerce_str().expect("text should be string"), "hello world");
-	assert_eq!(string_field(&editor, "mode"), "insert");
-	assert!(int_field(&editor, "undo_depth") > 0);
+	assert_eq!(int_field(&document, "undo_depth"), 0);
 
 	let _ = eval_to_value(
 		&mut plugin_test,
@@ -564,10 +504,7 @@ fn plugin_transaction_e2e() {
 			glorp call txn {{
 			  calls: [
 			    {{id: "config-set", input: {{path: "editor.wrapping", value: "glyph"}}}}
-			    {{id: "document-replace", input: {{text: "hello"}}}}
-			    {{id: "editor-mode", input: {{mode: "enter-insert-after"}}}}
-			    {{id: "editor-motion", input: {{motion: "line-end"}}}}
-			    {{id: "editor-insert", input: {{text: " world"}}}}
+			    {{id: "document-replace", input: {{text: "hello world"}}}}
 			  ]
 			}} --repo-root "{repo_root}"
 			"#,
@@ -575,8 +512,8 @@ fn plugin_transaction_e2e() {
 	);
 
 	assert_eq!(document_text(&mut harness.ipc_client()), "hello world");
-	let editor = editor_state(&mut harness.ipc_client());
-	assert_eq!(editor.mode, EditorMode::Insert);
+	let document = document_state(&mut harness.ipc_client());
+	assert_eq!(document.text_bytes, "hello world".len());
 }
 
 #[test]

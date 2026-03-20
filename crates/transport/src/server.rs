@@ -149,8 +149,13 @@ fn dispatch_public_request(
 
 fn dispatch_gui_request(request: GuiTransportRequest, host: &mut RuntimeHost) -> GuiTransportResponse {
 	match request {
-		GuiTransportRequest::ExecuteGui(command) => GuiTransportResponse::ExecuteGui(host.execute_gui(command)),
-		GuiTransportRequest::GuiFrame => GuiTransportResponse::GuiFrame(Box::new(Ok(host.gui_transport_frame()))),
+		GuiTransportRequest::ExecuteGui { layout, command } => {
+			GuiTransportResponse::ExecuteGui(host.execute_gui_at(layout, command))
+		}
+		GuiTransportRequest::Edit(request) => GuiTransportResponse::Edit(Box::new(host.gui_edit(request))),
+		GuiTransportRequest::GuiFrame(layout) => {
+			GuiTransportResponse::GuiFrame(Box::new(Ok(host.gui_frame_at(layout))))
+		}
 	}
 }
 

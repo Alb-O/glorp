@@ -1,6 +1,7 @@
 use {
 	clap::{Parser, Subcommand},
 	glorp_api::GlorpError,
+	glorp_editor::telemetry::init_tracing,
 	glorp_runtime::{RuntimeHost, RuntimeOptions, default_runtime_paths},
 	glorp_transport::{default_socket_path, ensure_socket_parent, start_server},
 	std::{path::PathBuf, process::ExitCode},
@@ -17,6 +18,7 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), GlorpError> {
+	init_tracing();
 	let cli = Cli::parse();
 	let repo_root = cli.repo_root.map_or_else(
 		|| {

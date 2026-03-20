@@ -1,15 +1,11 @@
 use {
-	crate::{SidebarTab, perf::PerfProjection, scene::scene_config_from_runtime},
-	glorp_api::{GlorpConfig, GlorpDelta, GlorpRevisions},
-	glorp_editor::{
-		CanvasTarget, EditorEngine, EditorIntent, EditorMode, EditorOutcome, EditorPresentation, EditorViewState,
-		ScenePresentation, SessionSnapshot, make_font_system,
-	},
-	std::{
-		ops::Range,
-		time::{Duration, Instant},
-	},
+	crate::{perf::PerfProjection, scene::scene_config_from_runtime},
+	glorp_api::{GlorpConfig, GlorpDelta, GlorpRevisions, TextEditView},
+	glorp_editor::{EditorEngine, EditorIntent, ScenePresentation, TextEdit, make_font_system},
+	std::time::{Duration, Instant},
 };
+
+pub const DEFAULT_LAYOUT_WIDTH: f32 = 540.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SessionRequest {
@@ -23,61 +19,31 @@ pub enum SessionRequest {
 pub struct SessionDelta {
 	pub text_changed: bool,
 	pub view_changed: bool,
-	pub selection_changed: bool,
-	pub mode_changed: bool,
+	pub document_edit: Option<TextEdit>,
 	pub scene_materialized: Option<Duration>,
 }
 
 #[derive(Debug, Clone)]
 pub struct DocumentCheckpoint {
 	editor: EditorEngine,
-	snapshot: SessionSnapshot,
+	scene: Option<ScenePresentation>,
 	next_scene_revision: u64,
 }
 
 #[derive(Debug)]
 pub struct DocumentSession {
 	editor: EditorEngine,
-	snapshot: SessionSnapshot,
+	scene: Option<ScenePresentation>,
 	next_scene_revision: u64,
 	font_system: cosmic_text::FontSystem,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct UiRuntimeState {
-	pub active_tab: SidebarTab,
-	pub hovered_target: Option<CanvasTarget>,
-	pub selected_target: Option<CanvasTarget>,
-	pub canvas_focused: bool,
-	pub show_baselines: bool,
-	pub show_hitboxes: bool,
-	pub canvas_scroll_x: f32,
-	pub canvas_scroll_y: f32,
-	pub layout_width: f32,
-	pub viewport_width: f32,
-	pub viewport_height: f32,
-	pub pane_ratio: f32,
 }
 
 #[derive(Debug)]
 pub struct RuntimeState {
 	pub config: GlorpConfig,
 	pub session: DocumentSession,
-	pub ui: UiRuntimeState,
 	pub revisions: GlorpRevisions,
 	pub perf: PerfProjection,
-}
-
-impl SessionDelta {
-	const fn all_public_changes() -> Self {
-		Self {
-			text_changed: true,
-			view_changed: true,
-			selection_changed: true,
-			mode_changed: true,
-			scene_materialized: None,
-		}
-	}
 }
 
 impl DocumentSession {
@@ -85,11 +51,10 @@ impl DocumentSession {
 		let mut font_system = make_font_system();
 		let scene_config = scene_config_from_runtime(config, layout_width);
 		let editor = EditorEngine::new(&mut font_system, text, scene_config);
-		let snapshot = SessionSnapshot::new(build_editor_presentation(&editor, 1));
 
 		Self {
 			editor,
-			snapshot,
+			scene: None,
 			next_scene_revision: 0,
 			font_system,
 		}
@@ -115,23 +80,43 @@ impl DocumentSession {
 		self.editor.text()
 	}
 
-	pub const fn snapshot(&self) -> &SessionSnapshot {
-		&self.snapshot
+	pub fn editor(&self) -> &EditorEngine {
+		&self.editor
+	}
+
+	pub fn editor_mut(&mut self) -> &mut EditorEngine {
+		&mut self.editor
+	}
+
+	pub fn layout_width(&self) -> f32 {
+		self.editor.layout_width()
+	}
+
+	pub fn history_depths(&self) -> (usize, usize) {
+		self.editor.history_depths()
+	}
+
+	pub const fn scene(&self) -> Option<&ScenePresentation> {
+		self.scene.as_ref()
 	}
 
 	pub fn checkpoint(&self) -> DocumentCheckpoint {
 		DocumentCheckpoint {
 			editor: self.editor.clone(),
-			snapshot: self.snapshot.clone(),
+			scene: self.scene.clone(),
 			next_scene_revision: self.next_scene_revision,
 		}
 	}
 
 	pub fn restore(&mut self, checkpoint: DocumentCheckpoint) {
 		self.editor = checkpoint.editor;
-		self.snapshot = checkpoint.snapshot;
+		self.scene = checkpoint.scene;
 		self.next_scene_revision = checkpoint.next_scene_revision;
 		self.font_system = make_font_system();
+	}
+
+	pub fn sync_layout_width(&mut self, config: &GlorpConfig, layout_width: f32) {
+		let _ = self.execute(SessionRequest::SyncConfig, config, layout_width);
 	}
 
 	fn execute_replace_document(&mut self, text: &str, config: &GlorpConfig, layout_width: f32) -> SessionDelta {
@@ -140,9 +125,13 @@ impl DocumentSession {
 			text,
 			scene_config_from_runtime(config, layout_width),
 		);
-		self.refresh_editor_snapshot();
 		self.invalidate_scene();
-		SessionDelta::all_public_changes()
+		SessionDelta {
+			text_changed: true,
+			view_changed: true,
+			document_edit: None,
+			scene_materialized: None,
+		}
 	}
 
 	fn execute_sync_config(&mut self, config: &GlorpConfig, layout_width: f32) -> SessionDelta {
@@ -153,7 +142,6 @@ impl DocumentSession {
 			return SessionDelta::default();
 		}
 
-		self.refresh_editor_snapshot();
 		self.invalidate_scene();
 		SessionDelta {
 			view_changed: true,
@@ -162,82 +150,44 @@ impl DocumentSession {
 	}
 
 	fn execute_editor_intent(&mut self, intent: EditorIntent) -> SessionDelta {
-		let EditorOutcome {
-			view_changed,
-			selection_changed,
-			mode_changed,
-			viewport_target: _,
-			text_edit,
-		} = self.editor.apply(&mut self.font_system, intent);
-		let text_changed = text_edit.is_some();
-
-		if view_changed || selection_changed || mode_changed || text_changed {
-			self.refresh_editor_snapshot();
-		}
-
+		let outcome = self.editor.apply(&mut self.font_system, intent);
+		let text_changed = outcome.text_edit.is_some();
 		if text_changed {
 			self.invalidate_scene();
 		}
 
 		SessionDelta {
 			text_changed,
-			view_changed,
-			selection_changed,
-			mode_changed,
-			..SessionDelta::default()
+			view_changed: false,
+			document_edit: outcome.text_edit,
+			scene_materialized: None,
 		}
 	}
 
-	fn refresh_editor_snapshot(&mut self) {
-		let revision = self.snapshot.editor.revision + 1;
-		self.snapshot.editor = build_editor_presentation(&self.editor, revision);
-	}
-
 	fn invalidate_scene(&mut self) {
-		self.snapshot.scene = None;
+		self.scene = None;
 	}
 
 	fn materialize_scene_if_needed(&mut self) -> Option<Duration> {
-		if self.snapshot.scene.is_some() {
+		if self.scene.is_some() {
 			return None;
 		}
 
 		let revision = self.next_scene_revision + 1;
 		let started = Instant::now();
-		self.snapshot.scene = Some(ScenePresentation::new(revision, self.editor.shared_document_layout()));
+		self.scene = Some(ScenePresentation::new(revision, self.editor.shared_document_layout()));
 		self.next_scene_revision = revision;
 		Some(started.elapsed())
 	}
 }
 
-impl UiRuntimeState {
-	pub const fn new() -> Self {
-		Self {
-			active_tab: SidebarTab::Controls,
-			hovered_target: None,
-			selected_target: None,
-			canvas_focused: false,
-			show_baselines: false,
-			show_hitboxes: false,
-			canvas_scroll_x: 0.0,
-			canvas_scroll_y: 0.0,
-			layout_width: 540.0,
-			viewport_width: 540.0,
-			viewport_height: 320.0,
-			pane_ratio: 0.35,
-		}
-	}
-}
-
 impl RuntimeState {
 	pub fn new(config: GlorpConfig, text: &str) -> Self {
-		let ui = UiRuntimeState::new();
-		let session = DocumentSession::new(text, &config, ui.layout_width);
+		let session = DocumentSession::new(text, &config, DEFAULT_LAYOUT_WIDTH);
 
 		Self {
 			config,
 			session,
-			ui,
 			revisions: GlorpRevisions { editor: 1, config: 1 },
 			perf: PerfProjection::default(),
 		}
@@ -247,7 +197,6 @@ impl RuntimeState {
 		RuntimeCheckpoint {
 			config: self.config.clone(),
 			session: self.session.checkpoint(),
-			ui: self.ui.clone(),
 			revisions: self.revisions,
 			perf: self.perf.clone(),
 		}
@@ -256,7 +205,6 @@ impl RuntimeState {
 	pub fn restore(&mut self, checkpoint: RuntimeCheckpoint) {
 		self.config = checkpoint.config;
 		self.session.restore(checkpoint.session);
-		self.ui = checkpoint.ui;
 		self.revisions = checkpoint.revisions;
 		self.perf = checkpoint.perf;
 	}
@@ -264,10 +212,7 @@ impl RuntimeState {
 	pub fn delta_from_session(&mut self, session_delta: &SessionDelta) -> GlorpDelta {
 		let text_changed = session_delta.text_changed;
 		let view_changed = session_delta.view_changed;
-		let selection_changed = session_delta.selection_changed;
-		let mode_changed = session_delta.mode_changed;
-		let editor_changed = text_changed || view_changed || selection_changed || mode_changed;
-		if editor_changed {
+		if text_changed || view_changed {
 			self.revisions.editor += 1;
 		}
 
@@ -278,8 +223,6 @@ impl RuntimeState {
 		GlorpDelta {
 			text_changed,
 			view_changed,
-			selection_changed,
-			mode_changed,
 			config_changed: false,
 		}
 	}
@@ -289,42 +232,16 @@ impl RuntimeState {
 pub struct RuntimeCheckpoint {
 	config: GlorpConfig,
 	session: DocumentCheckpoint,
-	ui: UiRuntimeState,
 	revisions: GlorpRevisions,
 	perf: PerfProjection,
 }
 
-fn build_editor_presentation(editor: &EditorEngine, revision: u64) -> EditorPresentation {
-	let (undo_depth, redo_depth) = editor.history_depths();
-	EditorPresentation::new(
-		revision,
-		editor.viewport_metrics(),
-		editor.text_layer_state(),
-		editor.view_state(),
-		editor.text().len(),
-		undo_depth,
-		redo_depth,
-	)
-}
-
-pub const fn text_range(range: &Range<usize>) -> glorp_api::TextRange {
-	glorp_api::TextRange {
-		start: range.start as u64,
-		end: range.end as u64,
-	}
-}
-
-pub fn selection_head(view: &EditorViewState) -> Option<u64> {
-	view.selection_head.map(|head| head as u64)
-}
-
-pub fn pointer_anchor(view: &EditorViewState) -> Option<u64> {
-	view.pointer_anchor.map(|anchor| anchor as u64)
-}
-
-pub const fn mode(mode: EditorMode) -> glorp_api::EditorMode {
-	match mode {
-		EditorMode::Normal => glorp_api::EditorMode::Normal,
-		EditorMode::Insert => glorp_api::EditorMode::Insert,
+pub fn text_edit_view(edit: &TextEdit) -> TextEditView {
+	TextEditView {
+		range: glorp_api::TextRange {
+			start: edit.range.start as u64,
+			end: edit.range.end as u64,
+		},
+		inserted: edit.inserted.clone(),
 	}
 }

@@ -70,16 +70,6 @@ impl EditorSelection {
 		Self { range, head }
 	}
 
-	fn clamped(&self, document_len: usize) -> Self {
-		let start = self.range.start.min(document_len);
-		let end = self.range.end.min(document_len).max(start);
-		let head = self.head.min(document_len);
-		Self {
-			range: start..end,
-			head,
-		}
-	}
-
 	const fn range(&self) -> &Range<usize> {
 		&self.range
 	}

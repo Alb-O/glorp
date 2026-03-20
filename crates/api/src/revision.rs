@@ -8,7 +8,5 @@ pub struct GlorpRevisions {
 pub struct GlorpDelta {
 	pub text_changed: bool,
 	pub view_changed: bool,
-	pub selection_changed: bool,
-	pub mode_changed: bool,
 	pub config_changed: bool,
 }
