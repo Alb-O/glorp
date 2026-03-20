@@ -702,7 +702,10 @@ impl RuntimeShell {
 	fn resync_document_to_revision(&mut self, revision: u64) -> Result<(), GlorpError> {
 		let (response, bytes) = self.client.document_fetch(revision)?;
 		if response.revision < revision {
-			return Ok(());
+			return Err(GlorpError::transport(format!(
+				"document fetch returned editor revision `{}` below requested revision `{revision}`",
+				response.revision
+			)));
 		}
 
 		let text = String::from_utf8(bytes)

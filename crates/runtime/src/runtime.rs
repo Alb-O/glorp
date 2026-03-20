@@ -82,16 +82,25 @@ impl GlorpRuntime {
 	}
 
 	pub fn gui_document_fetch(
-		&mut self, _request: crate::GuiDocumentFetchRequest,
-	) -> (crate::GuiDocumentFetchResponse, String) {
+		&mut self, request: crate::GuiDocumentFetchRequest,
+	) -> Result<(crate::GuiDocumentFetchResponse, String), GlorpError> {
+		if request.minimum_revision > self.state.revisions.editor {
+			return Err(GlorpError::validation(
+				None,
+				format!(
+					"document fetch requested future editor revision `{}` but current revision is `{}`",
+					request.minimum_revision, self.state.revisions.editor
+				),
+			));
+		}
 		let text = self.state.session.text().to_owned();
-		(
+		Ok((
 			crate::GuiDocumentFetchResponse {
 				revision: self.state.revisions.editor,
 				bytes: text.len(),
 			},
 			text,
-		)
+		))
 	}
 
 	pub fn gui_shared_delta(&self, outcome: &glorp_api::GlorpOutcome) -> crate::GuiSharedDelta {

@@ -141,8 +141,8 @@ pub fn read_session_frame(reader: &mut impl Read) -> Result<Option<GuiSessionFra
 	}
 }
 
-pub fn gui_document_request(revision: u64) -> glorp_runtime::GuiSessionRequest {
-	glorp_runtime::GuiSessionRequest::DocumentFetch(GuiDocumentFetchRequest { revision })
+pub fn gui_document_request(minimum_revision: u64) -> glorp_runtime::GuiSessionRequest {
+	glorp_runtime::GuiSessionRequest::DocumentFetch(GuiDocumentFetchRequest { minimum_revision })
 }
 
 fn write_session_frame(stream: &mut impl Write, kind: u8, payload: &[u8]) -> Result<(), GlorpError> {

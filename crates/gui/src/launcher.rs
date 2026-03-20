@@ -8,8 +8,8 @@
 //! `GuiRuntimeClient` presents one shape in both modes. Callers always get
 //! the same `gui_frame`, `gui_edit`, `document_fetch`, and public-call APIs,
 //! while this module handles capability probing, socket startup/wait logic, and
-//! boot-frame hydration when the runtime sends `document_sync` instead of inline
-//! text.
+//! frame hydration when the runtime sends `document_sync` instead of inline
+//! text payloads.
 //!
 //! One current detail worth knowing: only IPC sessions receive async `Changed`
 //! events; the pure local client path reads state directly from the shared host.
@@ -163,12 +163,12 @@ impl GuiRuntimeClient {
 		}
 	}
 
-	pub fn document_fetch(&mut self, revision: u64) -> Result<(GuiDocumentFetchResponse, Vec<u8>), GlorpError> {
+	pub fn document_fetch(&mut self, minimum_revision: u64) -> Result<(GuiDocumentFetchResponse, Vec<u8>), GlorpError> {
 		match &self.client {
-			RuntimeClient::Session(client) => client.document_fetch(revision),
+			RuntimeClient::Session(client) => client.document_fetch(minimum_revision),
 			RuntimeClient::Local(client) => with_local_runtime(client, |host| {
-				let (response, text) = host.gui_document_fetch(GuiDocumentFetchRequest { revision });
-				Ok((response, text.into_bytes()))
+				host.gui_document_fetch(GuiDocumentFetchRequest { minimum_revision })
+					.map(|(response, text)| (response, text.into_bytes()))
 			}),
 		}
 	}

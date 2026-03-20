@@ -99,7 +99,7 @@ impl GuiSessionClient {
 		}
 	}
 
-	pub fn document_fetch(&self, revision: u64) -> Result<(GuiDocumentFetchResponse, Vec<u8>), GlorpError> {
+	pub fn document_fetch(&self, minimum_revision: u64) -> Result<(GuiDocumentFetchResponse, Vec<u8>), GlorpError> {
 		let id = self.next_id.fetch_add(1, Ordering::SeqCst);
 		let (reply_tx, reply_rx) = mpsc::channel();
 		self.pending
@@ -112,7 +112,7 @@ impl GuiSessionClient {
 					response: None,
 				},
 			);
-		self.send_control(id, gui_document_request(revision))?;
+		self.send_control(id, gui_document_request(minimum_revision))?;
 		reply_rx.recv().map_err(|_| {
 			GlorpError::transport(format!(
 				"gui session closed while waiting for document fetch from {}",

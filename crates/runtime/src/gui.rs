@@ -9,10 +9,15 @@
 //! - edits are revision-based; stale `GuiEditRequest`s are rejected explicitly
 //! - edit replies include undo/redo depths so the sidebar can update without an
 //!   extra round trip
-//! - boot and incremental updates may omit inline document text once payloads
+//! - boot frames and large edit updates may omit inline text payloads once they
 //!   exceed `LARGE_PAYLOAD_BYTES`
 //! - omitted text is represented by `GuiDocumentSyncRef` and recovered through
 //!   `DocumentFetch`
+//! - `DocumentFetch` is a resync-to-latest operation, not a historical lookup:
+//!   callers ask for at least a revision, and the runtime may answer with a
+//!   newer snapshot
+//! - future revisions are rejected explicitly instead of silently returning an
+//!   unrelated snapshot
 //!
 //! This protocol is intentionally narrow and specific to the editor window.
 //! Other clients should stay on the public call/event surface.
@@ -71,12 +76,21 @@ pub struct GuiDocumentSyncRef {
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct GuiDocumentFetchRequest {
-	pub revision: u64,
+	/// Minimum editor revision the caller is trying to resynchronize to.
+	///
+	/// The runtime does not retain historical buffers here; it returns whatever
+	/// the current document snapshot is at reply time.
+	///
+	/// Requests for revisions newer than the current runtime revision are
+	/// rejected.
+	pub minimum_revision: u64,
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct GuiDocumentFetchResponse {
+	/// Editor revision of the snapshot carried by the accompanying payload.
 	pub revision: u64,
+	/// Byte length of the accompanying UTF-8 document payload.
 	pub bytes: usize,
 }
 

@@ -295,14 +295,14 @@ fn dispatch_gui_session_request(
 			GuiSessionDispatch::Control(GuiSessionResponse::Edit(host.gui_edit(request)))
 		}
 		GuiSessionRequest::GuiFrame => GuiSessionDispatch::Control(GuiSessionResponse::GuiFrame(Ok(host.gui_frame()))),
-		GuiSessionRequest::DocumentFetch(request) => {
-			let (response, text) = host.gui_document_fetch(request);
-			GuiSessionDispatch::WithPayload {
+		GuiSessionRequest::DocumentFetch(request) => match host.gui_document_fetch(request) {
+			Ok((response, text)) => GuiSessionDispatch::WithPayload {
 				response: GuiSessionResponse::DocumentFetch(Ok(response)),
 				kind: GuiPayloadKind::DocumentText,
 				bytes: text.into_bytes(),
-			}
-		}
+			},
+			Err(error) => GuiSessionDispatch::Control(GuiSessionResponse::DocumentFetch(Err(error))),
+		},
 	}
 }
 

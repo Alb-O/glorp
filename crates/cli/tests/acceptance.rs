@@ -267,6 +267,37 @@ fn gui_launcher_socket_contract_e2e() {
 }
 
 #[test]
+fn gui_document_fetch_rejects_future_revision_e2e() {
+	let harness = TestRepo::new("glorp-acceptance");
+	let options = gui_options(&harness);
+	let (mut owner, mut local_client) =
+		GuiRuntimeSession::connect_or_start(options.clone()).expect("owner GUI session should start runtime");
+	assert!(owner.owns_server());
+	let (attached, mut ipc_client) =
+		GuiRuntimeSession::connect_or_start(options).expect("attached GUI session should connect");
+	assert!(!attached.owns_server());
+
+	let current_revision = local_client
+		.gui_frame()
+		.expect("GUI frame should load")
+		.revisions
+		.editor;
+	let future_revision = current_revision + 1;
+
+	for client in [&mut local_client, &mut ipc_client] {
+		let error = client
+			.document_fetch(future_revision)
+			.expect_err("future revision fetch should be rejected");
+		match error {
+			GlorpError::Validation { message, .. } => assert!(message.contains("future editor revision")),
+			other => panic!("unexpected document fetch error: {other:?}"),
+		}
+	}
+
+	owner.shutdown().expect("owner shutdown should succeed");
+}
+
+#[test]
 fn gui_owner_client_does_not_depend_on_socket_roundtrips() {
 	let harness = TestRepo::new("glorp-acceptance");
 	let options = gui_options(&harness);
