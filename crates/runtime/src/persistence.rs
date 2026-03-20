@@ -1,3 +1,15 @@
+// Checked-in surface artifact synchronization.
+//
+// These artifacts are treated as source-controlled outputs of the current
+// public/runtime seam, not as disposable cache files:
+// - `schema/glorp-schema.json`
+// - `nu/glorp.nu`
+// - `nu/completions.nu`
+//
+// `xtask surface` drives this module in normal workflows, and
+// `ensure_surface_artifacts_current` turns drift into a validation error with a
+// concrete regeneration command.
+
 use {crate::ConfigStore, glorp_api::GlorpError};
 
 struct SurfaceArtifact {

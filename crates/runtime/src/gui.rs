@@ -1,3 +1,22 @@
+//! Private GUI/runtime session protocol.
+//!
+//! This is the interactive window's privileged path into the shared runtime. It
+//! sits beside the public `glorp_api` surface because it carries GUI-specific
+//! conveniences and sync rules.
+//!
+//! Key behaviors:
+//!
+//! - edits are revision-based; stale `GuiEditRequest`s are rejected explicitly
+//! - edit replies include undo/redo depths so the sidebar can update without an
+//!   extra round trip
+//! - boot and incremental updates may omit inline document text once payloads
+//!   exceed `LARGE_PAYLOAD_BYTES`
+//! - omitted text is represented by `GuiDocumentSyncRef` and recovered through
+//!   `DocumentFetch`
+//!
+//! This protocol is intentionally narrow and specific to the editor window.
+//! Other clients should stay on the public call/event surface.
+
 use glorp_api::{GlorpConfig, GlorpOutcome, GlorpRevisions, TextRange};
 
 pub const LARGE_PAYLOAD_BYTES: usize = 4096;

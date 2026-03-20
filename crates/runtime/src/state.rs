@@ -1,3 +1,20 @@
+//! Canonical mutable runtime state.
+//!
+//! This module keeps the shared host's durable state smaller than the GUI's
+//! local editor model. The runtime owns effective config, shared document text,
+//! undo/redo history, and monotonic editor/config revisions. It does not own
+//! cursor mode, overlays, scene geometry, or inspect state.
+//!
+//! Details that matter:
+//!
+//! - `ReplaceDocument` resets `DocumentState`, which clears history
+//! - normal edits record both forward and inverse edits so undo/redo can replay
+//!   directly against current text
+//! - editor revisions advance only when text/view deltas change; config
+//!   revisions are separate
+//! - checkpoints clone the full document session so transactions can roll back
+//!   atomically
+
 use {
 	glorp_api::{GlorpConfig, GlorpDelta, GlorpRevisions, TextEditView},
 	glorp_editor::{DocumentState, HistoryEntry, TextEdit},

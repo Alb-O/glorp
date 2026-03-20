@@ -1,3 +1,20 @@
+//! Code generation for the checked-in public `glorp` surface.
+//!
+//! This crate is the seam between the human-maintained surface catalog and the
+//! generated Rust helpers that the rest of the workspace uses. It exists so the
+//! runtime, transport, and clients can share one generated registry instead of
+//! hand-maintaining parallel descriptors or dispatch tables.
+//!
+//! # Generates
+//!
+//! - typed call descriptor helpers
+//! - route-specific dispatcher traits and functions
+//! - schema-registration glue for named public types
+//!
+//! The output is written into `glorp_api`, which remains the crate that owns the
+//! public semantic types. This crate owns generation mechanics, not product
+//! semantics.
+
 use {
 	glorp_api_catalog::{CALLS, CallDefinition, CallKind, CallRoute},
 	std::{

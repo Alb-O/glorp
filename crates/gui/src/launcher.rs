@@ -1,3 +1,19 @@
+//! GUI launcher and attachment boundary.
+//!
+//! This module hides the distinction between:
+//!
+//! - an owned in-process runtime plus socket server started by the GUI
+//! - an already-running shared runtime reached over IPC
+//!
+//! `GuiRuntimeClient` presents one shape in both modes. Callers always get
+//! the same `gui_frame`, `gui_edit`, `document_fetch`, and public-call APIs,
+//! while this module handles capability probing, socket startup/wait logic, and
+//! boot-frame hydration when the runtime sends `document_sync` instead of inline
+//! text.
+//!
+//! One current detail worth knowing: only IPC sessions receive async `Changed`
+//! events; the pure local client path reads state directly from the shared host.
+
 use {
 	glorp_api::{GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
 	glorp_runtime::{

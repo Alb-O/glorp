@@ -1,3 +1,9 @@
+//! Minimal shared-runtime host binary.
+//!
+//! This crate is the operational seam for running `glorp` as a shared local
+//! service. It wires together runtime creation and the transport server without
+//! adding new semantics of its own.
+
 use {
 	clap::{Parser, Subcommand},
 	glorp_api::GlorpError,

@@ -1,3 +1,30 @@
+//! Text layout and scene materialization.
+//!
+//! This is the other major internal seam inside `glorp_editor`. It converts
+//! document text plus scene config into measurable layout artifacts that higher
+//! layers can render, inspect, and hit-test.
+//!
+//! # Responsibilities
+//!
+//! - font-system setup and font-name resolution
+//! - buffer construction for `cosmic_text`
+//! - layout runs, clusters, caret metrics, and byte-order helpers
+//! - geometry answers used by editor interaction and rendering
+//!
+//! # Non-responsibilities
+//!
+//! - deciding which edit should happen
+//! - storing undo/redo history
+//! - transport-safe public protocol design
+//! - GUI widget composition
+//!
+//! # Why this seam exists
+//!
+//! Layout is expensive, stateful, and implementation-specific. By keeping it in
+//! a dedicated module, the rest of the codebase can depend on stable read models
+//! such as [`DocumentLayout`] and [`SceneConfig`] without coupling public
+//! semantics to `cosmic_text` details.
+
 mod build;
 mod data;
 mod font;

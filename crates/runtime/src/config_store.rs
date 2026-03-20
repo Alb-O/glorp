@@ -1,3 +1,17 @@
+// Durable config load/save boundary.
+//
+// The persisted config is a Nushell source file, but Rust still owns the schema
+// and dotted-path semantics. This module bridges the two.
+//
+// Current contract:
+// - missing config files are bootstrapped from Rust defaults via `save`
+// - loading shells out to `nu` and expects `$config` as JSON
+// - that JSON must be a record-of-records matching the Rust config namespaces
+// - saving rewrites the file into the canonical generated `export const config` form
+//
+// Nushell is the authoring/evaluation layer, not the schema authority.
+// Validation still flows through `GlorpConfig::set_path`.
+
 use {
 	glorp_api::{GlorpConfig, GlorpError, GlorpValue},
 	std::{path::PathBuf, process::Command},

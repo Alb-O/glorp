@@ -1,3 +1,9 @@
+//! Workspace maintenance tasks for checked-in surface artifacts.
+//!
+//! `xtask surface` is the operational seam that keeps generated Rust helpers,
+//! checked-in schema artifacts, and generated Nushell assets aligned. The rest
+//! of the workspace assumes those artifacts are current.
+
 use {
 	glorp_api_codegen::{SURFACE_COMMAND, generated_calls_are_current, generated_calls_path, sync_generated_calls},
 	glorp_runtime::{ConfigStore, default_runtime_paths, ensure_surface_artifacts_current, sync_surface_artifacts},

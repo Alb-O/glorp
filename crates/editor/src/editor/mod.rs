@@ -1,3 +1,25 @@
+//! Document-session core for editing operations.
+//!
+//! This is one of the main internal boundaries in the workspace. It owns the
+//! mutable text session and the rules that turn intent into text edits,
+//! selection updates, mode transitions, history entries, and viewport hints.
+//!
+//! It owns document text/selection, modal reducer logic, undo/redo history, and
+//! view-state refresh. It does not own durable config, transport, widget focus,
+//! or font policy beyond what layout needs.
+//!
+//! The split with [`crate::scene`] is deliberate:
+//!
+//! - `editor` decides what changed semantically
+//! - `scene` decides how the current text lays out geometrically
+//!
+//! `glorp_runtime` does not currently embed the full `EditorEngine`. It reuses
+//! the lower-level document/edit pieces and publishes revisioned text outcomes.
+//! The GUI reapplies those outcomes to its local editor engine to recover mode,
+//! selection, overlays, viewport targets, and scene state. That is why runtime
+//! mutations are document-centric even though this module contains richer
+//! interactive behavior.
+
 mod core;
 mod document;
 mod editing;

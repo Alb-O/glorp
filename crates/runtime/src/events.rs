@@ -1,3 +1,16 @@
+// In-memory fan-out queues for public and GUI-private change streams.
+//
+// The runtime uses a simple per-subscriber FIFO queue model: each subscriber
+// gets its own queue, published outcomes/deltas are cloned into all active
+// queues, and blocking reads wait on a condition variable with timeout.
+//
+// There are two parallel streams on purpose:
+// - `SubscriptionSet` for public `GlorpEvent`s
+// - `GuiSubscriptionSet` for private `GuiSharedDelta`s
+//
+// The public stream supports checkpoint/restore because transaction rollback
+// must undo queued public events as well as state mutation.
+
 use {
 	crate::GuiSharedDelta,
 	glorp_api::{GlorpError, GlorpEvent, GlorpOutcome, GlorpStreamToken, GlorpSubscription},

@@ -1,3 +1,19 @@
+//! Static catalog used to generate the public `glorp` call surface.
+//!
+//! This crate is a source-of-truth seam for surface generation. It stores a
+//! compact, Rust-native description of the supported calls, their routing, and
+//! the named types that must appear in reflection output.
+//!
+//! The important architectural rule is that this catalog describes the public
+//! contract at a higher level than any one adapter:
+//!
+//! - `glorp_api_codegen` uses it to generate typed descriptors and dispatchers
+//! - `glorp_api` re-exports the generated surface
+//! - runtime, transport, and clients all conform to that generated output
+//!
+//! Keep this catalog focused on durable public semantics. Internal helper state
+//! or GUI-only implementation details should not be added here.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NamedType {
 	pub schema_name: &'static str,

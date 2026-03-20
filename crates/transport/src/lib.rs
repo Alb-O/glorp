@@ -1,3 +1,32 @@
+//! Local transport adapters for the `glorp` runtime.
+//!
+//! This crate is the boundary between the canonical runtime host and external
+//! clients. It carries `glorp_api` types over in-process and Unix-socket
+//! boundaries without changing their meaning.
+//!
+//! Transport layers:
+//!
+//! - `local` provides an in-process client against a shared host
+//! - `client` provides one-shot IPC clients and the long-lived GUI session client
+//! - `server` hosts the Unix-socket server and dispatches requests
+//! - `ipc` defines the wire framing
+//!
+//! The public semantic API still lives in `glorp_api`; this crate only moves it.
+//! The one private extension is the GUI session protocol, kept in this crate and
+//! layered beside the public call vocabulary.
+//!
+//! In practice there are three paths through this crate:
+//!
+//! - one-shot public calls over JSON request/response
+//! - one-shot GUI helper requests such as `GuiFrame` and `Edit`
+//! - a persistent GUI session with streamed `Changed` messages and out-of-band
+//!   document payload frames
+//!
+//! The only transport-routed public semantic today is shared-server shutdown.
+//! Everything else either routes to the runtime or stays client-local.
+//!
+//! The stable repo-local socket contract is exposed by [`default_socket_path`].
+
 mod client;
 mod ipc;
 mod local;

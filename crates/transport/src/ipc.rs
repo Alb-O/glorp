@@ -1,3 +1,18 @@
+//! IPC framing for one-shot requests and persistent GUI sessions.
+//!
+//! The crate uses two wire shapes on purpose:
+//!
+//! - normal public/GUI requests are newline-delimited JSON
+//! - persistent GUI sessions use a compact framed protocol
+//!
+//! Session frames come in two kinds:
+//!
+//! - kind `1`: JSON control messages
+//! - kind `2`: binary payload messages with a JSON header and raw bytes
+//!
+//! That split lets the GUI move large document text out of JSON when an inline
+//! `GuiRuntimeFrame` or `GuiSharedDelta` would be too large.
+
 use {
 	glorp_api::{GlorpCall, GlorpCallResult, GlorpError},
 	glorp_runtime::{

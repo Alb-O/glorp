@@ -1,3 +1,21 @@
+//! Runtime execution boundary.
+//!
+//! This module turns the generated public call surface into concrete runtime
+//! behavior. It is thin on business concepts and heavy on invariants:
+//!
+//! - public calls dispatch through the generated `RuntimeCallDispatcher`
+//! - transactions only admit runtime-routed calls marked transactional
+//! - rollback restores both runtime state and public subscription queues, so
+//!   failed batched calls do not leak phantom `Changed` events
+//! - GUI edits are optimistic and revision-based; stale requests are rejected,
+//!   not merged
+//! - text edits are validated against current UTF-8 boundaries before mutation
+//!
+//! This module also marks the split between public outcomes and private GUI
+//! deltas. Large document payloads are not echoed inline once they cross
+//! `LARGE_PAYLOAD_BYTES`; the runtime sends a `GuiDocumentSyncRef` and the GUI
+//! fetches the text separately.
+
 use {
 	crate::{
 		GuiDocumentSyncReason, GuiDocumentSyncRef, GuiEditCommand, GuiEditRequest, GuiEditResponse, project,
