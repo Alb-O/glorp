@@ -2,15 +2,12 @@ use {
 	crate::{
 		GuiSessionOpen, GuiTransportRequest, GuiTransportResponse, ServerRequest, ServerResponse, TransportRequest,
 		TransportResponse,
-		ipc::{
-			GuiPayloadKind, GuiSessionFrame, gui_document_request, gui_scene_request, read_session_frame,
-			write_session_control_frame,
-		},
+		ipc::{GuiPayloadKind, GuiSessionFrame, gui_document_request, read_session_frame, write_session_control_frame},
 	},
 	glorp_api::{GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
 	glorp_runtime::{
-		GuiDocumentFetchResponse, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame, GuiSceneFetchRef,
-		GuiSceneFetchResponse, GuiSessionClientMessage, GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse,
+		GuiDocumentFetchResponse, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame,
+		GuiSessionClientMessage, GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse,
 	},
 	serde::{Serialize, de::DeserializeOwned},
 	std::{
@@ -44,10 +41,6 @@ enum PendingReply {
 	DocumentFetch {
 		sender: mpsc::Sender<Result<(GuiDocumentFetchResponse, Vec<u8>), GlorpError>>,
 		response: Option<GuiDocumentFetchResponse>,
-	},
-	SceneFetch {
-		sender: mpsc::Sender<Result<Option<(GuiSceneFetchRef, Vec<u8>)>, GlorpError>>,
-		response: Option<GuiSceneFetchRef>,
 	},
 }
 
@@ -123,30 +116,6 @@ impl GuiSessionClient {
 		reply_rx.recv().map_err(|_| {
 			GlorpError::transport(format!(
 				"gui session closed while waiting for document fetch from {}",
-				self.socket_path.display()
-			))
-		})?
-	}
-
-	pub fn scene_fetch(
-		&self, layout: GuiLayoutRequest, scene_revision: u64,
-	) -> Result<Option<(GuiSceneFetchRef, Vec<u8>)>, GlorpError> {
-		let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-		let (reply_tx, reply_rx) = mpsc::channel();
-		self.pending
-			.lock()
-			.expect("gui session pending reply map should not be poisoned")
-			.insert(
-				id,
-				PendingReply::SceneFetch {
-					sender: reply_tx,
-					response: None,
-				},
-			);
-		self.send_control(id, gui_scene_request(layout, scene_revision))?;
-		reply_rx.recv().map_err(|_| {
-			GlorpError::transport(format!(
-				"gui session closed while waiting for scene fetch from {}",
 				self.socket_path.display()
 			))
 		})?
@@ -314,26 +283,6 @@ fn spawn_gui_session_reader(
 										let _ = sender.send(Err(unexpected_response("document fetch reply")));
 									}
 								},
-								PendingReply::SceneFetch { sender, response } => match body {
-									GuiSessionResponse::SceneFetch(Ok(GuiSceneFetchResponse::NotModified)) => {
-										let sender = sender.clone();
-										pending.remove(&id);
-										let _ = sender.send(Ok(None));
-									}
-									GuiSessionResponse::SceneFetch(Ok(GuiSceneFetchResponse::Payload(meta))) => {
-										*response = Some(meta);
-									}
-									GuiSessionResponse::SceneFetch(Err(error)) => {
-										let sender = sender.clone();
-										pending.remove(&id);
-										let _ = sender.send(Err(error));
-									}
-									_ => {
-										let sender = sender.clone();
-										pending.remove(&id);
-										let _ = sender.send(Err(unexpected_response("scene fetch reply")));
-									}
-								},
 							}
 						}
 						GuiSessionHostMessage::Changed(delta) => {
@@ -371,23 +320,6 @@ fn spawn_gui_session_reader(
 							pending.remove(&header.id);
 							let _ = sender.send(Ok((meta, bytes)));
 						}
-						PendingReply::SceneFetch { sender, response } => {
-							let Some(meta) = response.take() else {
-								let sender = sender.clone();
-								pending.remove(&header.id);
-								let _ = sender.send(Err(unexpected_response("scene fetch payload ordering")));
-								continue;
-							};
-							if header.kind != GuiPayloadKind::Scene {
-								let sender = sender.clone();
-								pending.remove(&header.id);
-								let _ = sender.send(Err(unexpected_response("scene fetch payload kind")));
-								continue;
-							}
-							let sender = sender.clone();
-							pending.remove(&header.id);
-							let _ = sender.send(Ok(Some((meta, bytes))));
-						}
 						PendingReply::Control(sender) => {
 							let sender = sender.clone();
 							pending.remove(&header.id);
@@ -408,9 +340,6 @@ fn spawn_gui_session_reader(
 					let _ = sender.send(Err(GlorpError::transport("gui session reader stopped")));
 				}
 				PendingReply::DocumentFetch { sender, .. } => {
-					let _ = sender.send(Err(GlorpError::transport("gui session reader stopped")));
-				}
-				PendingReply::SceneFetch { sender, .. } => {
 					let _ = sender.send(Err(GlorpError::transport("gui session reader stopped")));
 				}
 			}

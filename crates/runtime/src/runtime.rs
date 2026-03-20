@@ -1,12 +1,12 @@
 use {
 	crate::{
 		ConfigStore, ConfigStorePaths,
-		events::{SubscriptionCheckpoint, SubscriptionSet},
+		events::{GuiSubscriptionSet, SubscriptionCheckpoint, SubscriptionSet},
 		execute,
 		state::RuntimeState,
 	},
 	glorp_api::{GlorpCall, GlorpCallResult, GlorpCaller, GlorpError, GlorpOutcome, SamplePreset},
-	glorp_editor::{ScenePresentation, sample_preset_text},
+	glorp_editor::sample_preset_text,
 };
 
 #[derive(Debug, Clone)]
@@ -18,6 +18,7 @@ pub struct GlorpRuntime {
 	pub(crate) config_store: ConfigStore,
 	pub(crate) state: RuntimeState,
 	pub(crate) subscriptions: SubscriptionSet,
+	pub(crate) gui_subscriptions: GuiSubscriptionSet,
 }
 
 impl GlorpRuntime {
@@ -30,6 +31,7 @@ impl GlorpRuntime {
 			config_store,
 			state,
 			subscriptions: SubscriptionSet::default(),
+			gui_subscriptions: GuiSubscriptionSet::default(),
 		})
 	}
 
@@ -41,12 +43,20 @@ impl GlorpRuntime {
 		&self.subscriptions
 	}
 
+	pub fn gui_subscriptions(&self) -> &GuiSubscriptionSet {
+		&self.gui_subscriptions
+	}
+
 	pub fn restore_subscriptions(&mut self, subscriptions: SubscriptionCheckpoint) {
 		self.subscriptions.restore(subscriptions);
 	}
 
 	pub fn publish_changed(&mut self, outcome: &GlorpOutcome) {
 		self.subscriptions.publish_changed(outcome);
+	}
+
+	pub fn publish_gui_changed(&mut self, delta: &crate::GuiSharedDelta) {
+		self.gui_subscriptions.publish_changed(delta);
 	}
 
 	pub fn gui_edit(&mut self, request: crate::GuiEditRequest) -> Result<crate::GuiEditResponse, GlorpError> {
@@ -93,52 +103,7 @@ impl GlorpRuntime {
 		)
 	}
 
-	pub fn gui_scene_fetch(&mut self, request: crate::GuiSceneFetchRequest) -> crate::GuiSceneFetchResponse {
-		self.gui_scene_fetch_at(request)
-	}
-
-	pub fn gui_scene_fetch_at(&mut self, request: crate::GuiSceneFetchRequest) -> crate::GuiSceneFetchResponse {
-		execute::sync_gui_layout(self, request.layout.layout_width);
-		let scene_summary = self.state.session.scene_summary();
-		let current_width = self.state.session.layout_width();
-		if request.scene_revision == scene_summary.revision
-			&& (request.layout.layout_width - current_width).abs() <= f32::EPSILON
-		{
-			return crate::GuiSceneFetchResponse::NotModified;
-		}
-
-		let (scene, duration) = self.state.session.fetch_scene();
-		if let Some(duration) = duration {
-			self.state.perf.record_scene_build(duration.as_secs_f64() * 1000.0);
-		}
-		let bytes = execute::scene_payload_bytes(&scene);
-		crate::GuiSceneFetchResponse::Payload(crate::GuiSceneFetchRef {
-			scene_revision: scene.revision,
-			layout_width: current_width,
-			bytes,
-			codec: crate::GuiPayloadCodec::Postcard,
-		})
-	}
-
-	pub fn gui_scene_payload_at(&mut self, request: crate::GuiSceneFetchRequest) -> ScenePresentation {
-		execute::sync_gui_layout(self, request.layout.layout_width);
-		let (scene, duration) = self.state.session.fetch_scene();
-		if let Some(duration) = duration {
-			self.state.perf.record_scene_build(duration.as_secs_f64() * 1000.0);
-		}
-		scene
-	}
-
-	pub fn gui_scene_fetch_legacy(&mut self) -> ScenePresentation {
-		self.gui_scene_payload_at(crate::GuiSceneFetchRequest {
-			layout: crate::GuiLayoutRequest {
-				layout_width: crate::DEFAULT_LAYOUT_WIDTH,
-			},
-			scene_revision: 0,
-		})
-	}
-
-	pub fn gui_shared_delta(&self, outcome: glorp_api::GlorpOutcome) -> crate::GuiSharedDelta {
+	pub fn gui_shared_delta(&self, outcome: &glorp_api::GlorpOutcome) -> crate::GuiSharedDelta {
 		execute::gui_shared_delta(self, outcome)
 	}
 }

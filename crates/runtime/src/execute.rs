@@ -124,7 +124,7 @@ fn publish_config(runtime: &mut GlorpRuntime, changed_paths: Vec<ConfigPath>) ->
 	outcome.revisions = runtime.state.revisions;
 	outcome.delta.config_changed = !changed_paths.is_empty();
 	outcome.changed_config_paths = changed_paths;
-	runtime.publish_changed(&outcome);
+	publish_change_streams(runtime, &outcome);
 	Ok(outcome)
 }
 
@@ -188,7 +188,7 @@ fn run_session(runtime: &mut GlorpRuntime, request: SessionRequest) -> GlorpOutc
 		.state
 		.session
 		.execute(request, &runtime.state.config, layout_width);
-	session_outcome(runtime, &delta)
+	session_outcome(runtime, delta)
 }
 
 fn publish_session(runtime: &mut GlorpRuntime, request: SessionRequest) -> GlorpOutcome {
@@ -196,19 +196,19 @@ fn publish_session(runtime: &mut GlorpRuntime, request: SessionRequest) -> Glorp
 	publish(runtime, outcome)
 }
 
-fn session_outcome(runtime: &mut GlorpRuntime, session_delta: &SessionDelta) -> GlorpOutcome {
-	let delta = runtime.state.delta_from_session(session_delta);
+fn session_outcome(runtime: &mut GlorpRuntime, session_delta: SessionDelta) -> GlorpOutcome {
+	let delta = runtime.state.delta_from_session(&session_delta);
 	outcome(
 		runtime.state.revisions,
 		delta,
-		session_delta.document_edit.as_ref().map(crate::state::text_edit_view),
+		session_delta.document_edit.map(crate::state::text_edit_view),
 		vec![],
 	)
 }
 
 fn publish(runtime: &mut GlorpRuntime, outcome: GlorpOutcome) -> GlorpOutcome {
 	if public_delta_changed(&outcome.delta) {
-		runtime.publish_changed(&outcome);
+		publish_change_streams(runtime, &outcome);
 	}
 	outcome
 }
@@ -230,7 +230,7 @@ fn outcome(
 	}
 }
 
-pub fn gui_shared_delta(runtime: &GlorpRuntime, outcome: GlorpOutcome) -> crate::GuiSharedDelta {
+pub fn gui_shared_delta(runtime: &GlorpRuntime, outcome: &GlorpOutcome) -> crate::GuiSharedDelta {
 	let (undo_depth, redo_depth) = runtime.state.session.history_depths();
 	let document_sync = private_document_sync_ref(&outcome, GuiDocumentSyncReason::LargeEdit);
 	crate::GuiSharedDelta {
@@ -239,7 +239,7 @@ pub fn gui_shared_delta(runtime: &GlorpRuntime, outcome: GlorpOutcome) -> crate:
 		config: outcome.delta.config_changed.then(|| runtime.state.config.clone()),
 		scene_summary: runtime.state.session.scene_summary(),
 		document_sync,
-		outcome: private_outcome(&outcome, document_sync.is_some()),
+		outcome: private_outcome(outcome, document_sync.is_some()),
 	}
 }
 
@@ -251,21 +251,25 @@ pub fn document_sync_ref(revision: u64, text: &str, reason: GuiDocumentSyncReaso
 	})
 }
 
-pub fn scene_payload_bytes(scene: &glorp_editor::ScenePresentation) -> usize {
-	postcard::to_allocvec(scene).expect("scene payload should encode").len()
-}
-
 fn private_document_sync_ref(outcome: &GlorpOutcome, reason: GuiDocumentSyncReason) -> Option<GuiDocumentSyncRef> {
 	let edit = outcome.document_edit.as_ref()?;
 	document_sync_ref(outcome.revisions.editor, edit.inserted.as_str(), reason)
 }
 
 fn private_outcome(outcome: &GlorpOutcome, strip_document_edit: bool) -> GlorpOutcome {
-	let mut outcome = outcome.clone();
-	if strip_document_edit {
-		outcome.document_edit = None;
+	GlorpOutcome {
+		delta: outcome.delta.clone(),
+		revisions: outcome.revisions,
+		document_edit: (!strip_document_edit).then(|| outcome.document_edit.clone()).flatten(),
+		changed_config_paths: outcome.changed_config_paths.clone(),
+		warnings: outcome.warnings.clone(),
 	}
-	outcome
+}
+
+fn publish_change_streams(runtime: &mut GlorpRuntime, outcome: &GlorpOutcome) {
+	let gui_delta = gui_shared_delta(runtime, outcome);
+	runtime.publish_gui_changed(&gui_delta);
+	runtime.publish_changed(outcome);
 }
 
 fn flatten_patch(value: &glorp_api::GlorpValue) -> Result<Vec<ConfigAssignment>, GlorpError> {

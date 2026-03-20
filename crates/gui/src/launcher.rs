@@ -1,10 +1,8 @@
 use {
 	glorp_api::{GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
-	glorp_editor::ScenePresentation,
 	glorp_runtime::{
 		DEFAULT_LAYOUT_WIDTH, GuiDocumentFetchRequest, GuiDocumentFetchResponse, GuiEditRequest, GuiEditResponse,
-		GuiLayoutRequest, GuiRuntimeFrame, GuiSceneFetchRef, GuiSessionHostMessage, RuntimeHost, RuntimeOptions,
-		default_runtime_paths,
+		GuiLayoutRequest, GuiRuntimeFrame, GuiSessionHostMessage, RuntimeHost, RuntimeOptions, default_runtime_paths,
 	},
 	glorp_transport::{
 		GuiSessionClient, IpcServerHandle, LocalClient, default_socket_path, ensure_socket_parent, socket_is_live,
@@ -173,26 +171,6 @@ impl GuiRuntimeClient {
 		}
 	}
 
-	pub fn scene_fetch(&mut self, scene_revision: u64) -> Result<Option<ScenePresentation>, GlorpError> {
-		let layout = self.layout_request();
-		match &self.client {
-			RuntimeClient::Session(client) => client
-				.scene_fetch(layout, scene_revision)
-				.and_then(|payload| decode_scene_payload(payload)),
-			RuntimeClient::Local(client) => with_local_runtime(client, |host| {
-				match host.gui_scene_fetch(glorp_runtime::GuiSceneFetchRequest { layout, scene_revision }) {
-					glorp_runtime::GuiSceneFetchResponse::NotModified => Ok(None),
-					glorp_runtime::GuiSceneFetchResponse::Payload(_) => {
-						Ok(Some(host.gui_scene_payload_at(glorp_runtime::GuiSceneFetchRequest {
-							layout,
-							scene_revision,
-						})))
-					}
-				}
-			}),
-		}
-	}
-
 	pub fn drain_events(&mut self) -> Vec<GuiSessionHostMessage> {
 		let Some(events) = &self.events else {
 			return Vec::new();
@@ -251,17 +229,5 @@ fn ensure_runtime_capabilities(client: &mut impl GlorpCaller, error: &'static st
 impl Drop for GuiRuntimeSession {
 	fn drop(&mut self) {
 		let _ = self.shutdown();
-	}
-}
-
-fn decode_scene_payload(payload: Option<(GuiSceneFetchRef, Vec<u8>)>) -> Result<Option<ScenePresentation>, GlorpError> {
-	let Some((meta, bytes)) = payload else {
-		return Ok(None);
-	};
-	match meta.codec {
-		glorp_runtime::GuiPayloadCodec::Postcard => postcard::from_bytes(&bytes)
-			.map(Some)
-			.map_err(|error| GlorpError::transport(format!("failed to decode scene payload: {error}"))),
-		glorp_runtime::GuiPayloadCodec::Utf8 => Err(GlorpError::transport("unexpected UTF-8 codec for scene payload")),
 	}
 }

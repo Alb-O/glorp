@@ -1,9 +1,8 @@
 use {
 	glorp_api::{GlorpCall, GlorpCallResult, GlorpError},
-	glorp_editor::ScenePresentation,
 	glorp_runtime::{
 		GuiDocumentFetchRequest, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame,
-		GuiSceneFetchRequest, GuiSessionClientMessage, GuiSessionHostMessage,
+		GuiSessionClientMessage, GuiSessionHostMessage,
 	},
 	serde::{Serialize, de::DeserializeOwned},
 	std::io::{Read, Write},
@@ -23,14 +22,12 @@ pub enum TransportResponse {
 pub enum GuiTransportRequest {
 	Edit(GuiEditRequest),
 	GuiFrame(GuiLayoutRequest),
-	SceneFetch(GuiLayoutRequest),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum GuiTransportResponse {
 	Edit(Box<Result<GuiEditResponse, GlorpError>>),
 	GuiFrame(Box<Result<GuiRuntimeFrame, GlorpError>>),
-	SceneFetch(Box<Result<ScenePresentation, GlorpError>>),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -41,7 +38,6 @@ pub struct GuiSessionOpen {
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum GuiPayloadKind {
 	DocumentText,
-	Scene,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -134,10 +130,6 @@ pub fn read_session_frame(reader: &mut impl Read) -> Result<Option<GuiSessionFra
 
 pub fn gui_document_request(revision: u64) -> glorp_runtime::GuiSessionRequest {
 	glorp_runtime::GuiSessionRequest::DocumentFetch(GuiDocumentFetchRequest { revision })
-}
-
-pub fn gui_scene_request(layout: GuiLayoutRequest, scene_revision: u64) -> glorp_runtime::GuiSessionRequest {
-	glorp_runtime::GuiSessionRequest::SceneFetch(GuiSceneFetchRequest { layout, scene_revision })
 }
 
 fn write_session_frame(stream: &mut impl Write, kind: u8, payload: &[u8]) -> Result<(), GlorpError> {

@@ -4,7 +4,6 @@ mod execute;
 mod gui;
 mod host;
 pub mod nu;
-mod perf;
 mod persistence;
 mod project;
 mod runtime;
@@ -15,9 +14,8 @@ pub use self::{
 	config_store::{ConfigStore, ConfigStorePaths},
 	gui::{
 		GuiDocumentFetchRequest, GuiDocumentFetchResponse, GuiDocumentSyncReason, GuiDocumentSyncRef, GuiEditCommand,
-		GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiPayloadCodec, GuiRuntimeFrame, GuiSceneFetchRef,
-		GuiSceneFetchRequest, GuiSceneFetchResponse, GuiSceneSummary, GuiSessionClientMessage, GuiSessionHostMessage,
-		GuiSessionRequest, GuiSessionResponse, GuiSharedDelta, LARGE_PAYLOAD_BYTES, SidebarTab,
+		GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame, GuiSceneSummary, GuiSessionClientMessage,
+		GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse, GuiSharedDelta, LARGE_PAYLOAD_BYTES, SidebarTab,
 	},
 	host::RuntimeHost,
 	persistence::{ensure_surface_artifacts_current, export_surface_artifacts, sync_surface_artifacts},

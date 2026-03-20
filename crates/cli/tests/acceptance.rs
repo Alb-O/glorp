@@ -215,28 +215,6 @@ fn ipc_transport_rejects_client_route_calls_e2e() {
 }
 
 #[test]
-fn scene_fetch_does_not_emit_public_events() {
-	let mut host = TestRepo::new("glorp-acceptance").runtime();
-	let token = subscribe_changes(&mut host);
-
-	let scene = match host.gui_scene_fetch(glorp_runtime::GuiSceneFetchRequest {
-		layout: glorp_runtime::GuiLayoutRequest { layout_width: 540.0 },
-		scene_revision: 0,
-	}) {
-		glorp_runtime::GuiSceneFetchResponse::NotModified => panic!("scene fetch should materialize a payload"),
-		glorp_runtime::GuiSceneFetchResponse::Payload(_) => {
-			host.gui_scene_payload_at(glorp_runtime::GuiSceneFetchRequest {
-				layout: glorp_runtime::GuiLayoutRequest { layout_width: 540.0 },
-				scene_revision: 0,
-			})
-		}
-	};
-
-	assert!(scene.layout.measured_height > 0.0);
-	assert!(next_event(&mut host, token).is_none());
-}
-
-#[test]
 fn gui_clients_keep_request_scoped_layout_width_e2e() {
 	let harness = TestRepo::new("glorp-acceptance");
 	let options = gui_options(&harness);

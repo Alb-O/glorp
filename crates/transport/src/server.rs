@@ -8,8 +8,7 @@ use {
 		TransportCallDispatcher, call_spec, dispatch_transport_call,
 	},
 	glorp_runtime::{
-		GuiSceneFetchResponse, GuiSessionClientMessage, GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse,
-		RuntimeHost,
+		GuiSessionClientMessage, GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse, RuntimeHost,
 	},
 	std::{
 		io::{BufRead, BufReader, Write},
@@ -153,10 +152,9 @@ fn handle_gui_session(
 		let host = host
 			.lock()
 			.map_err(|_| GlorpError::transport("runtime lock poisoned"))?;
-		host.subscriptions().clone()
+		host.gui_subscriptions().clone()
 	};
-	let token = subscriptions.subscribe(glorp_api::GlorpSubscription::Changes);
-	let host_for_events = Arc::clone(host);
+	let token = subscriptions.subscribe();
 	let stop_for_events = Arc::clone(stop);
 	let closed_for_events = Arc::clone(&closed);
 	let writer_for_events = Arc::clone(&writer);
@@ -164,14 +162,7 @@ fn handle_gui_session(
 	let events_thread = thread::spawn(move || {
 		while !stop_for_events.load(Ordering::SeqCst) && !closed_for_events.load(Ordering::SeqCst) {
 			match subscriptions_for_events.next_event_blocking(token, Duration::from_millis(100)) {
-				Ok(Some(glorp_api::GlorpEvent::Changed(outcome))) => {
-					let delta = {
-						let host = match host_for_events.lock() {
-							Ok(host) => host,
-							Err(_) => break,
-						};
-						host.gui_shared_delta(outcome)
-					};
+				Ok(Some(delta)) => {
 					let Ok(writer) = writer_for_events.lock() else {
 						break;
 					};
@@ -179,7 +170,6 @@ fn handle_gui_session(
 						break;
 					}
 				}
-				Ok(Some(_)) => {}
 				Ok(None) => {}
 				Err(_) => break,
 			}
@@ -265,9 +255,6 @@ fn dispatch_gui_request(request: GuiTransportRequest, host: &mut RuntimeHost) ->
 		GuiTransportRequest::GuiFrame(layout) => {
 			GuiTransportResponse::GuiFrame(Box::new(Ok(host.gui_frame_at(layout))))
 		}
-		GuiTransportRequest::SceneFetch(_layout) => {
-			GuiTransportResponse::SceneFetch(Box::new(Ok(host.gui_scene_fetch_legacy())))
-		}
 	}
 }
 
@@ -292,19 +279,6 @@ fn dispatch_gui_session_request(
 				bytes: text.into_bytes(),
 			}
 		}
-		GuiSessionRequest::SceneFetch(request) => match host.gui_scene_fetch(request) {
-			GuiSceneFetchResponse::NotModified => {
-				GuiSessionDispatch::Control(GuiSessionResponse::SceneFetch(Ok(GuiSceneFetchResponse::NotModified)))
-			}
-			GuiSceneFetchResponse::Payload(response) => {
-				let scene = host.gui_scene_payload_at(request);
-				GuiSessionDispatch::WithPayload {
-					response: GuiSessionResponse::SceneFetch(Ok(GuiSceneFetchResponse::Payload(response))),
-					kind: GuiPayloadKind::Scene,
-					bytes: postcard::to_allocvec(&scene).expect("scene payload should encode"),
-				}
-			}
-		},
 	}
 }
 

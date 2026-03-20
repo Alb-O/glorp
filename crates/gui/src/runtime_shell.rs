@@ -601,28 +601,18 @@ impl RuntimeShell {
 
 		self.scene_loading = true;
 		self.refresh_local_snapshot();
-		let scene = self
-			.client
-			.scene_fetch(self.active_scene().map_or(0, |scene| scene.revision))?;
-		let Some(scene) = scene else {
-			self.scene_loading = false;
-			self.scene_refresh_at = None;
-			self.refresh_local_snapshot();
-			return Ok(());
-		};
+		let started = Instant::now();
+		let scene = glorp_editor::ScenePresentation::new(
+			self.frame.scene_summary.revision,
+			self.editor.shared_document_layout(),
+		);
+		self.perf.record_scene_build(started.elapsed());
 		self.inspect_scene = Some(InspectSceneState {
 			layout_width: self.frame.layout_width,
 			scene,
 		});
 		self.scene_loading = false;
 		self.scene_refresh_at = None;
-		if self
-			.inspect_scene
-			.as_ref()
-			.is_some_and(|scene| scene.scene.revision != self.frame.scene_summary.revision)
-		{
-			self.request_scene_refresh(Duration::ZERO);
-		}
 		self.refresh_local_snapshot();
 		Ok(())
 	}

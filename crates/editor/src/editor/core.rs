@@ -168,12 +168,16 @@ impl EditorEngine {
 		self.refresh_view_state(Some(layout.clone()));
 	}
 
-	pub fn reset(&mut self, font_system: &mut FontSystem, text: impl Into<String>, config: SceneConfig) {
-		let text = text.into();
-		self.core.reset(&text);
-		self.layout.reset(font_system, &text, config);
+	pub fn reset(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) {
+		self.core.reset(text);
+		self.layout.reset(font_system, text, config);
 		self.reset_normal_selection();
 		self.refresh_view_state(None);
+	}
+
+	pub fn replace_document(&mut self, font_system: &mut FontSystem, text: &str, config: SceneConfig) {
+		self.core.reset(text);
+		self.layout.reset(font_system, text, config);
 	}
 
 	pub fn selection_from_range(&self, range: Range<usize>, head: Option<usize>) -> Option<EditorSelection> {

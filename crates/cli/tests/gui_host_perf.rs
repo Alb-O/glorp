@@ -33,10 +33,10 @@ fn gui_host_perf_report() {
 			run_resize_reflow(transport, warmup, samples),
 			run_edit_only(transport, warmup, samples),
 			run_edit_with_frame_refresh(transport, warmup, samples),
-			run_scene_fetch_cold(transport, warmup, samples),
-			run_scene_fetch_not_modified(transport, warmup, samples),
 		];
 		if matches!(transport, TransportKind::AttachedIpc) {
+			reports.push(run_large_replace_call_only(warmup, samples));
+			reports.push(run_large_invalidate_delivery_only(warmup, samples));
 			reports.push(run_push_propagation_large_invalidate(warmup, samples));
 			reports.push(run_document_fetch_large(warmup, samples));
 		}
@@ -245,72 +245,6 @@ fn run_edit_with_frame_refresh(transport: TransportKind, warmup: usize, samples:
 	}
 }
 
-fn run_scene_fetch_cold(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
-	let mut harness = PerfHarness::new(transport);
-	let doc_a = large_document();
-	let doc_b = alternate_document();
-
-	for step in 0..warmup {
-		invalidate_scene(&mut harness.client, if step % 2 == 0 { &doc_a } else { &doc_b });
-		let _ = harness
-			.client
-			.scene_fetch(0)
-			.expect("warmup scene fetch should succeed");
-	}
-
-	let mut results = Vec::with_capacity(samples);
-	for step in 0..samples {
-		invalidate_scene(&mut harness.client, if step % 2 == 0 { &doc_a } else { &doc_b });
-		results.push(measure(|| {
-			let _ = harness.client.scene_fetch(0).expect("scene fetch should succeed");
-		}));
-	}
-
-	ScenarioReport {
-		name: "scene-fetch-cold-binary",
-		transport,
-		samples: results,
-	}
-}
-
-fn run_scene_fetch_not_modified(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
-	let mut harness = PerfHarness::new(transport);
-	harness.seed_document(&large_document());
-	let _ = harness
-		.client
-		.scene_fetch(0)
-		.expect("initial scene fetch should succeed");
-	let revision = harness
-		.client
-		.gui_frame()
-		.expect("scene frame should load")
-		.scene_summary
-		.revision;
-
-	for _ in 0..warmup {
-		let _ = harness
-			.client
-			.scene_fetch(revision)
-			.expect("warmup scene fetch should succeed");
-	}
-
-	let mut results = Vec::with_capacity(samples);
-	for _ in 0..samples {
-		results.push(measure(|| {
-			let _ = harness
-				.client
-				.scene_fetch(revision)
-				.expect("scene fetch should succeed");
-		}));
-	}
-
-	ScenarioReport {
-		name: "scene-fetch-not-modified",
-		transport,
-		samples: results,
-	}
-}
-
 fn run_push_propagation_large_invalidate(warmup: usize, samples: usize) -> ScenarioReport {
 	let mut harness = PerfHarness::new(TransportKind::AttachedIpc);
 	let doc_a = large_document();
@@ -360,6 +294,104 @@ fn run_push_propagation_large_invalidate(warmup: usize, samples: usize) -> Scena
 	}
 }
 
+fn run_large_replace_call_only(warmup: usize, samples: usize) -> ScenarioReport {
+	let mut harness = PerfHarness::new(TransportKind::AttachedIpc);
+	let doc_a = large_document();
+	let doc_b = alternate_document();
+	let (owner, client) = {
+		let PerfHarness {
+			owner_client, client, ..
+		} = &mut harness;
+		(
+			owner_client
+				.as_mut()
+				.expect("attached transport should keep an owner client"),
+			client,
+		)
+	};
+	let _ = client.gui_frame().expect("attached frame should load");
+
+	for step in 0..warmup {
+		let _ = glorp_api::calls::DocumentReplace::call(
+			owner,
+			TextInput {
+				text: if step % 2 == 0 { doc_a.clone() } else { doc_b.clone() },
+			},
+		)
+		.expect("warmup document replace should succeed");
+		let _ = wait_for_pushed_delta(client).expect("warmup pushed delta should arrive");
+	}
+
+	let mut results = Vec::with_capacity(samples);
+	for step in 0..samples {
+		let started = Instant::now();
+		let _ = glorp_api::calls::DocumentReplace::call(
+			owner,
+			TextInput {
+				text: if step % 2 == 0 { doc_a.clone() } else { doc_b.clone() },
+			},
+		)
+		.expect("document replace should succeed");
+		results.push(elapsed_ms(started.elapsed()));
+		let _ = wait_for_pushed_delta(client).expect("pushed delta should arrive");
+	}
+
+	ScenarioReport {
+		name: "large-replace-call",
+		transport: TransportKind::AttachedIpc,
+		samples: results,
+	}
+}
+
+fn run_large_invalidate_delivery_only(warmup: usize, samples: usize) -> ScenarioReport {
+	let mut harness = PerfHarness::new(TransportKind::AttachedIpc);
+	let doc_a = large_document();
+	let doc_b = alternate_document();
+	let (owner, client) = {
+		let PerfHarness {
+			owner_client, client, ..
+		} = &mut harness;
+		(
+			owner_client
+				.as_mut()
+				.expect("attached transport should keep an owner client"),
+			client,
+		)
+	};
+	let _ = client.gui_frame().expect("attached frame should load");
+
+	for step in 0..warmup {
+		let _ = glorp_api::calls::DocumentReplace::call(
+			owner,
+			TextInput {
+				text: if step % 2 == 0 { doc_a.clone() } else { doc_b.clone() },
+			},
+		)
+		.expect("warmup document replace should succeed");
+		let _ = wait_for_pushed_delta(client).expect("warmup pushed delta should arrive");
+	}
+
+	let mut results = Vec::with_capacity(samples);
+	for step in 0..samples {
+		let _ = glorp_api::calls::DocumentReplace::call(
+			owner,
+			TextInput {
+				text: if step % 2 == 0 { doc_a.clone() } else { doc_b.clone() },
+			},
+		)
+		.expect("document replace should succeed");
+		let started = Instant::now();
+		let _ = wait_for_pushed_delta(client).expect("pushed delta should arrive");
+		results.push(elapsed_ms(started.elapsed()));
+	}
+
+	ScenarioReport {
+		name: "large-invalidate-delivery",
+		transport: TransportKind::AttachedIpc,
+		samples: results,
+	}
+}
+
 fn run_document_fetch_large(warmup: usize, samples: usize) -> ScenarioReport {
 	let mut harness = PerfHarness::new(TransportKind::AttachedIpc);
 	let doc_a = large_document();
@@ -399,11 +431,6 @@ fn run_document_fetch_large(warmup: usize, samples: usize) -> ScenarioReport {
 		transport: TransportKind::AttachedIpc,
 		samples: results,
 	}
-}
-
-fn invalidate_scene(client: &mut GuiRuntimeClient, text: &str) {
-	let _ = glorp_api::calls::DocumentReplace::call(client, TextInput { text: text.to_owned() })
-		.expect("document replace should succeed");
 }
 
 fn run_edit_step(client: &mut GuiRuntimeClient, context: EditorContextView, step: usize) -> EditorContextView {
