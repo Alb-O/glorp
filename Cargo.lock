@@ -1577,6 +1577,7 @@ dependencies = [
  "nu-protocol",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -1629,6 +1630,7 @@ dependencies = [
  "postcard",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]

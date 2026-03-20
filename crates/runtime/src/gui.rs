@@ -1,4 +1,4 @@
-use glorp_api::{EditorContextView, EditorHistoryCommand, GlorpConfig, GlorpOutcome, GlorpRevisions};
+use glorp_api::{GlorpConfig, GlorpOutcome, GlorpRevisions, TextRange};
 
 pub const LARGE_PAYLOAD_BYTES: usize = 4096;
 
@@ -9,41 +9,32 @@ pub enum SidebarTab {
 	Perf,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum GuiEditCommand {
-	InsertText(String),
-	Backspace,
-	DeleteForward,
-	DeleteSelection,
-	History(EditorHistoryCommand),
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct GuiLayoutRequest {
-	pub layout_width: f32,
+	ReplaceRange { range: TextRange, inserted: String },
+	Undo,
+	Redo,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct GuiEditRequest {
-	pub layout: GuiLayoutRequest,
-	pub context: EditorContextView,
+	pub base_revision: u64,
 	pub command: GuiEditCommand,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct GuiEditResponse {
-	pub outcome: GlorpOutcome,
-	pub next_context: EditorContextView,
-	pub revisions: GlorpRevisions,
-	pub undo_depth: usize,
-	pub redo_depth: usize,
-	pub scene_summary: GuiSceneSummary,
-	pub document_sync: Option<GuiDocumentSyncRef>,
-}
-
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct GuiSceneSummary {
-	pub revision: u64,
+pub enum GuiEditResponse {
+	Applied {
+		outcome: GlorpOutcome,
+		revisions: GlorpRevisions,
+		undo_depth: usize,
+		redo_depth: usize,
+	},
+	RejectedStale {
+		latest_revision: u64,
+		undo_depth: usize,
+		redo_depth: usize,
+	},
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
@@ -76,7 +67,6 @@ pub struct GuiSharedDelta {
 	pub undo_depth: usize,
 	pub redo_depth: usize,
 	pub config: Option<GlorpConfig>,
-	pub scene_summary: GuiSceneSummary,
 	pub document_sync: Option<GuiDocumentSyncRef>,
 }
 
@@ -84,7 +74,7 @@ pub struct GuiSharedDelta {
 pub enum GuiSessionRequest {
 	Call(glorp_api::GlorpCall),
 	Edit(GuiEditRequest),
-	GuiFrame(GuiLayoutRequest),
+	GuiFrame,
 	DocumentFetch(GuiDocumentFetchRequest),
 }
 
@@ -112,11 +102,9 @@ pub enum GuiSessionHostMessage {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GuiRuntimeFrame {
 	pub config: GlorpConfig,
-	pub layout_width: f32,
 	pub revisions: GlorpRevisions,
 	pub document_text: Option<String>,
 	pub undo_depth: usize,
 	pub redo_depth: usize,
-	pub scene_summary: GuiSceneSummary,
 	pub document_sync: Option<GuiDocumentSyncRef>,
 }

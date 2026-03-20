@@ -4,7 +4,6 @@ use {
 		percentile_ms,
 	},
 	crate::editor::{EditorMode, EditorViewportMetrics},
-	glorp_runtime::GuiSceneSummary,
 	std::{fmt::Write as _, sync::Arc},
 };
 
@@ -183,8 +182,8 @@ pub struct PerfDashboard {
 }
 
 pub(super) fn build_dashboard(
-	store: &PerfStore, scene_summary: Option<GuiSceneSummary>, viewport_metrics: EditorViewportMetrics,
-	editor_mode: EditorMode, editor_text: &str, layout_width: f32,
+	store: &PerfStore, scene_revision: Option<u64>, viewport_metrics: EditorViewportMetrics, editor_mode: EditorMode,
+	editor_text: &str, layout_width: f32,
 ) -> PerfDashboard {
 	// Summaries back both the table and the graphs; compute them once so a
 	// dashboard rebuild does not rescan the same metric windows twice.
@@ -206,7 +205,7 @@ pub(super) fn build_dashboard(
 			editor_bytes: editor_text.len(),
 			editor_chars: editor_text.chars().count(),
 			line_count: editor_text.lines().count().max(1),
-			scene_revision: scene_summary.map(|summary| summary.revision),
+			scene_revision,
 			scene_width: viewport_metrics.measured_width,
 			scene_height: viewport_metrics.measured_height,
 			layout_width,
@@ -323,7 +322,6 @@ mod tests {
 			types::{FontChoice, ShapingChoice, WrapChoice},
 		},
 		glorp_editor::{build_buffer, make_font_system, resolve_font_names_from_buffer, scene_config},
-		glorp_runtime::GuiSceneSummary,
 		std::time::Duration,
 	};
 
@@ -366,7 +364,7 @@ mod tests {
 		let (viewport_metrics, editor_text, layout_width) = metrics();
 		let dashboard = build_dashboard(
 			&store,
-			Some(GuiSceneSummary { revision: 7 }),
+			Some(7),
 			viewport_metrics,
 			EditorMode::Normal,
 			&editor_text,

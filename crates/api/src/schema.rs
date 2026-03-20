@@ -390,7 +390,6 @@ fn register_type_ref(registry: &mut TypeRegistry, ty: &TypeRef) {
 				"ShapingChoice" => registry.register::<crate::ShapingChoice>(),
 				"EditorHistoryCommand" => registry.register::<crate::EditorHistoryCommand>(),
 				"EditorMode" => registry.register::<crate::EditorMode>(),
-				"EditorContextView" => registry.register::<crate::EditorContextView>(),
 				"TextRange" => registry.register::<crate::TextRange>(),
 				"TextEditView" => registry.register::<crate::TextEditView>(),
 				"LayoutRectView" => registry.register::<crate::LayoutRectView>(),
@@ -573,11 +572,6 @@ impl_named_record_schema!(crate::DocumentStateView, "DocumentStateView", "Stable
 	"text_lines" => usize: "Document line count.",
 	"undo_depth" => usize: "Undo depth.",
 	"redo_depth" => usize: "Redo depth.",
-});
-impl_named_record_schema!(crate::EditorContextView, "EditorContextView", "Client-local editor context.", {
-	"mode" => crate::EditorMode: "Editor mode.",
-	"selection" => Option<crate::TextRange>: "Current selection range.",
-	"selection_head" => Option<u64>: "Selection head byte offset.",
 });
 impl_named_record_schema!(crate::GlorpSessionView, "GlorpSessionView", "Resolved live session endpoint.", {
 	"socket" => String: "Socket path.",

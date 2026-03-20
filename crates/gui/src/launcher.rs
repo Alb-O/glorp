@@ -1,8 +1,8 @@
 use {
 	glorp_api::{GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
 	glorp_runtime::{
-		DEFAULT_LAYOUT_WIDTH, GuiDocumentFetchRequest, GuiDocumentFetchResponse, GuiEditRequest, GuiEditResponse,
-		GuiLayoutRequest, GuiRuntimeFrame, GuiSessionHostMessage, RuntimeHost, RuntimeOptions, default_runtime_paths,
+		GuiDocumentFetchRequest, GuiDocumentFetchResponse, GuiEditRequest, GuiEditResponse, GuiRuntimeFrame,
+		GuiSessionHostMessage, RuntimeHost, RuntimeOptions, default_runtime_paths,
 	},
 	glorp_transport::{
 		GuiSessionClient, IpcServerHandle, LocalClient, default_socket_path, ensure_socket_parent, socket_is_live,
@@ -38,7 +38,6 @@ pub struct GuiRuntimeSession {
 
 pub struct GuiRuntimeClient {
 	client: RuntimeClient,
-	layout_width: f32,
 	boot_frame: Option<GuiRuntimeFrame>,
 	events: Option<mpsc::Receiver<GuiSessionHostMessage>>,
 }
@@ -112,15 +111,9 @@ impl GuiRuntimeSession {
 impl GuiRuntimeClient {
 	pub fn new_ipc(socket_path: impl Into<PathBuf>) -> Result<Self, GlorpError> {
 		let socket_path = socket_path.into();
-		let (client, frame, events) = GuiSessionClient::connect(
-			socket_path.as_path(),
-			GuiLayoutRequest {
-				layout_width: DEFAULT_LAYOUT_WIDTH,
-			},
-		)?;
+		let (client, frame, events) = GuiSessionClient::connect(socket_path.as_path())?;
 		Ok(Self {
 			client: RuntimeClient::Session(client),
-			layout_width: DEFAULT_LAYOUT_WIDTH,
 			boot_frame: Some(frame),
 			events: Some(events),
 		})
@@ -130,19 +123,12 @@ impl GuiRuntimeClient {
 	pub fn new_local(_socket_path: impl Into<PathBuf>, host: Arc<Mutex<RuntimeHost>>) -> Self {
 		Self {
 			client: RuntimeClient::Local(LocalClient::shared(host)),
-			layout_width: DEFAULT_LAYOUT_WIDTH,
 			boot_frame: None,
 			events: None,
 		}
 	}
 
-	pub fn set_layout_width(&mut self, layout_width: f32) {
-		self.layout_width = layout_width.max(1.0);
-		self.boot_frame = None;
-	}
-
-	pub fn gui_edit(&mut self, mut request: GuiEditRequest) -> Result<GuiEditResponse, GlorpError> {
-		request.layout = self.layout_request();
+	pub fn gui_edit(&mut self, request: GuiEditRequest) -> Result<GuiEditResponse, GlorpError> {
 		match &self.client {
 			RuntimeClient::Session(client) => client.gui_edit(request),
 			RuntimeClient::Local(client) => with_local_runtime(client, |host| host.gui_edit(request)),
@@ -153,11 +139,11 @@ impl GuiRuntimeClient {
 		if let Some(frame) = self.boot_frame.take() {
 			return self.hydrate_frame(frame);
 		}
-		let layout = self.layout_request();
 		match &self.client {
-			RuntimeClient::Session(client) => client.gui_frame(layout),
-			RuntimeClient::Local(client) => with_local_runtime(client, |host| Ok(host.gui_frame_at(layout)))
-				.and_then(|frame| self.hydrate_frame(frame)),
+			RuntimeClient::Session(client) => client.gui_frame(),
+			RuntimeClient::Local(client) => {
+				with_local_runtime(client, |host| Ok(host.gui_frame())).and_then(|frame| self.hydrate_frame(frame))
+			}
 		}
 	}
 
@@ -180,12 +166,6 @@ impl GuiRuntimeClient {
 			drained.push(message);
 		}
 		drained
-	}
-
-	fn layout_request(&self) -> GuiLayoutRequest {
-		GuiLayoutRequest {
-			layout_width: self.layout_width,
-		}
 	}
 
 	fn hydrate_frame(&mut self, mut frame: GuiRuntimeFrame) -> Result<GuiRuntimeFrame, GlorpError> {

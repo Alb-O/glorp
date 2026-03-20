@@ -1,7 +1,7 @@
 use {
 	crate::{
 		canvas_view::scene_viewport_size,
-		editor::{EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorMode, EditorViewportMetrics},
+		editor::{EditorHistoryIntent, EditorIntent, EditorMode, EditorViewportMetrics},
 		overlay::OverlayPrimitive,
 		perf::PerfMonitor,
 		presentation::SessionSnapshot,
@@ -13,22 +13,24 @@ use {
 		},
 	},
 	glorp_api::{
-		ConfigAssignment, EditorContextView, EditorHistoryCommand, EnumValue, GlorpCall, GlorpCallDescriptor,
-		GlorpCaller, GlorpError, GlorpTxn, GlorpValue, TextInput, WrapChoice,
+		ConfigAssignment, EnumValue, GlorpCall, GlorpCallDescriptor, GlorpCaller, GlorpError, GlorpTxn, GlorpValue,
+		TextInput, TextRange, WrapChoice,
 	},
 	glorp_editor::{
-		CanvasTarget, EditorEngine, EditorPresentation, EditorTextLayerState, LayoutRect, make_font_system,
+		CanvasTarget, EditorEngine, EditorPresentation, EditorTextLayerState, LayoutRect, TextEdit, make_font_system,
 		sample_preset_text, scene_config,
 	},
 	glorp_gui::{GuiLaunchOptions, GuiRuntimeClient, GuiRuntimeSession},
 	glorp_runtime::{
-		GuiEditCommand, GuiEditRequest, GuiRuntimeFrame, GuiSessionHostMessage, GuiSharedDelta, SidebarTab,
+		GuiEditCommand, GuiEditRequest, GuiEditResponse, GuiRuntimeFrame, GuiSessionHostMessage, GuiSharedDelta,
+		SidebarTab,
 	},
 	iced::{
 		Element, Length, Size, Subscription, Theme, Vector,
 		widget::{container, pane_grid, responsive},
 	},
 	std::{
+		ops::Range,
 		sync::Arc,
 		time::{Duration, Instant},
 	},
@@ -54,6 +56,8 @@ struct ShellState {
 struct InspectSceneState {
 	scene: glorp_editor::ScenePresentation,
 	layout_width: f32,
+	editor_revision: u64,
+	config_revision: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -61,10 +65,18 @@ struct DocumentSyncState {
 	revision: u64,
 }
 
+#[derive(Debug, Clone)]
+struct LocalEditorContext {
+	mode: EditorMode,
+	selection: Option<Range<usize>>,
+	selection_head: Option<usize>,
+}
+
 pub struct RuntimeShell {
 	session: GuiRuntimeSession,
 	client: GuiRuntimeClient,
 	frame: GuiRuntimeFrame,
+	layout_width: f32,
 	editor: EditorEngine,
 	font_system: cosmic_text::FontSystem,
 	editor_revision: u64,
@@ -84,7 +96,8 @@ impl RuntimeShell {
 		let (session, mut client) =
 			GuiRuntimeSession::connect_or_start(options).expect("GUI runtime should connect or start");
 		let frame = client.gui_frame().expect("GUI frame should load during boot");
-		let ui = ShellState::new(frame.layout_width);
+		let layout_width = glorp_runtime::DEFAULT_LAYOUT_WIDTH;
+		let ui = ShellState::new(layout_width);
 		let mut font_system = make_font_system();
 		let editor = EditorEngine::new(
 			&mut font_system,
@@ -92,13 +105,14 @@ impl RuntimeShell {
 				.document_text
 				.as_deref()
 				.expect("GUI frame should be hydrated during boot"),
-			shell_scene_config(&frame),
+			shell_scene_config(&frame.config, layout_width),
 		);
 		let snapshot = build_snapshot(&editor, None, 1, frame.undo_depth, frame.redo_depth);
 		Self {
 			session,
 			client,
 			frame,
+			layout_width,
 			editor,
 			font_system,
 			editor_revision: 1,
@@ -195,7 +209,7 @@ impl RuntimeShell {
 					scene.layout.inspect_overlay_primitives(
 						self.ui.hovered_target,
 						self.ui.selected_target,
-						self.frame.layout_width,
+						self.layout_width,
 						self.ui.show_hitboxes,
 					)
 				},
@@ -206,7 +220,7 @@ impl RuntimeShell {
 
 		view_canvas_pane(CanvasPaneProps {
 			snapshot,
-			layout_width: self.frame.layout_width,
+			layout_width: self.layout_width,
 			decorations: CanvasDecorations {
 				show_baselines: self.ui.show_baselines,
 				show_hitboxes: self.ui.show_hitboxes,
@@ -258,11 +272,11 @@ impl RuntimeShell {
 			}
 			SidebarTab::Perf => {
 				let dashboard = self.perf.dashboard(
-					Some(self.frame.scene_summary),
+					Some(self.scene_revision_key()),
 					snapshot.mode(),
 					self.editor.text(),
 					snapshot.editor.viewport_metrics,
-					self.frame.layout_width,
+					self.layout_width,
 				);
 				view_perf_tab(&dashboard)
 			}
@@ -333,44 +347,50 @@ impl RuntimeShell {
 			CanvasEvent::PointerSelectionStarted { target, intent } => {
 				self.ui.canvas_focused = true;
 				self.ui.selected_target = inspect_target(self.ui.active_tab, target);
-				self.apply_local_editor_intent(EditorIntent::Pointer(intent))
+				self.apply_local_editor_intent(EditorIntent::Pointer(intent));
+				Ok(())
 			}
 		}
 	}
 
 	fn handle_editor(&mut self, intent: EditorIntent) -> Result<(), GlorpError> {
 		match intent {
-			EditorIntent::Pointer(pointer) => self.apply_local_editor_intent(EditorIntent::Pointer(pointer)),
-			EditorIntent::Motion(motion) => self.apply_local_editor_intent(EditorIntent::Motion(motion)),
-			EditorIntent::Mode(mode) => self.apply_local_editor_intent(EditorIntent::Mode(mode)),
+			EditorIntent::Pointer(pointer) => {
+				self.apply_local_editor_intent(EditorIntent::Pointer(pointer));
+				Ok(())
+			}
+			EditorIntent::Motion(motion) => {
+				self.apply_local_editor_intent(EditorIntent::Motion(motion));
+				Ok(())
+			}
+			EditorIntent::Mode(mode) => {
+				self.apply_local_editor_intent(EditorIntent::Mode(mode));
+				Ok(())
+			}
 			EditorIntent::Edit(edit) => {
 				if self.document_sync.is_some() {
 					return Ok(());
 				}
-				self.execute_gui_edit(EditorIntent::Edit(edit.clone()), edit_command(edit))
+				self.execute_local_text_edit(EditorIntent::Edit(edit))
 			}
 			EditorIntent::History(history) => {
 				if self.document_sync.is_some() {
 					return Ok(());
 				}
-				self.execute_gui_edit(
-					EditorIntent::History(history),
-					GuiEditCommand::History(match history {
-						EditorHistoryIntent::Undo => EditorHistoryCommand::Undo,
-						EditorHistoryIntent::Redo => EditorHistoryCommand::Redo,
-					}),
-				)
+				self.execute_history_edit(match history {
+					EditorHistoryIntent::Undo => GuiEditCommand::Undo,
+					EditorHistoryIntent::Redo => GuiEditCommand::Redo,
+				})
 			}
 		}
 	}
 
-	fn apply_local_editor_intent(&mut self, intent: EditorIntent) -> Result<(), GlorpError> {
+	fn apply_local_editor_intent(&mut self, intent: EditorIntent) {
 		let _ = self.editor.apply(&mut self.font_system, intent);
 		self.refresh_local_snapshot();
-		if let Some(scroll) = reveal_scroll(&self.snapshot, self.frame.layout_width, &self.ui) {
+		if let Some(scroll) = reveal_scroll(&self.snapshot, self.layout_width, &self.ui) {
 			self.ui.canvas_scroll = scroll;
 		}
-		Ok(())
 	}
 
 	fn execute(&mut self, call: GlorpCall) -> Result<(), GlorpError> {
@@ -378,59 +398,117 @@ impl RuntimeShell {
 		Ok(())
 	}
 
-	fn execute_gui_edit(&mut self, intent: EditorIntent, command: GuiEditCommand) -> Result<(), GlorpError> {
-		let context = self.local_context();
-		self.apply_local_editor_intent(intent)?;
-		let response = self.client.gui_edit(GuiEditRequest {
-			layout: glorp_runtime::GuiLayoutRequest {
-				layout_width: self.frame.layout_width,
-			},
-			context,
-			command,
-		})?;
-		self.frame.revisions = response.revisions;
-		self.frame.undo_depth = response.undo_depth;
-		self.frame.redo_depth = response.redo_depth;
-		self.frame.scene_summary = response.scene_summary;
-		if let Some(document_sync) = response.document_sync {
-			self.document_sync = Some(DocumentSyncState {
-				revision: document_sync.revision,
-			});
-		}
-		self.apply_local_context(&response.next_context)?;
-		self.request_scene_refresh(Duration::from_millis(120));
-		Ok(())
-	}
-
-	fn apply_local_context(&mut self, context: &EditorContextView) -> Result<(), GlorpError> {
-		let layout = self.editor.document_layout();
-		let mode = match context.mode {
-			glorp_api::EditorMode::Normal => EditorMode::Normal,
-			glorp_api::EditorMode::Insert => EditorMode::Insert,
+	fn execute_local_text_edit(&mut self, intent: EditorIntent) -> Result<(), GlorpError> {
+		let base_revision = self.frame.revisions.editor;
+		let command_started = Instant::now();
+		let outcome = self.editor.apply(&mut self.font_system, intent);
+		self.perf.record_editor_command(command_started.elapsed());
+		let Some(edit) = outcome.text_edit else {
+			self.refresh_local_snapshot();
+			if let Some(scroll) = reveal_scroll(&self.snapshot, self.layout_width, &self.ui) {
+				self.ui.canvas_scroll = scroll;
+			}
+			return Ok(());
 		};
-		let selection = context
-			.selection
-			.as_ref()
-			.map(|range| range.start as usize..range.end as usize);
-		let selection_head = context.selection_head.map(|head| head as usize);
-		self.editor.replace_context(&layout, mode, selection, selection_head);
+
 		self.refresh_local_snapshot();
-		Ok(())
+		if let Some(scroll) = reveal_scroll(&self.snapshot, self.layout_width, &self.ui) {
+			self.ui.canvas_scroll = scroll;
+		}
+
+		match self.client.gui_edit(GuiEditRequest {
+			base_revision,
+			command: GuiEditCommand::ReplaceRange {
+				range: TextRange {
+					start: edit.range.start as u64,
+					end: edit.range.end as u64,
+				},
+				inserted: edit.inserted,
+			},
+		})? {
+			GuiEditResponse::Applied {
+				revisions,
+				undo_depth,
+				redo_depth,
+				..
+			} => {
+				self.frame.revisions = revisions;
+				self.frame.undo_depth = undo_depth;
+				self.frame.redo_depth = redo_depth;
+				self.request_scene_refresh(Duration::from_millis(120));
+				Ok(())
+			}
+			GuiEditResponse::RejectedStale {
+				latest_revision,
+				undo_depth,
+				redo_depth,
+			} => {
+				self.frame.undo_depth = undo_depth;
+				self.frame.redo_depth = redo_depth;
+				self.resync_document_to_revision(latest_revision)
+			}
+		}
 	}
 
-	fn local_context(&self) -> EditorContextView {
-		let view = self.editor.view_state();
-		EditorContextView {
-			mode: match view.mode {
-				EditorMode::Normal => glorp_api::EditorMode::Normal,
-				EditorMode::Insert => glorp_api::EditorMode::Insert,
-			},
-			selection: view.selection.map(|range| glorp_api::TextRange {
-				start: range.start as u64,
-				end: range.end as u64,
-			}),
-			selection_head: view.selection_head.map(|head| head as u64),
+	fn execute_history_edit(&mut self, command: GuiEditCommand) -> Result<(), GlorpError> {
+		let base_revision = self.frame.revisions.editor;
+		match self.client.gui_edit(GuiEditRequest { base_revision, command })? {
+			GuiEditResponse::Applied {
+				outcome,
+				revisions,
+				undo_depth,
+				redo_depth,
+			} => {
+				if let Some(edit) = outcome.document_edit {
+					self.apply_external_text_edit(TextEdit {
+						range: edit.range.start as usize..edit.range.end as usize,
+						inserted: edit.inserted,
+					});
+				} else if outcome.delta.text_changed {
+					self.frame.revisions = revisions;
+					self.frame.undo_depth = undo_depth;
+					self.frame.redo_depth = redo_depth;
+					return self.resync_document_to_revision(revisions.editor);
+				}
+				self.frame.revisions = revisions;
+				self.frame.undo_depth = undo_depth;
+				self.frame.redo_depth = redo_depth;
+				self.request_scene_refresh(Duration::from_millis(120));
+				self.refresh_local_snapshot();
+				Ok(())
+			}
+			GuiEditResponse::RejectedStale {
+				latest_revision,
+				undo_depth,
+				redo_depth,
+			} => {
+				self.frame.undo_depth = undo_depth;
+				self.frame.redo_depth = redo_depth;
+				self.resync_document_to_revision(latest_revision)
+			}
 		}
+	}
+
+	fn apply_external_text_edit(&mut self, text_edit: TextEdit) {
+		let apply_started = Instant::now();
+		let _ = self.editor.apply_external_text_edit(&mut self.font_system, text_edit);
+		self.perf.record_editor_apply(apply_started.elapsed());
+	}
+
+	fn local_context(&self) -> LocalEditorContext {
+		let view = self.editor.view_state();
+		LocalEditorContext {
+			mode: view.mode,
+			selection: view.selection,
+			selection_head: view.selection_head,
+		}
+	}
+
+	fn restore_local_context(&mut self, context: &LocalEditorContext) {
+		let layout = self.editor.document_layout();
+		self.editor
+			.replace_context(&layout, context.mode, context.selection.clone(), context.selection_head);
+		self.refresh_local_snapshot();
 	}
 
 	fn refresh_local_snapshot(&mut self) {
@@ -446,14 +524,13 @@ impl RuntimeShell {
 
 	fn resize_viewport(&mut self, viewport: Size) -> Result<(), GlorpError> {
 		self.ui.viewport_size = viewport;
-		if (self.frame.layout_width - viewport.width).abs() <= f32::EPSILON {
+		if (self.layout_width - viewport.width).abs() <= f32::EPSILON {
 			return Ok(());
 		}
-		self.client.set_layout_width(viewport.width);
-		self.frame.layout_width = viewport.width;
-		let _ = self
-			.editor
-			.sync_buffer_config(&mut self.font_system, shell_scene_config(&self.frame));
+		self.layout_width = viewport.width;
+		let started = Instant::now();
+		let _ = self.editor.sync_buffer_width(&mut self.font_system, viewport.width);
+		self.perf.record_editor_width_sync(started.elapsed());
 		self.refresh_local_snapshot();
 		self.request_scene_refresh(Duration::from_millis(120));
 		Ok(())
@@ -522,23 +599,20 @@ impl RuntimeShell {
 
 		if let Some(config) = delta.config {
 			self.frame.config = config;
-			let _ = self
-				.editor
-				.sync_buffer_config(&mut self.font_system, shell_scene_config(&self.frame));
+			let _ = self.editor.sync_buffer_config(
+				&mut self.font_system,
+				shell_scene_config(&self.frame.config, self.layout_width),
+			);
 		}
 		if let Some(edit) = delta.outcome.document_edit.as_ref() {
-			let _ = self.editor.apply_external_text_edit(
-				&mut self.font_system,
-				glorp_editor::TextEdit {
-					range: edit.range.start as usize..edit.range.end as usize,
-					inserted: edit.inserted.clone(),
-				},
-			);
+			self.apply_external_text_edit(TextEdit {
+				range: edit.range.start as usize..edit.range.end as usize,
+				inserted: edit.inserted.clone(),
+			});
 		}
 		self.frame.revisions = revisions;
 		self.frame.undo_depth = delta.undo_depth;
 		self.frame.redo_depth = delta.redo_depth;
-		self.frame.scene_summary = delta.scene_summary;
 		if let Some(document_sync) = delta.document_sync {
 			self.document_sync = Some(DocumentSyncState {
 				revision: document_sync.revision,
@@ -552,8 +626,9 @@ impl RuntimeShell {
 	fn active_scene(&self) -> Option<glorp_editor::ScenePresentation> {
 		let scene = self.inspect_scene.as_ref()?;
 		(self.scene_consumer_active()
-			&& (scene.layout_width - self.frame.layout_width).abs() <= f32::EPSILON
-			&& scene.scene.revision == self.frame.scene_summary.revision)
+			&& (scene.layout_width - self.layout_width).abs() <= f32::EPSILON
+			&& scene.editor_revision == self.frame.revisions.editor
+			&& scene.config_revision == self.frame.revisions.config)
 			.then(|| scene.scene.clone())
 	}
 
@@ -602,14 +677,14 @@ impl RuntimeShell {
 		self.scene_loading = true;
 		self.refresh_local_snapshot();
 		let started = Instant::now();
-		let scene = glorp_editor::ScenePresentation::new(
-			self.frame.scene_summary.revision,
-			self.editor.shared_document_layout(),
-		);
+		let scene =
+			glorp_editor::ScenePresentation::new(self.scene_revision_key(), self.editor.shared_document_layout());
 		self.perf.record_scene_build(started.elapsed());
 		self.inspect_scene = Some(InspectSceneState {
-			layout_width: self.frame.layout_width,
 			scene,
+			layout_width: self.layout_width,
+			editor_revision: self.frame.revisions.editor,
+			config_revision: self.frame.revisions.config,
 		});
 		self.scene_loading = false;
 		self.scene_refresh_at = None;
@@ -621,37 +696,31 @@ impl RuntimeShell {
 		let Some(document_sync) = self.document_sync else {
 			return Ok(());
 		};
-		let (response, bytes) = self.client.document_fetch(document_sync.revision)?;
-		if response.revision < document_sync.revision {
+		self.resync_document_to_revision(document_sync.revision)
+	}
+
+	fn resync_document_to_revision(&mut self, revision: u64) -> Result<(), GlorpError> {
+		let (response, bytes) = self.client.document_fetch(revision)?;
+		if response.revision < revision {
 			return Ok(());
 		}
 
 		let text = String::from_utf8(bytes)
 			.map_err(|error| GlorpError::transport(format!("document payload is not valid UTF-8: {error}")))?;
-		let view = self.editor.view_state();
-		let selection = view.selection.map(|range| glorp_api::TextRange {
-			start: range.start.min(text.len()) as u64,
-			end: range.end.min(text.len()) as u64,
+		let context = clamp_local_context(self.local_context(), text.len());
+		self.apply_external_text_edit(TextEdit {
+			range: 0..self.editor.text().len(),
+			inserted: text,
 		});
-		let selection_head = view.selection_head.map(|head| head.min(text.len()) as u64);
-		let _ = self.editor.apply_external_text_edit(
-			&mut self.font_system,
-			glorp_editor::TextEdit {
-				range: 0..self.editor.text().len(),
-				inserted: text,
-			},
-		);
 		self.frame.revisions.editor = response.revision;
 		self.document_sync = None;
-		self.apply_local_context(&EditorContextView {
-			mode: match view.mode {
-				EditorMode::Normal => glorp_api::EditorMode::Normal,
-				EditorMode::Insert => glorp_api::EditorMode::Insert,
-			},
-			selection,
-			selection_head,
-		})?;
+		self.restore_local_context(&context);
+		self.request_scene_refresh(Duration::from_millis(120));
 		Ok(())
+	}
+
+	fn scene_revision_key(&self) -> u64 {
+		self.frame.revisions.editor.max(self.frame.revisions.config)
 	}
 }
 
@@ -670,14 +739,14 @@ impl ShellState {
 	}
 }
 
-fn shell_scene_config(frame: &GuiRuntimeFrame) -> glorp_editor::SceneConfig {
+fn shell_scene_config(config: &glorp_api::GlorpConfig, layout_width: f32) -> glorp_editor::SceneConfig {
 	scene_config(
-		frame.config.editor.font,
-		frame.config.editor.shaping,
-		frame.config.editor.wrapping,
-		frame.config.editor.font_size,
-		frame.config.editor.line_height,
-		frame.layout_width,
+		config.editor.font,
+		config.editor.shaping,
+		config.editor.wrapping,
+		config.editor.font_size,
+		config.editor.line_height,
+		layout_width,
 	)
 }
 
@@ -700,15 +769,6 @@ fn build_snapshot(
 		redo_depth,
 	);
 	SessionSnapshot { editor, scene }
-}
-
-fn edit_command(edit: EditorEditIntent) -> GuiEditCommand {
-	match edit {
-		EditorEditIntent::Backspace => GuiEditCommand::Backspace,
-		EditorEditIntent::DeleteForward => GuiEditCommand::DeleteForward,
-		EditorEditIntent::DeleteSelection => GuiEditCommand::DeleteSelection,
-		EditorEditIntent::InsertText(text) => GuiEditCommand::InsertText(text),
-	}
 }
 
 fn config_set(path: &str, value: GlorpValue) -> GlorpCall {
@@ -776,6 +836,16 @@ fn clamp_scroll(scroll: Vector, metrics: EditorViewportMetrics, layout_width: f3
 	};
 	let max_y = (metrics.measured_height - viewport.height).max(0.0);
 	Vector::new(scroll.x.clamp(0.0, max_x), scroll.y.clamp(0.0, max_y))
+}
+
+fn clamp_local_context(mut context: LocalEditorContext, text_len: usize) -> LocalEditorContext {
+	context.selection = context.selection.map(|range| {
+		let start = range.start.min(text_len);
+		let end = range.end.min(text_len).max(start);
+		start..end
+	});
+	context.selection_head = context.selection_head.map(|head| head.min(text_len));
+	context
 }
 
 fn public_call<D>(input: D::Input) -> GlorpCall

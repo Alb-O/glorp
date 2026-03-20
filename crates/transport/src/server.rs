@@ -21,6 +21,7 @@ use {
 		thread::{self, JoinHandle},
 		time::Duration,
 	},
+	tracing::{debug, error, info, trace, warn},
 };
 
 enum GuiSessionDispatch {
@@ -79,6 +80,7 @@ pub fn start_server_shared(
 ) -> Result<IpcServerHandle, GlorpError> {
 	let socket_path = socket_path.into();
 	if socket_path.exists() {
+		debug!(socket = %socket_path.display(), "removing stale socket");
 		std::fs::remove_file(&socket_path)
 			.map_err(|error| GlorpError::transport(format!("failed to remove stale socket: {error}")))?;
 	}
@@ -88,6 +90,7 @@ pub fn start_server_shared(
 	listener
 		.set_nonblocking(true)
 		.map_err(|error| GlorpError::transport(format!("failed to mark socket nonblocking: {error}")))?;
+	info!(socket = %socket_path.display(), "listening for IPC");
 
 	let stop = Arc::new(AtomicBool::new(false));
 	let stop_thread = Arc::clone(&stop);
@@ -96,18 +99,25 @@ pub fn start_server_shared(
 		while !stop_thread.load(Ordering::SeqCst) {
 			match listener.accept() {
 				Ok((stream, _)) => {
+					trace!(socket = %socket_path_thread.display(), "accepted IPC connection");
 					let host = Arc::clone(&host);
 					let stop = Arc::clone(&stop_thread);
 					thread::spawn(move || {
-						let _ = handle_connection(stream, &host, &stop);
+						if let Err(error) = handle_connection(stream, &host, &stop) {
+							debug!(%error, "connection handler exited with error");
+						}
 					});
 				}
 				Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
 					thread::sleep(Duration::from_millis(10));
 				}
-				Err(_) => break,
+				Err(error) => {
+					error!(%error, "IPC accept failed");
+					break;
+				}
 			}
 		}
+		info!(socket = %socket_path_thread.display(), "IPC listener stopping");
 		let _ = std::fs::remove_file(socket_path_thread);
 	});
 
@@ -123,8 +133,12 @@ fn handle_connection(
 ) -> Result<(), GlorpError> {
 	let request = read_request(&stream)?;
 	match request {
-		ServerRequest::GuiSessionOpen(open) => handle_gui_session(stream, host, stop, open.layout),
+		ServerRequest::GuiSessionOpen(_) => {
+			debug!("opening persistent GUI session");
+			handle_gui_session(stream, host, stop)
+		}
 		request => {
+			trace!(request = request_kind(&request), "dispatching one-shot request");
 			let response = dispatch_request(request, host, stop)?;
 			write_response(&stream, &response)
 		}
@@ -132,17 +146,18 @@ fn handle_connection(
 }
 
 fn handle_gui_session(
-	stream: UnixStream, host: &Arc<Mutex<RuntimeHost>>, stop: &Arc<AtomicBool>, layout: glorp_runtime::GuiLayoutRequest,
+	stream: UnixStream, host: &Arc<Mutex<RuntimeHost>>, stop: &Arc<AtomicBool>,
 ) -> Result<(), GlorpError> {
 	let ready = {
 		let mut host = host
 			.lock()
 			.map_err(|_| GlorpError::transport("runtime lock poisoned"))?;
 		ServerResponse::GuiSessionReady(GuiSessionHostMessage::Ready {
-			frame: Box::new(host.gui_frame_at(layout)),
+			frame: Box::new(host.gui_frame()),
 		})
 	};
 	write_response(&stream, &ready)?;
+	debug!("GUI session ready");
 
 	let writer = Arc::new(Mutex::new(stream.try_clone().map_err(|error| {
 		GlorpError::transport(format!("failed to clone gui session socket: {error}"))
@@ -163,6 +178,13 @@ fn handle_gui_session(
 		while !stop_for_events.load(Ordering::SeqCst) && !closed_for_events.load(Ordering::SeqCst) {
 			match subscriptions_for_events.next_event_blocking(token, Duration::from_millis(100)) {
 				Ok(Some(delta)) => {
+					trace!(
+						editor_revision = delta.outcome.revisions.editor,
+						config_revision = delta.outcome.revisions.config,
+						text_changed = delta.outcome.delta.text_changed,
+						config_changed = delta.outcome.delta.config_changed,
+						"pushing GUI delta"
+					);
 					let Ok(writer) = writer_for_events.lock() else {
 						break;
 					};
@@ -186,6 +208,11 @@ fn handle_gui_session(
 			break;
 		};
 		let GuiSessionClientMessage::Request { id, body } = request;
+		trace!(
+			id,
+			request = gui_session_request_kind(&body),
+			"dispatching GUI session request"
+		);
 		let reply = {
 			let mut host = host
 				.lock()
@@ -212,6 +239,7 @@ fn handle_gui_session(
 	if let Ok(writer) = writer.lock() {
 		let _ = write_session_message(&mut &*writer, &GuiSessionHostMessage::Closed);
 	}
+	debug!("GUI session closed");
 	Ok(())
 }
 
@@ -252,9 +280,7 @@ fn dispatch_public_request(
 fn dispatch_gui_request(request: GuiTransportRequest, host: &mut RuntimeHost) -> GuiTransportResponse {
 	match request {
 		GuiTransportRequest::Edit(request) => GuiTransportResponse::Edit(Box::new(host.gui_edit(request))),
-		GuiTransportRequest::GuiFrame(layout) => {
-			GuiTransportResponse::GuiFrame(Box::new(Ok(host.gui_frame_at(layout))))
-		}
+		GuiTransportRequest::GuiFrame => GuiTransportResponse::GuiFrame(Box::new(Ok(host.gui_frame()))),
 	}
 }
 
@@ -268,9 +294,7 @@ fn dispatch_gui_session_request(
 		GuiSessionRequest::Edit(request) => {
 			GuiSessionDispatch::Control(GuiSessionResponse::Edit(host.gui_edit(request)))
 		}
-		GuiSessionRequest::GuiFrame(layout) => {
-			GuiSessionDispatch::Control(GuiSessionResponse::GuiFrame(Ok(host.gui_frame_at(layout))))
-		}
+		GuiSessionRequest::GuiFrame => GuiSessionDispatch::Control(GuiSessionResponse::GuiFrame(Ok(host.gui_frame()))),
 		GuiSessionRequest::DocumentFetch(request) => {
 			let (response, text) = host.gui_document_fetch(request);
 			GuiSessionDispatch::WithPayload {
@@ -285,6 +309,7 @@ fn dispatch_gui_session_request(
 fn dispatch_public_call(
 	call: GlorpCall, host: &mut RuntimeHost, stop: &Arc<AtomicBool>,
 ) -> Result<GlorpCallResult, GlorpError> {
+	trace!(call = %call.id, "dispatching public call");
 	let Some(spec) = call_spec(&call.id) else {
 		return Err(GlorpError::not_found(format!("unknown call `{}`", call.id)));
 	};
@@ -316,7 +341,26 @@ struct ServerTransportDispatcher<'a> {
 
 impl TransportCallDispatcher for ServerTransportDispatcher<'_> {
 	fn session_shutdown(&mut self, _input: ()) -> Result<OkView, GlorpError> {
+		warn!("received session shutdown request");
 		self.stop.store(true, Ordering::SeqCst);
 		Ok(OkView { ok: true })
+	}
+}
+
+fn request_kind(request: &ServerRequest) -> &'static str {
+	match request {
+		ServerRequest::Public(_) => "public",
+		ServerRequest::Gui(_) => "gui",
+		ServerRequest::GuiSessionOpen(_) => "gui-session-open",
+		ServerRequest::GuiSessionMessage(_) => "gui-session-message",
+	}
+}
+
+fn gui_session_request_kind(request: &GuiSessionRequest) -> &'static str {
+	match request {
+		GuiSessionRequest::Call(_) => "call",
+		GuiSessionRequest::Edit(_) => "edit",
+		GuiSessionRequest::GuiFrame => "frame",
+		GuiSessionRequest::DocumentFetch(_) => "document-fetch",
 	}
 }

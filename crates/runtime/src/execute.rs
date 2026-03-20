@@ -5,12 +5,11 @@ use {
 		state::{SessionDelta, SessionRequest},
 	},
 	glorp_api::{
-		ConfigAssignment, ConfigPath, EditorContextView, EditorHistoryCommand, GlorpCall, GlorpCallResult, GlorpConfig,
-		GlorpDelta, GlorpError, GlorpOutcome, GlorpRevisions, GlorpSubscription, GlorpTxn, RuntimeCallDispatcher,
-		TokenAckView, decode_call_output, dispatch_runtime_call, transactional_call_spec,
+		ConfigAssignment, ConfigPath, GlorpCall, GlorpCallResult, GlorpConfig, GlorpDelta, GlorpError, GlorpOutcome,
+		GlorpRevisions, GlorpSubscription, GlorpTxn, RuntimeCallDispatcher, TextRange, TokenAckView,
+		decode_call_output, dispatch_runtime_call, transactional_call_spec,
 	},
-	glorp_editor::{EditorEditIntent, EditorHistoryIntent, EditorIntent, EditorMode},
-	std::ops::Range,
+	glorp_editor::TextEdit,
 };
 
 pub fn call(runtime: &mut GlorpRuntime, glorp_call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
@@ -18,30 +17,32 @@ pub fn call(runtime: &mut GlorpRuntime, glorp_call: GlorpCall) -> Result<GlorpCa
 }
 
 pub fn execute_gui_edit(runtime: &mut GlorpRuntime, request: GuiEditRequest) -> Result<GuiEditResponse, GlorpError> {
-	sync_gui_layout(runtime, request.layout.layout_width);
-	apply_gui_context(runtime, &request.context);
-	let intent = match request.command {
-		GuiEditCommand::InsertText(text) => EditorIntent::Edit(EditorEditIntent::InsertText(text)),
-		GuiEditCommand::Backspace => EditorIntent::Edit(EditorEditIntent::Backspace),
-		GuiEditCommand::DeleteForward => EditorIntent::Edit(EditorEditIntent::DeleteForward),
-		GuiEditCommand::DeleteSelection => EditorIntent::Edit(EditorEditIntent::DeleteSelection),
-		GuiEditCommand::History(action) => EditorIntent::History(match action {
-			EditorHistoryCommand::Undo => EditorHistoryIntent::Undo,
-			EditorHistoryCommand::Redo => EditorHistoryIntent::Redo,
-		}),
-	};
-	let outcome = publish_session(runtime, SessionRequest::ApplyEditorIntent(intent));
-	let next_context = current_gui_context(runtime);
 	let (undo_depth, redo_depth) = runtime.state.session.history_depths();
-	let document_sync = private_document_sync_ref(&outcome, GuiDocumentSyncReason::LargeEdit);
-	Ok(GuiEditResponse {
+	if request.base_revision != runtime.state.revisions.editor {
+		return Ok(GuiEditResponse::RejectedStale {
+			latest_revision: runtime.state.revisions.editor,
+			undo_depth,
+			redo_depth,
+		});
+	}
+
+	let session_request = match request.command {
+		GuiEditCommand::ReplaceRange { range, inserted } => {
+			SessionRequest::ApplyEdit(validate_text_edit(runtime.state.session.text(), range, inserted)?)
+		}
+		GuiEditCommand::Undo => SessionRequest::Undo,
+		GuiEditCommand::Redo => SessionRequest::Redo,
+	};
+	let outcome = publish_session(runtime, session_request);
+	let (undo_depth, redo_depth) = runtime.state.session.history_depths();
+	Ok(GuiEditResponse::Applied {
 		revisions: outcome.revisions,
-		outcome: private_outcome(&outcome, document_sync.is_some()),
-		next_context,
+		outcome: private_outcome(
+			&outcome,
+			private_document_sync_ref(&outcome, GuiDocumentSyncReason::LargeEdit).is_some(),
+		),
 		undo_depth,
 		redo_depth,
-		scene_summary: runtime.state.session.scene_summary(),
-		document_sync,
 	})
 }
 
@@ -119,53 +120,20 @@ fn execute_config_persist(runtime: &mut GlorpRuntime) -> Result<GlorpOutcome, Gl
 }
 
 fn publish_config(runtime: &mut GlorpRuntime, changed_paths: Vec<ConfigPath>) -> Result<GlorpOutcome, GlorpError> {
-	let mut outcome = run_session(runtime, SessionRequest::SyncConfig);
 	runtime.state.revisions.config += 1;
-	outcome.revisions = runtime.state.revisions;
-	outcome.delta.config_changed = !changed_paths.is_empty();
-	outcome.changed_config_paths = changed_paths;
+	let outcome = GlorpOutcome {
+		delta: GlorpDelta {
+			text_changed: false,
+			view_changed: false,
+			config_changed: !changed_paths.is_empty(),
+		},
+		revisions: runtime.state.revisions,
+		document_edit: None,
+		changed_config_paths: changed_paths,
+		warnings: vec![],
+	};
 	publish_change_streams(runtime, &outcome);
 	Ok(outcome)
-}
-
-pub(crate) fn sync_gui_layout(runtime: &mut GlorpRuntime, layout_width: f32) {
-	let layout_width = layout_width.max(1.0);
-	let current = runtime.state.session.layout_width();
-	if (current - layout_width).abs() <= f32::EPSILON {
-		return;
-	}
-
-	runtime
-		.state
-		.session
-		.sync_layout_width(&runtime.state.config, layout_width);
-}
-
-fn apply_gui_context(runtime: &mut GlorpRuntime, context: &EditorContextView) {
-	let editor = runtime.state.session.editor_mut();
-	let layout = editor.document_layout();
-	let selection = context.selection.as_ref().map(text_range);
-	let selection_head = context.selection_head.map(|head| head as usize);
-	let mode = match context.mode {
-		glorp_api::EditorMode::Normal => EditorMode::Normal,
-		glorp_api::EditorMode::Insert => EditorMode::Insert,
-	};
-	editor.replace_context(&layout, mode, selection, selection_head);
-}
-
-fn current_gui_context(runtime: &GlorpRuntime) -> EditorContextView {
-	let view = runtime.state.session.editor().view_state();
-	EditorContextView {
-		mode: match view.mode {
-			EditorMode::Normal => glorp_api::EditorMode::Normal,
-			EditorMode::Insert => glorp_api::EditorMode::Insert,
-		},
-		selection: view.selection.as_ref().map(|range| glorp_api::TextRange {
-			start: range.start as u64,
-			end: range.end as u64,
-		}),
-		selection_head: view.selection_head.map(|head| head as u64),
-	}
 }
 
 fn merge_outcome(accumulated: &mut GlorpOutcome, outcome: GlorpOutcome) {
@@ -183,11 +151,7 @@ const fn merge_delta(accumulated: &mut GlorpDelta, delta: &GlorpDelta) {
 }
 
 fn run_session(runtime: &mut GlorpRuntime, request: SessionRequest) -> GlorpOutcome {
-	let layout_width = runtime.state.session.layout_width();
-	let delta = runtime
-		.state
-		.session
-		.execute(request, &runtime.state.config, layout_width);
+	let delta = runtime.state.session.execute(request);
 	session_outcome(runtime, delta)
 }
 
@@ -237,7 +201,6 @@ pub fn gui_shared_delta(runtime: &GlorpRuntime, outcome: &GlorpOutcome) -> crate
 		undo_depth,
 		redo_depth,
 		config: outcome.delta.config_changed.then(|| runtime.state.config.clone()),
-		scene_summary: runtime.state.session.scene_summary(),
 		document_sync,
 		outcome: private_outcome(outcome, document_sync.is_some()),
 	}
@@ -295,8 +258,18 @@ fn flatten_patch_into(path: &str, value: &glorp_api::GlorpValue) -> Result<Vec<C
 	}
 }
 
-fn text_range(range: &glorp_api::TextRange) -> Range<usize> {
-	range.start as usize..range.end as usize
+fn validate_text_edit(text: &str, range: TextRange, inserted: String) -> Result<TextEdit, GlorpError> {
+	let range = range.start as usize..range.end as usize;
+	if range.start > range.end || range.end > text.len() {
+		return Err(GlorpError::validation(None, "text edit range is out of bounds"));
+	}
+	if !text.is_char_boundary(range.start) || !text.is_char_boundary(range.end) {
+		return Err(GlorpError::validation(
+			None,
+			"text edit range must stay on UTF-8 boundaries",
+		));
+	}
+	Ok(TextEdit { range, inserted })
 }
 
 impl RuntimeCallDispatcher for GlorpRuntime {

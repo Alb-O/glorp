@@ -33,6 +33,8 @@ use {
 	tracing::{debug, trace, trace_span, warn},
 };
 
+pub use self::{document::DocumentState, history::HistoryEntry};
+
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Default, PartialEq, Eq, Hash)]
 pub enum EditorMode {
 	#[default]

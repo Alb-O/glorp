@@ -1,8 +1,8 @@
 use {
 	glorp_api::{GlorpCall, GlorpCallResult, GlorpError},
 	glorp_runtime::{
-		GuiDocumentFetchRequest, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame,
-		GuiSessionClientMessage, GuiSessionHostMessage,
+		GuiDocumentFetchRequest, GuiEditRequest, GuiEditResponse, GuiRuntimeFrame, GuiSessionClientMessage,
+		GuiSessionHostMessage,
 	},
 	serde::{Serialize, de::DeserializeOwned},
 	std::io::{Read, Write},
@@ -21,7 +21,7 @@ pub enum TransportResponse {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum GuiTransportRequest {
 	Edit(GuiEditRequest),
-	GuiFrame(GuiLayoutRequest),
+	GuiFrame,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -31,9 +31,7 @@ pub enum GuiTransportResponse {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct GuiSessionOpen {
-	pub layout: GuiLayoutRequest,
-}
+pub struct GuiSessionOpen {}
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub enum GuiPayloadKind {

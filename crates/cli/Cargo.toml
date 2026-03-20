@@ -11,6 +11,7 @@ glorp_runtime = { path = "../runtime" }
 glorp_transport = { path = "../transport" }
 serde.workspace = true
 serde_json.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 glorp_gui = { path = "../gui" }

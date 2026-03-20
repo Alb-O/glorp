@@ -64,15 +64,8 @@ impl GlorpRuntime {
 	}
 
 	pub fn gui_frame(&mut self) -> crate::GuiRuntimeFrame {
-		self.gui_frame_at(crate::GuiLayoutRequest {
-			layout_width: crate::DEFAULT_LAYOUT_WIDTH,
-		})
-	}
-
-	pub fn gui_frame_at(&mut self, layout: crate::GuiLayoutRequest) -> crate::GuiRuntimeFrame {
-		execute::sync_gui_layout(self, layout.layout_width);
-		let (undo_depth, redo_depth) = self.state.session.history_depths();
 		let document_text = self.state.session.text();
+		let (undo_depth, redo_depth) = self.state.session.history_depths();
 		let document_sync = execute::document_sync_ref(
 			self.state.revisions.editor,
 			document_text,
@@ -80,12 +73,10 @@ impl GlorpRuntime {
 		);
 		crate::GuiRuntimeFrame {
 			config: self.state.config.clone(),
-			layout_width: self.state.session.layout_width(),
 			revisions: self.state.revisions,
 			document_text: document_sync.is_none().then(|| document_text.to_owned()),
 			undo_depth,
 			redo_depth,
-			scene_summary: self.state.session.scene_summary(),
 			document_sync,
 		}
 	}

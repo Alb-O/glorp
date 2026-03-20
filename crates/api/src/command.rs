@@ -113,13 +113,6 @@ pub struct TextRange {
 	pub end: u64,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-pub struct EditorContextView {
-	pub mode: EditorMode,
-	pub selection: Option<TextRange>,
-	pub selection_head: Option<u64>,
-}
-
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct LayoutRectView {
 	pub x: f32,

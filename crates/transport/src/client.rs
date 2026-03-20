@@ -6,8 +6,8 @@ use {
 	},
 	glorp_api::{GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
 	glorp_runtime::{
-		GuiDocumentFetchResponse, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame,
-		GuiSessionClientMessage, GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse,
+		GuiDocumentFetchResponse, GuiEditRequest, GuiEditResponse, GuiRuntimeFrame, GuiSessionClientMessage,
+		GuiSessionHostMessage, GuiSessionRequest, GuiSessionResponse,
 	},
 	serde::{Serialize, de::DeserializeOwned},
 	std::{
@@ -54,13 +54,13 @@ impl IpcClient {
 
 impl GuiSessionClient {
 	pub fn connect(
-		socket_path: impl Into<PathBuf>, layout: GuiLayoutRequest,
+		socket_path: impl Into<PathBuf>,
 	) -> Result<(Self, GuiRuntimeFrame, mpsc::Receiver<GuiSessionHostMessage>), GlorpError> {
 		let socket_path = socket_path.into();
 		let mut stream = UnixStream::connect(&socket_path).map_err(|error| {
 			GlorpError::transport(format!("failed to connect to {}: {error}", socket_path.display()))
 		})?;
-		write_json(&mut stream, &ServerRequest::GuiSessionOpen(GuiSessionOpen { layout }))?;
+		write_json(&mut stream, &ServerRequest::GuiSessionOpen(GuiSessionOpen {}))?;
 		let ready = read_json::<ServerResponse>(&stream)?;
 		let ServerResponse::GuiSessionReady(GuiSessionHostMessage::Ready { frame }) = ready else {
 			return Err(GlorpError::transport("unexpected gui session handshake response"));
@@ -92,8 +92,8 @@ impl GuiSessionClient {
 		}
 	}
 
-	pub fn gui_frame(&self, layout: GuiLayoutRequest) -> Result<GuiRuntimeFrame, GlorpError> {
-		match self.request_control(GuiSessionRequest::GuiFrame(layout))? {
+	pub fn gui_frame(&self) -> Result<GuiRuntimeFrame, GlorpError> {
+		match self.request_control(GuiSessionRequest::GuiFrame)? {
 			GuiSessionResponse::GuiFrame(result) => self.hydrate_frame(result?),
 			_ => Err(unexpected_response("gui session frame")),
 		}

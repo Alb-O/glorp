@@ -5,7 +5,6 @@ mod store;
 use {
 	self::{bridge::CanvasPerfSink as Sink, report::build_dashboard, store::PerfStore},
 	crate::editor::{EditorMode, EditorViewportMetrics},
-	glorp_runtime::GuiSceneSummary,
 	std::{hash::Hash, time::Duration},
 };
 pub use {
@@ -76,12 +75,12 @@ impl PerfMonitor {
 	}
 
 	pub fn dashboard(
-		&self, scene_summary: Option<GuiSceneSummary>, editor_mode: EditorMode, editor_text: &str,
+		&self, scene_revision: Option<u64>, editor_mode: EditorMode, editor_text: &str,
 		viewport_metrics: EditorViewportMetrics, layout_width: f32,
 	) -> PerfDashboard {
 		build_dashboard(
 			&self.store,
-			scene_summary,
+			scene_revision,
 			viewport_metrics,
 			editor_mode,
 			editor_text,

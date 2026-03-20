@@ -1,16 +1,16 @@
 use {
-	crate::scene::scene_config_from_runtime,
 	glorp_api::{GlorpConfig, GlorpDelta, GlorpRevisions, TextEditView},
-	glorp_editor::{EditorEngine, EditorIntent, SceneConfig, TextEdit, make_font_system},
+	glorp_editor::{DocumentState, HistoryEntry, TextEdit},
 };
 
 pub const DEFAULT_LAYOUT_WIDTH: f32 = 540.0;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SessionRequest {
 	ReplaceDocument(String),
-	SyncConfig,
-	ApplyEditorIntent(EditorIntent),
+	ApplyEdit(TextEdit),
+	Undo,
+	Redo,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -22,23 +22,12 @@ pub struct SessionDelta {
 
 #[derive(Debug, Clone)]
 pub struct DocumentCheckpoint {
-	editor: EditorEngine,
-	pending_reset: Option<PendingEditorReset>,
-	scene_revision: u64,
-}
-
-#[derive(Debug, Clone)]
-struct PendingEditorReset {
-	text: String,
-	scene_config: SceneConfig,
+	document: DocumentState,
 }
 
 #[derive(Debug)]
 pub struct DocumentSession {
-	editor: EditorEngine,
-	pending_reset: Option<PendingEditorReset>,
-	scene_revision: u64,
-	font_system: cosmic_text::FontSystem,
+	document: DocumentState,
 }
 
 #[derive(Debug)]
@@ -49,99 +38,45 @@ pub struct RuntimeState {
 }
 
 impl DocumentSession {
-	pub fn new(text: &str, config: &GlorpConfig, layout_width: f32) -> Self {
-		let mut font_system = make_font_system();
-		let scene_config = scene_config_from_runtime(config, layout_width);
-		let editor = EditorEngine::new(&mut font_system, text, scene_config);
-
+	pub fn new(text: &str) -> Self {
 		Self {
-			editor,
-			pending_reset: None,
-			scene_revision: 1,
-			font_system,
+			document: DocumentState::new(text),
 		}
 	}
 
-	pub fn execute(&mut self, request: SessionRequest, config: &GlorpConfig, layout_width: f32) -> SessionDelta {
+	pub fn execute(&mut self, request: SessionRequest) -> SessionDelta {
 		match request {
-			SessionRequest::ReplaceDocument(text) => self.execute_replace_document(text, config, layout_width),
-			SessionRequest::SyncConfig => self.execute_sync_config(config, layout_width),
-			SessionRequest::ApplyEditorIntent(intent) => self.execute_editor_intent(intent),
-		}
-	}
-
-	pub fn scene_summary(&self) -> crate::GuiSceneSummary {
-		crate::GuiSceneSummary {
-			revision: self.scene_revision,
+			SessionRequest::ReplaceDocument(text) => self.execute_replace_document(text),
+			SessionRequest::ApplyEdit(edit) => self.execute_apply_edit(edit),
+			SessionRequest::Undo => self.execute_undo(),
+			SessionRequest::Redo => self.execute_redo(),
 		}
 	}
 
 	pub fn text(&self) -> &str {
-		if let Some(pending_reset) = self.pending_reset.as_ref() {
-			return pending_reset.text.as_str();
-		}
-
-		self.editor.text()
-	}
-
-	pub fn editor(&self) -> &EditorEngine {
-		debug_assert!(
-			self.pending_reset.is_none(),
-			"pending editor reset should be realized before immutable editor access"
-		);
-		&self.editor
-	}
-
-	pub fn editor_mut(&mut self) -> &mut EditorEngine {
-		self.ensure_editor_current();
-		&mut self.editor
-	}
-
-	pub fn layout_width(&self) -> f32 {
-		if let Some(pending_reset) = self.pending_reset.as_ref() {
-			return pending_reset.scene_config.max_width;
-		}
-
-		self.editor.layout_width()
+		self.document.text()
 	}
 
 	pub fn history_depths(&self) -> (usize, usize) {
-		if self.pending_reset.is_some() {
-			return (0, 0);
-		}
-
-		self.editor.history_depths()
+		self.document.history_depths()
 	}
 
 	pub fn checkpoint(&self) -> DocumentCheckpoint {
 		DocumentCheckpoint {
-			editor: self.editor.clone(),
-			pending_reset: self.pending_reset.clone(),
-			scene_revision: self.scene_revision,
+			document: self.document.clone(),
 		}
 	}
 
 	pub fn restore(&mut self, checkpoint: DocumentCheckpoint) {
-		self.editor = checkpoint.editor;
-		self.pending_reset = checkpoint.pending_reset;
-		self.scene_revision = checkpoint.scene_revision;
-		self.font_system = make_font_system();
+		self.document = checkpoint.document;
 	}
 
-	pub fn sync_layout_width(&mut self, config: &GlorpConfig, layout_width: f32) {
-		let _ = self.execute(SessionRequest::SyncConfig, config, layout_width);
-	}
-
-	fn execute_replace_document(&mut self, text: String, config: &GlorpConfig, layout_width: f32) -> SessionDelta {
-		let previous_len = self.text().len();
-		self.pending_reset = Some(PendingEditorReset {
-			text: text.clone(),
-			scene_config: scene_config_from_runtime(config, layout_width),
-		});
-		self.invalidate_scene();
+	fn execute_replace_document(&mut self, text: String) -> SessionDelta {
+		let previous_len = self.document.len();
+		self.document.reset(text.clone());
 		SessionDelta {
 			text_changed: true,
-			view_changed: true,
+			view_changed: false,
 			document_edit: Some(TextEdit {
 				range: 0..previous_len,
 				inserted: text,
@@ -149,64 +84,49 @@ impl DocumentSession {
 		}
 	}
 
-	fn execute_sync_config(&mut self, config: &GlorpConfig, layout_width: f32) -> SessionDelta {
-		let scene_config = scene_config_from_runtime(config, layout_width);
-		if let Some(pending_reset) = self.pending_reset.as_mut() {
-			if pending_reset.scene_config == scene_config {
-				return SessionDelta::default();
-			}
-
-			pending_reset.scene_config = scene_config;
-			self.invalidate_scene();
-			return SessionDelta {
-				view_changed: true,
-				..SessionDelta::default()
-			};
-		}
-
-		if !self.editor.sync_buffer_config(&mut self.font_system, scene_config) {
-			return SessionDelta::default();
-		}
-
-		self.invalidate_scene();
+	fn execute_apply_edit(&mut self, edit: TextEdit) -> SessionDelta {
+		let inverse = self.document.apply_edit(&edit);
+		self.document.record_history(HistoryEntry {
+			forward: edit.clone(),
+			inverse,
+		});
 		SessionDelta {
-			view_changed: true,
-			..SessionDelta::default()
-		}
-	}
-
-	fn execute_editor_intent(&mut self, intent: EditorIntent) -> SessionDelta {
-		self.ensure_editor_current();
-		let outcome = self.editor.apply(&mut self.font_system, intent);
-		let text_changed = outcome.text_edit.is_some();
-		if text_changed {
-			self.invalidate_scene();
-		}
-
-		SessionDelta {
-			text_changed,
+			text_changed: true,
 			view_changed: false,
-			document_edit: outcome.text_edit,
+			document_edit: Some(edit),
 		}
 	}
 
-	fn invalidate_scene(&mut self) {
-		self.scene_revision = self.scene_revision.saturating_add(1);
+	fn execute_undo(&mut self) -> SessionDelta {
+		let Some(entry) = self.document.undo() else {
+			return SessionDelta::default();
+		};
+		let edit = entry.inverse;
+		let _ = self.document.apply_edit(&edit);
+		SessionDelta {
+			text_changed: true,
+			view_changed: false,
+			document_edit: Some(edit),
+		}
 	}
 
-	fn ensure_editor_current(&mut self) {
-		let Some(pending_reset) = self.pending_reset.take() else {
-			return;
+	fn execute_redo(&mut self) -> SessionDelta {
+		let Some(entry) = self.document.redo() else {
+			return SessionDelta::default();
 		};
-
-		self.editor
-			.replace_document(&mut self.font_system, &pending_reset.text, pending_reset.scene_config);
+		let edit = entry.forward;
+		let _ = self.document.apply_edit(&edit);
+		SessionDelta {
+			text_changed: true,
+			view_changed: false,
+			document_edit: Some(edit),
+		}
 	}
 }
 
 impl RuntimeState {
 	pub fn new(config: GlorpConfig, text: &str) -> Self {
-		let session = DocumentSession::new(text, &config, DEFAULT_LAYOUT_WIDTH);
+		let session = DocumentSession::new(text);
 
 		Self {
 			config,

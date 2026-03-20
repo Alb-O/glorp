@@ -215,28 +215,34 @@ fn ipc_transport_rejects_client_route_calls_e2e() {
 }
 
 #[test]
-fn gui_clients_keep_request_scoped_layout_width_e2e() {
+fn gui_stale_edit_is_rejected_e2e() {
 	let harness = TestRepo::new("glorp-acceptance");
 	let options = gui_options(&harness);
-	let (mut owner, mut first) =
-		GuiRuntimeSession::connect_or_start(options.clone()).expect("first GUI session should start runtime");
+	let (mut owner, mut client) =
+		GuiRuntimeSession::connect_or_start(options).expect("GUI session should start runtime");
 	assert!(owner.owns_server());
 
-	first.set_layout_width(240.0);
-	let first_frame = first.gui_frame().expect("first GUI frame should load");
-	assert!((first_frame.layout_width - 240.0).abs() <= f32::EPSILON);
+	let _ = outcome(&mut client, document_replace("abc"));
+	let base_revision = client.gui_frame().expect("GUI frame should load").revisions.editor;
+	let _ = outcome(&mut client, document_replace("stale"));
 
-	let (attached, mut second) =
-		GuiRuntimeSession::connect_or_start(options).expect("second GUI session should attach");
-	assert!(!attached.owns_server());
-	second.set_layout_width(420.0);
-	let second_frame = second.gui_frame().expect("second GUI frame should load");
-	assert!((second_frame.layout_width - 420.0).abs() <= f32::EPSILON);
+	let response = client
+		.gui_edit(GuiEditRequest {
+			base_revision,
+			command: GuiEditCommand::ReplaceRange {
+				range: TextRange { start: 3, end: 3 },
+				inserted: "!".to_owned(),
+			},
+		})
+		.expect("stale GUI edit should return a structured response");
 
-	let first_again = first
-		.gui_frame()
-		.expect("first GUI frame should preserve its request width");
-	assert!((first_again.layout_width - 240.0).abs() <= f32::EPSILON);
+	match response {
+		glorp_runtime::GuiEditResponse::RejectedStale { latest_revision, .. } => {
+			assert!(latest_revision > base_revision)
+		}
+		other => panic!("unexpected GUI edit response: {other:?}"),
+	}
+	assert_eq!(document_text(&mut client), "stale");
 
 	owner.shutdown().expect("owner shutdown should succeed");
 }
@@ -270,9 +276,8 @@ fn gui_owner_client_does_not_depend_on_socket_roundtrips() {
 
 	std::fs::remove_file(owner.socket_path()).expect("socket path should be removable during the session");
 
-	client.set_layout_width(420.0);
 	let frame = client.gui_frame().expect("owned GUI frame should stay available");
-	assert!((frame.layout_width - 420.0).abs() <= f32::EPSILON);
+	assert!(frame.document_text.is_some());
 
 	let _ = outcome(&mut client, document_replace("local-owned"));
 	assert_eq!(document_text(&mut client), "local-owned");
@@ -287,32 +292,123 @@ fn gui_edit_command_to_document_text_e2e() {
 	let (mut owner, mut client) =
 		GuiRuntimeSession::connect_or_start(options).expect("GUI session should start runtime");
 	let _ = outcome(&mut client, document_replace("abc"));
+	let base_revision = client.gui_frame().expect("GUI frame should load").revisions.editor;
 
 	let response = client
 		.gui_edit(GuiEditRequest {
-			layout: glorp_runtime::GuiLayoutRequest { layout_width: 540.0 },
-			context: EditorContextView {
-				mode: EditorMode::Insert,
-				selection: None,
-				selection_head: Some(3),
+			base_revision,
+			command: GuiEditCommand::ReplaceRange {
+				range: TextRange { start: 3, end: 3 },
+				inserted: "!".to_owned(),
 			},
-			command: GuiEditCommand::InsertText("!".to_owned()),
 		})
 		.expect("GUI edit should succeed");
 
 	assert_eq!(document_text(&mut client), "abc!");
-	assert!(response.outcome.document_edit.is_some());
+	let undo_base_revision = match response {
+		glorp_runtime::GuiEditResponse::Applied { outcome, revisions, .. } => {
+			assert!(outcome.document_edit.is_some());
+			revisions.editor
+		}
+		other => panic!("unexpected GUI edit response: {other:?}"),
+	};
 	assert!(document_state(&mut client).undo_depth > 0);
 
 	let undo = client
 		.gui_edit(GuiEditRequest {
-			layout: glorp_runtime::GuiLayoutRequest { layout_width: 540.0 },
-			context: response.next_context,
-			command: GuiEditCommand::History(EditorHistoryCommand::Undo),
+			base_revision: undo_base_revision,
+			command: GuiEditCommand::Undo,
 		})
 		.expect("GUI undo should succeed");
 	assert_eq!(document_text(&mut client), "abc");
-	assert!(undo.outcome.document_edit.is_some());
+	match undo {
+		glorp_runtime::GuiEditResponse::Applied { outcome, .. } => assert!(outcome.document_edit.is_some()),
+		other => panic!("unexpected GUI undo response: {other:?}"),
+	}
+	owner.shutdown().expect("owner shutdown should succeed");
+}
+
+#[test]
+fn attached_gui_shared_undo_e2e() {
+	let harness = TestRepo::new("glorp-acceptance");
+	let options = gui_options(&harness);
+	let (mut owner, mut primary) =
+		GuiRuntimeSession::connect_or_start(options.clone()).expect("owner GUI session should start runtime");
+	assert!(owner.owns_server());
+	let _ = primary.gui_frame().expect("primary GUI frame should load");
+
+	let (attached, mut secondary) =
+		GuiRuntimeSession::connect_or_start(options).expect("attached GUI session should connect");
+	assert!(!attached.owns_server());
+	let _ = secondary.gui_frame().expect("secondary GUI frame should load");
+	let _ = outcome(&mut primary, document_replace("abc"));
+	let _ = (0..20)
+		.find_map(|_| {
+			let event = secondary.drain_events().into_iter().find_map(|message| match message {
+				glorp_runtime::GuiSessionHostMessage::Changed(delta)
+					if delta
+						.outcome
+						.document_edit
+						.as_ref()
+						.is_some_and(|edit| edit.inserted == "abc") =>
+				{
+					Some(delta)
+				}
+				_ => None,
+			});
+			if event.is_none() {
+				std::thread::sleep(std::time::Duration::from_millis(10));
+			}
+			event
+		})
+		.expect("attached GUI should receive the seeded document delta");
+
+	let base_revision = primary
+		.gui_frame()
+		.expect("primary GUI frame should refresh")
+		.revisions
+		.editor;
+	let applied = primary
+		.gui_edit(GuiEditRequest {
+			base_revision,
+			command: GuiEditCommand::ReplaceRange {
+				range: TextRange { start: 3, end: 3 },
+				inserted: "!".to_owned(),
+			},
+		})
+		.expect("primary GUI edit should succeed");
+	let applied_revision = match applied {
+		glorp_runtime::GuiEditResponse::Applied { revisions, .. } => revisions.editor,
+		other => panic!("unexpected GUI edit response: {other:?}"),
+	};
+	assert_eq!(document_text(&mut primary), "abc!");
+
+	let pushed = (0..20)
+		.find_map(|_| {
+			let event = secondary.drain_events().into_iter().find_map(|message| match message {
+				glorp_runtime::GuiSessionHostMessage::Changed(delta) => Some(delta),
+				_ => None,
+			});
+			if event.is_none() {
+				std::thread::sleep(std::time::Duration::from_millis(10));
+			}
+			event
+		})
+		.expect("attached GUI should receive the shared edit delta");
+	assert_eq!(pushed.outcome.revisions.editor, applied_revision);
+
+	let undo = secondary
+		.gui_edit(GuiEditRequest {
+			base_revision: applied_revision,
+			command: GuiEditCommand::Undo,
+		})
+		.expect("attached GUI undo should succeed");
+	match undo {
+		glorp_runtime::GuiEditResponse::Applied { outcome, .. } => assert!(outcome.document_edit.is_some()),
+		other => panic!("unexpected GUI undo response: {other:?}"),
+	}
+	assert_eq!(document_text(&mut primary), "abc");
+
 	owner.shutdown().expect("owner shutdown should succeed");
 }
 
@@ -358,7 +454,6 @@ fn attached_gui_receives_pushed_document_delta_e2e() {
 		})
 	);
 	assert_eq!(pushed.undo_depth, document_state(&mut primary).undo_depth);
-	assert!(pushed.scene_summary.revision > 0);
 	owner.shutdown().expect("owner shutdown should succeed");
 }
 

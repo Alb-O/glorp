@@ -1,7 +1,7 @@
 use {
-	glorp_api::{EditorContextView, EditorMode, GlorpCallDescriptor, TextInput},
+	glorp_api::{GlorpCallDescriptor, TextInput, TextRange},
 	glorp_gui::{GuiLaunchOptions, GuiRuntimeClient, GuiRuntimeSession},
-	glorp_runtime::{GuiEditCommand, GuiEditRequest, GuiLayoutRequest},
+	glorp_runtime::{GuiEditCommand, GuiEditRequest, GuiEditResponse},
 	glorp_test_support::TestRepo,
 	glorp_transport::default_socket_path,
 	std::{
@@ -30,11 +30,12 @@ fn gui_host_perf_report() {
 		println!("\n== {} ==", transport.label());
 		let mut reports = vec![
 			run_frame_poll(transport, warmup, samples),
-			run_resize_reflow(transport, warmup, samples),
+			run_stale_edit_reject(transport, warmup, samples),
 			run_edit_only(transport, warmup, samples),
 			run_edit_with_frame_refresh(transport, warmup, samples),
 		];
 		if matches!(transport, TransportKind::AttachedIpc) {
+			reports.push(run_shared_undo_cross_client(warmup, samples));
 			reports.push(run_large_replace_call_only(warmup, samples));
 			reports.push(run_large_invalidate_delivery_only(warmup, samples));
 			reports.push(run_push_propagation_large_invalidate(warmup, samples));
@@ -67,6 +68,12 @@ struct PerfHarness {
 	_attached: Option<GuiRuntimeSession>,
 	owner_client: Option<GuiRuntimeClient>,
 	client: GuiRuntimeClient,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct EditCursor {
+	revision: u64,
+	len: usize,
 }
 
 #[derive(Debug)]
@@ -139,16 +146,21 @@ impl PerfHarness {
 		}
 	}
 
-	fn seed_document(&mut self, text: &str) {
+	fn seed_document(&mut self, text: &str) -> EditCursor {
+		let _ = self.client.gui_frame().expect("initial GUI frame should load");
 		let _ = glorp_api::calls::DocumentReplace::call(&mut self.client, TextInput { text: text.to_owned() })
 			.expect("document replace should succeed");
-		let _ = self.client.gui_frame().expect("gui frame should refresh");
+		let frame = self.client.gui_frame().expect("gui frame should refresh");
+		EditCursor {
+			revision: frame.revisions.editor,
+			len: text.len(),
+		}
 	}
 }
 
 fn run_frame_poll(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
 	let mut harness = PerfHarness::new(transport);
-	harness.seed_document(&large_document());
+	let _ = harness.seed_document(&large_document());
 
 	for _ in 0..warmup {
 		let _ = harness.client.gui_frame().expect("warmup frame should load");
@@ -168,26 +180,23 @@ fn run_frame_poll(transport: TransportKind, warmup: usize, samples: usize) -> Sc
 	}
 }
 
-fn run_resize_reflow(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
+fn run_stale_edit_reject(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
 	let mut harness = PerfHarness::new(transport);
-	harness.seed_document(&large_document());
-	let widths = [320.0_f32, 420.0, 540.0, 680.0, 460.0];
+	let _ = harness.seed_document("stale-a");
 
 	for step in 0..warmup {
-		harness.client.set_layout_width(widths[step % widths.len()]);
-		let _ = harness.client.gui_frame().expect("warmup resize frame should load");
+		run_stale_reject_step(&mut harness.client, step);
 	}
 
 	let mut results = Vec::with_capacity(samples);
 	for step in 0..samples {
 		results.push(measure(|| {
-			harness.client.set_layout_width(widths[step % widths.len()]);
-			let _ = harness.client.gui_frame().expect("resize frame should load");
+			run_stale_reject_step(&mut harness.client, step);
 		}));
 	}
 
 	ScenarioReport {
-		name: "resize-reflow",
+		name: "stale-edit-reject",
 		transport,
 		samples: results,
 	}
@@ -195,19 +204,16 @@ fn run_resize_reflow(transport: TransportKind, warmup: usize, samples: usize) ->
 
 fn run_edit_only(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
 	let mut harness = PerfHarness::new(transport);
-	let text = large_document();
-	let base_len = text.len() as u64;
-	harness.seed_document(&text);
-	let mut context = insert_context(base_len);
+	let mut cursor = harness.seed_document(&large_document());
 
 	for step in 0..warmup {
-		context = run_edit_step(&mut harness.client, context, step);
+		cursor = run_edit_step(&mut harness.client, cursor, step);
 	}
 
 	let mut results = Vec::with_capacity(samples);
 	for step in 0..samples {
 		let started = Instant::now();
-		context = run_edit_step(&mut harness.client, context, step);
+		cursor = run_edit_step(&mut harness.client, cursor, step);
 		results.push(elapsed_ms(started.elapsed()));
 	}
 
@@ -220,20 +226,17 @@ fn run_edit_only(transport: TransportKind, warmup: usize, samples: usize) -> Sce
 
 fn run_edit_with_frame_refresh(transport: TransportKind, warmup: usize, samples: usize) -> ScenarioReport {
 	let mut harness = PerfHarness::new(transport);
-	let text = large_document();
-	let base_len = text.len() as u64;
-	harness.seed_document(&text);
-	let mut context = insert_context(base_len);
+	let mut cursor = harness.seed_document(&large_document());
 
 	for step in 0..warmup {
-		context = run_edit_step(&mut harness.client, context, step);
+		cursor = run_edit_step(&mut harness.client, cursor, step);
 		let _ = harness.client.gui_frame().expect("warmup post-edit frame should load");
 	}
 
 	let mut results = Vec::with_capacity(samples);
 	for step in 0..samples {
 		let started = Instant::now();
-		context = run_edit_step(&mut harness.client, context, step);
+		cursor = run_edit_step(&mut harness.client, cursor, step);
 		let _ = harness.client.gui_frame().expect("post-edit frame should load");
 		results.push(elapsed_ms(started.elapsed()));
 	}
@@ -289,6 +292,39 @@ fn run_push_propagation_large_invalidate(warmup: usize, samples: usize) -> Scena
 
 	ScenarioReport {
 		name: "push-propagation-large-invalidate",
+		transport: TransportKind::AttachedIpc,
+		samples: results,
+	}
+}
+
+fn run_shared_undo_cross_client(warmup: usize, samples: usize) -> ScenarioReport {
+	let mut harness = PerfHarness::new(TransportKind::AttachedIpc);
+	let mut cursor = harness.seed_document("shared undo baseline");
+	let (owner, client) = {
+		let PerfHarness {
+			owner_client, client, ..
+		} = &mut harness;
+		(
+			owner_client
+				.as_mut()
+				.expect("attached transport should keep an owner client"),
+			client,
+		)
+	};
+
+	for _ in 0..warmup {
+		cursor = run_shared_undo_cycle(owner, client, cursor);
+	}
+
+	let mut results = Vec::with_capacity(samples);
+	for _ in 0..samples {
+		let started = Instant::now();
+		cursor = run_shared_undo_cycle(owner, client, cursor);
+		results.push(elapsed_ms(started.elapsed()));
+	}
+
+	ScenarioReport {
+		name: "shared-undo-cross-client",
 		transport: TransportKind::AttachedIpc,
 		samples: results,
 	}
@@ -433,26 +469,116 @@ fn run_document_fetch_large(warmup: usize, samples: usize) -> ScenarioReport {
 	}
 }
 
-fn run_edit_step(client: &mut GuiRuntimeClient, context: EditorContextView, step: usize) -> EditorContextView {
-	let command = if step % 2 == 0 {
-		GuiEditCommand::InsertText("x".to_owned())
+fn run_edit_step(client: &mut GuiRuntimeClient, cursor: EditCursor, step: usize) -> EditCursor {
+	let (range, inserted) = if step % 2 == 0 || cursor.len == 0 {
+		(
+			TextRange {
+				start: cursor.len as u64,
+				end: cursor.len as u64,
+			},
+			"x".to_owned(),
+		)
 	} else {
-		GuiEditCommand::Backspace
+		(
+			TextRange {
+				start: (cursor.len - 1) as u64,
+				end: cursor.len as u64,
+			},
+			String::new(),
+		)
 	};
-	client
+	let delta = inserted.len() as isize - (range.end - range.start) as isize;
+	match client
 		.gui_edit(GuiEditRequest {
-			layout: GuiLayoutRequest { layout_width: 540.0 },
-			context,
-			command,
+			base_revision: cursor.revision,
+			command: GuiEditCommand::ReplaceRange { range, inserted },
 		})
 		.expect("gui edit should succeed")
-		.next_context
+	{
+		GuiEditResponse::Applied { revisions, .. } => EditCursor {
+			revision: revisions.editor,
+			len: cursor.len.saturating_add_signed(delta),
+		},
+		GuiEditResponse::RejectedStale { .. } => panic!("steady-state edit should not go stale"),
+	}
+}
+
+fn run_stale_reject_step(client: &mut GuiRuntimeClient, step: usize) {
+	let stale_revision = client
+		.gui_frame()
+		.expect("stale baseline frame should load")
+		.revisions
+		.editor;
+	let _ = glorp_api::calls::DocumentReplace::call(
+		client,
+		TextInput {
+			text: if step % 2 == 0 {
+				"stale-b".to_owned()
+			} else {
+				"stale-a".to_owned()
+			},
+		},
+	)
+	.expect("stale baseline replace should succeed");
+	match client
+		.gui_edit(GuiEditRequest {
+			base_revision: stale_revision,
+			command: GuiEditCommand::ReplaceRange {
+				range: TextRange { start: 0, end: 0 },
+				inserted: "!".to_owned(),
+			},
+		})
+		.expect("stale GUI edit should return a structured response")
+	{
+		GuiEditResponse::RejectedStale { .. } => {}
+		GuiEditResponse::Applied { .. } => panic!("stale GUI edit should be rejected"),
+	}
+	let _ = client.drain_events();
+}
+
+fn run_shared_undo_cycle(
+	owner: &mut GuiRuntimeClient, client: &mut GuiRuntimeClient, cursor: EditCursor,
+) -> EditCursor {
+	let _ = run_edit_step(owner, cursor, 0);
+	let pushed =
+		wait_for_delta_after_revision(client, cursor.revision).expect("attached client should receive the shared edit");
+	let revision = pushed.outcome.revisions.editor;
+	match client
+		.gui_edit(GuiEditRequest {
+			base_revision: revision,
+			command: GuiEditCommand::Undo,
+		})
+		.expect("shared undo should succeed")
+	{
+		GuiEditResponse::Applied { revisions, .. } => EditCursor {
+			revision: revisions.editor,
+			len: cursor.len,
+		},
+		GuiEditResponse::RejectedStale { .. } => panic!("shared undo should not go stale"),
+	}
 }
 
 fn wait_for_pushed_delta(client: &mut GuiRuntimeClient) -> Option<glorp_runtime::GuiSharedDelta> {
 	for _ in 0..200 {
 		if let Some(delta) = client.drain_events().into_iter().find_map(|message| match message {
 			glorp_runtime::GuiSessionHostMessage::Changed(delta) => Some(delta),
+			_ => None,
+		}) {
+			return Some(delta);
+		}
+		std::thread::sleep(Duration::from_millis(1));
+	}
+	None
+}
+
+fn wait_for_delta_after_revision(
+	client: &mut GuiRuntimeClient, revision: u64,
+) -> Option<glorp_runtime::GuiSharedDelta> {
+	for _ in 0..200 {
+		if let Some(delta) = client.drain_events().into_iter().find_map(|message| match message {
+			glorp_runtime::GuiSessionHostMessage::Changed(delta) if delta.outcome.revisions.editor > revision => {
+				Some(delta)
+			}
 			_ => None,
 		}) {
 			return Some(delta);
@@ -470,14 +596,6 @@ fn replace_and_fetch_large(owner: &mut GuiRuntimeClient, client: &mut GuiRuntime
 		.document_sync
 		.expect("large document replace should produce a document sync")
 		.revision
-}
-
-fn insert_context(selection_head: u64) -> EditorContextView {
-	EditorContextView {
-		mode: EditorMode::Insert,
-		selection: None,
-		selection_head: Some(selection_head),
-	}
 }
 
 fn large_document() -> String {
