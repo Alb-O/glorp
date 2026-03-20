@@ -120,6 +120,7 @@ impl DocumentSession {
 	}
 
 	fn execute_replace_document(&mut self, text: &str, config: &GlorpConfig, layout_width: f32) -> SessionDelta {
+		let previous_len = self.editor.text().len();
 		self.editor.reset(
 			&mut self.font_system,
 			text,
@@ -129,7 +130,10 @@ impl DocumentSession {
 		SessionDelta {
 			text_changed: true,
 			view_changed: true,
-			document_edit: None,
+			document_edit: Some(TextEdit {
+				range: 0..previous_len,
+				inserted: text.to_owned(),
+			}),
 			scene_materialized: None,
 		}
 	}

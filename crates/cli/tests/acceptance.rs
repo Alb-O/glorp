@@ -329,6 +329,51 @@ fn gui_edit_command_to_document_text_e2e() {
 }
 
 #[test]
+fn attached_gui_receives_pushed_document_delta_e2e() {
+	let harness = TestRepo::new("glorp-acceptance");
+	let options = gui_options(&harness);
+	let (mut owner, mut primary) =
+		GuiRuntimeSession::connect_or_start(options.clone()).expect("owner GUI session should start runtime");
+	assert!(owner.owns_server());
+	let _ = primary.gui_frame().expect("primary GUI frame should load");
+
+	let (attached, mut secondary) =
+		GuiRuntimeSession::connect_or_start(options).expect("attached GUI session should connect");
+	assert!(!attached.owns_server());
+	let _ = secondary.gui_frame().expect("secondary GUI frame should load");
+	assert!(secondary.drain_events().is_empty());
+
+	let previous_len = document_text(&mut primary).len() as u64;
+	let _ = outcome(&mut primary, document_replace("pushed"));
+
+	let pushed = (0..20)
+		.find_map(|_| {
+			let event = secondary.drain_events().into_iter().find_map(|message| match message {
+				glorp_runtime::GuiSessionHostMessage::Changed(delta) => Some(delta),
+				_ => None,
+			});
+			if event.is_none() {
+				std::thread::sleep(std::time::Duration::from_millis(10));
+			}
+			event
+		})
+		.expect("attached GUI should receive a pushed delta");
+
+	assert_eq!(
+		pushed.outcome.document_edit,
+		Some(TextEditView {
+			range: TextRange {
+				start: 0,
+				end: previous_len,
+			},
+			inserted: "pushed".to_owned(),
+		})
+	);
+	assert_eq!(pushed.undo_depth, document_state(&mut primary).undo_depth);
+	owner.shutdown().expect("owner shutdown should succeed");
+}
+
+#[test]
 fn revision_monotonicity_test() {
 	let mut host = TestRepo::new("glorp-acceptance").runtime();
 	let initial = document_state(&mut host).revisions;

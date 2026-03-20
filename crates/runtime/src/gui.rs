@@ -40,6 +40,49 @@ pub struct GuiEditRequest {
 pub struct GuiEditResponse {
 	pub outcome: GlorpOutcome,
 	pub next_context: EditorContextView,
+	pub revisions: GlorpRevisions,
+	pub undo_depth: usize,
+	pub redo_depth: usize,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct GuiSharedDelta {
+	pub outcome: GlorpOutcome,
+	pub undo_depth: usize,
+	pub redo_depth: usize,
+	pub config: Option<GlorpConfig>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub enum GuiSessionRequest {
+	Call(glorp_api::GlorpCall),
+	ExecuteGui {
+		layout: GuiLayoutRequest,
+		command: GuiCommand,
+	},
+	Edit(GuiEditRequest),
+	GuiFrame(GuiLayoutRequest),
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum GuiSessionResponse {
+	Call(Result<glorp_api::GlorpCallResult, glorp_api::GlorpError>),
+	ExecuteGui(Result<(), glorp_api::GlorpError>),
+	Edit(Result<GuiEditResponse, glorp_api::GlorpError>),
+	GuiFrame(Result<GuiRuntimeFrame, glorp_api::GlorpError>),
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub enum GuiSessionClientMessage {
+	Request { id: u64, body: GuiSessionRequest },
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum GuiSessionHostMessage {
+	Ready { frame: Box<GuiRuntimeFrame> },
+	Reply { id: u64, body: GuiSessionResponse },
+	Changed(GuiSharedDelta),
+	Closed,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

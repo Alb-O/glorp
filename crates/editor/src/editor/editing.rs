@@ -11,6 +11,20 @@ use {
 };
 
 impl EditorEngine {
+	pub fn apply_external_text_edit(&mut self, font_system: &mut FontSystem, text_edit: TextEdit) -> ApplyResult {
+		self.apply_document_edit(
+			font_system,
+			&text_edit,
+			edit_changes_line_structure(self.text(), &text_edit),
+		);
+		self.rebase_context_after_history_edit(&text_edit);
+		ApplyResult {
+			text_edit: Some(text_edit),
+			layout: Some(self.document_layout()),
+			view_refreshed: false,
+		}
+	}
+
 	pub fn undo(&mut self, font_system: &mut FontSystem) -> ApplyResult {
 		let entry = self.core.document.undo();
 		self.apply_history_entry(font_system, entry, true)

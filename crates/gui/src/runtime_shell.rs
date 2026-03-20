@@ -21,7 +21,9 @@ use {
 		sample_preset_text, scene_config,
 	},
 	glorp_gui::{GuiLaunchOptions, GuiRuntimeClient, GuiRuntimeSession},
-	glorp_runtime::{GuiCommand, GuiEditCommand, GuiEditRequest, GuiRuntimeFrame, SidebarTab},
+	glorp_runtime::{
+		GuiCommand, GuiEditCommand, GuiEditRequest, GuiRuntimeFrame, GuiSessionHostMessage, GuiSharedDelta, SidebarTab,
+	},
 	iced::{
 		Element, Length, Size, Subscription, Theme, Vector,
 		widget::{container, pane_grid, responsive},
@@ -73,7 +75,7 @@ impl RuntimeShell {
 			shell_scene_config(&frame),
 		);
 		let snapshot = build_snapshot(&editor, &frame, 1);
-		let mut shell = Self {
+		Self {
 			session,
 			client,
 			frame,
@@ -90,9 +92,7 @@ impl RuntimeShell {
 				b: Box::new(pane_grid::Configuration::Pane(ShellPane::Canvas)),
 			}),
 			last_error: None,
-		};
-		let _ = shell.refresh_frame();
-		shell
+		}
 	}
 
 	pub(crate) fn title(&self) -> String {
@@ -109,7 +109,7 @@ impl RuntimeShell {
 			Message::Sidebar(crate::types::SidebarMessage::SelectTab(tab)) => self.select_tab(tab),
 			Message::Canvas(message) => self.handle_canvas(message),
 			Message::Editor(intent) => self.handle_editor(intent),
-			Message::Perf(PerfMessage::Tick(_)) => self.refresh_frame(),
+			Message::Perf(PerfMessage::Tick(_)) => self.handle_tick(),
 			Message::Viewport(ViewportMessage::CanvasResized(size)) => {
 				let viewport = scene_viewport_size(size);
 				self.resize_viewport(viewport)
@@ -119,7 +119,7 @@ impl RuntimeShell {
 	}
 
 	pub(crate) fn subscription(_: &Self) -> Subscription<Message> {
-		iced::time::every(std::time::Duration::from_millis(100)).map(|now| Message::Perf(PerfMessage::Tick(now)))
+		iced::time::every(std::time::Duration::from_millis(16)).map(|now| Message::Perf(PerfMessage::Tick(now)))
 	}
 
 	pub(crate) const fn theme(_: &Self) -> Theme {
@@ -322,11 +322,14 @@ impl RuntimeShell {
 			EditorIntent::Pointer(pointer) => self.apply_local_editor_intent(EditorIntent::Pointer(pointer)),
 			EditorIntent::Motion(motion) => self.apply_local_editor_intent(EditorIntent::Motion(motion)),
 			EditorIntent::Mode(mode) => self.apply_local_editor_intent(EditorIntent::Mode(mode)),
-			EditorIntent::Edit(edit) => self.execute_gui_edit(edit_command(edit)),
-			EditorIntent::History(history) => self.execute_gui_edit(GuiEditCommand::History(match history {
-				EditorHistoryIntent::Undo => EditorHistoryCommand::Undo,
-				EditorHistoryIntent::Redo => EditorHistoryCommand::Redo,
-			})),
+			EditorIntent::Edit(edit) => self.execute_gui_edit(EditorIntent::Edit(edit.clone()), edit_command(edit)),
+			EditorIntent::History(history) => self.execute_gui_edit(
+				EditorIntent::History(history),
+				GuiEditCommand::History(match history {
+					EditorHistoryIntent::Undo => EditorHistoryCommand::Undo,
+					EditorHistoryIntent::Redo => EditorHistoryCommand::Redo,
+				}),
+			),
 		}
 	}
 
@@ -341,50 +344,38 @@ impl RuntimeShell {
 
 	fn execute(&mut self, call: GlorpCall) -> Result<(), GlorpError> {
 		self.client.call(call)?;
-		self.refresh_frame()
+		Ok(())
 	}
 
-	fn execute_gui_edit(&mut self, command: GuiEditCommand) -> Result<(), GlorpError> {
+	fn execute_gui_edit(&mut self, intent: EditorIntent, command: GuiEditCommand) -> Result<(), GlorpError> {
+		let context = self.local_context();
+		self.apply_local_editor_intent(intent)?;
 		let response = self.client.gui_edit(GuiEditRequest {
 			layout: glorp_runtime::GuiLayoutRequest {
 				layout_width: self.frame.layout_width,
 			},
-			context: self.local_context(),
+			context,
 			command,
 		})?;
-		self.refresh_frame()?;
+		self.frame.revisions = response.revisions;
+		self.frame.undo_depth = response.undo_depth;
+		self.frame.redo_depth = response.redo_depth;
+		if response.outcome.delta.text_changed || response.outcome.delta.config_changed {
+			self.frame.scene = None;
+		}
 		self.apply_local_context(&response.next_context)?;
-		Ok(())
-	}
-
-	fn refresh_frame(&mut self) -> Result<(), GlorpError> {
-		self.perf.flush_canvas_metrics();
-		let mut frame = self.client.gui_frame()?;
-		if self.scene_required() && frame.scene.is_none() {
-			self.client.execute_gui(GuiCommand::SceneEnsure)?;
-			frame = self.client.gui_frame()?;
-		}
-
-		self.sync_editor_from_frame(&frame)?;
-		self.frame = frame;
-		self.refresh_local_snapshot();
-		if let Some(scroll) = reveal_scroll(&self.snapshot, self.frame.layout_width, &self.ui) {
-			self.ui.canvas_scroll = scroll;
+		if self.scene_required() && self.frame.scene.is_none() {
+			self.refresh_scene()?;
 		}
 		Ok(())
 	}
 
-	fn sync_editor_from_frame(&mut self, frame: &GuiRuntimeFrame) -> Result<(), GlorpError> {
-		let config = shell_scene_config(frame);
-		if self.editor.text() != frame.document_text {
-			let context = self.local_context();
-			self.editor
-				.reset(&mut self.font_system, frame.document_text.as_str(), config);
-			self.apply_local_context(&context)?;
-			return Ok(());
-		}
-
-		let _ = self.editor.sync_buffer_config(&mut self.font_system, config);
+	fn refresh_scene(&mut self) -> Result<(), GlorpError> {
+		self.client.execute_gui(GuiCommand::SceneEnsure)?;
+		let frame = self.client.gui_frame()?;
+		self.frame.scene = frame.scene;
+		self.frame.undo_depth = frame.undo_depth;
+		self.frame.redo_depth = frame.redo_depth;
 		Ok(())
 	}
 
@@ -430,7 +421,13 @@ impl RuntimeShell {
 			return Ok(());
 		}
 		self.client.set_layout_width(viewport.width);
-		self.refresh_frame()
+		self.frame.layout_width = viewport.width;
+		self.frame.scene = None;
+		let _ = self
+			.editor
+			.sync_buffer_config(&mut self.font_system, shell_scene_config(&self.frame));
+		self.refresh_local_snapshot();
+		Ok(())
 	}
 
 	fn resize_shell(&mut self, event: iced::widget::pane_grid::ResizeEvent) -> Result<(), GlorpError> {
@@ -443,7 +440,10 @@ impl RuntimeShell {
 			return Ok(());
 		}
 		self.ui.active_tab = tab;
-		self.refresh_frame()
+		if self.scene_required() && self.frame.scene.is_none() {
+			self.refresh_scene()?;
+		}
+		Ok(())
 	}
 
 	fn set_show_baselines(&mut self, show_baselines: bool) -> Result<(), GlorpError> {
@@ -451,7 +451,10 @@ impl RuntimeShell {
 			return Ok(());
 		}
 		self.ui.show_baselines = show_baselines;
-		self.refresh_frame()
+		if self.scene_required() && self.frame.scene.is_none() {
+			self.refresh_scene()?;
+		}
+		Ok(())
 	}
 
 	fn set_show_hitboxes(&mut self, show_hitboxes: bool) -> Result<(), GlorpError> {
@@ -459,13 +462,64 @@ impl RuntimeShell {
 			return Ok(());
 		}
 		self.ui.show_hitboxes = show_hitboxes;
-		self.refresh_frame()
+		if self.scene_required() && self.frame.scene.is_none() {
+			self.refresh_scene()?;
+		}
+		Ok(())
 	}
 
 	fn scene_required(&self) -> bool {
 		matches!(self.ui.active_tab, SidebarTab::Inspect | SidebarTab::Perf)
 			|| self.ui.show_baselines
 			|| self.ui.show_hitboxes
+	}
+
+	fn handle_tick(&mut self) -> Result<(), GlorpError> {
+		self.perf.flush_canvas_metrics();
+		for event in self.client.drain_events() {
+			match event {
+				GuiSessionHostMessage::Changed(delta) => self.apply_shared_delta(delta)?,
+				GuiSessionHostMessage::Closed => {
+					return Err(GlorpError::transport("GUI session closed"));
+				}
+				GuiSessionHostMessage::Ready { .. } | GuiSessionHostMessage::Reply { .. } => {}
+			}
+		}
+		Ok(())
+	}
+
+	fn apply_shared_delta(&mut self, delta: GuiSharedDelta) -> Result<(), GlorpError> {
+		let revisions = delta.outcome.revisions;
+		if revisions.editor <= self.frame.revisions.editor && revisions.config <= self.frame.revisions.config {
+			return Ok(());
+		}
+
+		if let Some(config) = delta.config {
+			self.frame.config = config;
+			let _ = self
+				.editor
+				.sync_buffer_config(&mut self.font_system, shell_scene_config(&self.frame));
+		}
+		if let Some(edit) = delta.outcome.document_edit.as_ref() {
+			let _ = self.editor.apply_external_text_edit(
+				&mut self.font_system,
+				glorp_editor::TextEdit {
+					range: edit.range.start as usize..edit.range.end as usize,
+					inserted: edit.inserted.clone(),
+				},
+			);
+		}
+		self.frame.revisions = revisions;
+		self.frame.undo_depth = delta.undo_depth;
+		self.frame.redo_depth = delta.redo_depth;
+		if delta.outcome.delta.text_changed || delta.outcome.delta.config_changed {
+			self.frame.scene = None;
+		}
+		if self.scene_required() && self.frame.scene.is_none() {
+			self.refresh_scene()?;
+		}
+		self.refresh_local_snapshot();
+		Ok(())
 	}
 }
 

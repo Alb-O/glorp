@@ -12,9 +12,10 @@ use {
 };
 
 pub use self::{
-	client::{IpcClient, gui_transport_request, socket_is_live, transport_request},
+	client::{GuiSessionClient, IpcClient, gui_transport_request, socket_is_live, transport_request},
 	ipc::{
-		GuiTransportRequest, GuiTransportResponse, ServerRequest, ServerResponse, TransportRequest, TransportResponse,
+		GuiSessionOpen, GuiTransportRequest, GuiTransportResponse, ServerRequest, ServerResponse, TransportRequest,
+		TransportResponse,
 	},
 	local::LocalClient,
 	server::{IpcServerHandle, start_server, start_server_shared},

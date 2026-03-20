@@ -1,6 +1,9 @@
 use {
 	glorp_api::{GlorpCall, GlorpCallResult, GlorpError},
-	glorp_runtime::{GuiCommand, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame},
+	glorp_runtime::{
+		GuiCommand, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame, GuiSessionClientMessage,
+		GuiSessionHostMessage,
+	},
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -31,13 +34,22 @@ pub enum GuiTransportResponse {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct GuiSessionOpen {
+	pub layout: GuiLayoutRequest,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ServerRequest {
 	Public(TransportRequest),
 	Gui(GuiTransportRequest),
+	GuiSessionOpen(GuiSessionOpen),
+	GuiSessionMessage(GuiSessionClientMessage),
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum ServerResponse {
 	Public(TransportResponse),
 	Gui(GuiTransportResponse),
+	GuiSessionReady(GuiSessionHostMessage),
+	GuiSessionMessage(GuiSessionHostMessage),
 }

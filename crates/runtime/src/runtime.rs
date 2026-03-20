@@ -1,5 +1,10 @@
 use {
-	crate::{ConfigStore, ConfigStorePaths, events::SubscriptionSet, execute, state::RuntimeState},
+	crate::{
+		ConfigStore, ConfigStorePaths,
+		events::{SubscriptionCheckpoint, SubscriptionSet},
+		execute,
+		state::RuntimeState,
+	},
 	glorp_api::{GlorpCall, GlorpCallResult, GlorpCaller, GlorpError, GlorpOutcome, SamplePreset},
 	glorp_editor::sample_preset_text,
 };
@@ -28,12 +33,16 @@ impl GlorpRuntime {
 		})
 	}
 
-	pub fn subscriptions_state(&self) -> SubscriptionSet {
-		self.subscriptions.clone()
+	pub fn subscriptions_state(&self) -> SubscriptionCheckpoint {
+		self.subscriptions.checkpoint()
 	}
 
-	pub fn restore_subscriptions(&mut self, subscriptions: SubscriptionSet) {
-		self.subscriptions = subscriptions;
+	pub fn subscriptions(&self) -> &SubscriptionSet {
+		&self.subscriptions
+	}
+
+	pub fn restore_subscriptions(&mut self, subscriptions: SubscriptionCheckpoint) {
+		self.subscriptions.restore(subscriptions);
 	}
 
 	pub fn publish_changed(&mut self, outcome: &GlorpOutcome) {
@@ -77,6 +86,10 @@ impl GlorpRuntime {
 			redo_depth,
 			scene: self.state.session.scene().cloned(),
 		}
+	}
+
+	pub fn gui_shared_delta(&self, outcome: glorp_api::GlorpOutcome) -> crate::GuiSharedDelta {
+		execute::gui_shared_delta(self, outcome)
 	}
 }
 

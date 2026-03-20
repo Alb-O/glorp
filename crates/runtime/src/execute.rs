@@ -41,7 +41,14 @@ pub fn execute_gui_edit(runtime: &mut GlorpRuntime, request: GuiEditRequest) -> 
 	};
 	let outcome = publish_session(runtime, SessionRequest::ApplyEditorIntent(intent));
 	let next_context = current_gui_context(runtime);
-	Ok(GuiEditResponse { outcome, next_context })
+	let (undo_depth, redo_depth) = runtime.state.session.history_depths();
+	Ok(GuiEditResponse {
+		revisions: outcome.revisions,
+		outcome,
+		next_context,
+		undo_depth,
+		redo_depth,
+	})
 }
 
 fn execute_txn(runtime: &mut GlorpRuntime, txn: GlorpTxn) -> Result<GlorpOutcome, GlorpError> {
@@ -228,6 +235,16 @@ fn outcome(
 		document_edit,
 		changed_config_paths,
 		warnings: vec![],
+	}
+}
+
+pub fn gui_shared_delta(runtime: &GlorpRuntime, outcome: GlorpOutcome) -> crate::GuiSharedDelta {
+	let (undo_depth, redo_depth) = runtime.state.session.history_depths();
+	crate::GuiSharedDelta {
+		undo_depth,
+		redo_depth,
+		config: outcome.delta.config_changed.then(|| runtime.state.config.clone()),
+		outcome,
 	}
 }
 

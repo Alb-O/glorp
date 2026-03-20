@@ -2,15 +2,15 @@ use {
 	glorp_api::{GlorpCall, GlorpCallDescriptor, GlorpCallResult, GlorpCaller, GlorpError},
 	glorp_runtime::{
 		DEFAULT_LAYOUT_WIDTH, GuiCommand, GuiEditRequest, GuiEditResponse, GuiLayoutRequest, GuiRuntimeFrame,
-		RuntimeHost, RuntimeOptions, default_runtime_paths,
+		GuiSessionHostMessage, RuntimeHost, RuntimeOptions, default_runtime_paths,
 	},
 	glorp_transport::{
-		GuiTransportRequest, GuiTransportResponse, IpcClient, IpcServerHandle, LocalClient, default_socket_path,
-		ensure_socket_parent, gui_transport_request, socket_is_live, start_server_shared, wait_for_socket,
+		GuiSessionClient, IpcServerHandle, LocalClient, default_socket_path, ensure_socket_parent, socket_is_live,
+		start_server_shared, wait_for_socket,
 	},
 	std::{
 		path::{Path, PathBuf},
-		sync::{Arc, Mutex},
+		sync::{Arc, Mutex, mpsc},
 	},
 };
 
@@ -38,13 +38,13 @@ pub struct GuiRuntimeSession {
 
 pub struct GuiRuntimeClient {
 	client: RuntimeClient,
-	socket_path: PathBuf,
 	layout_width: f32,
+	boot_frame: Option<GuiRuntimeFrame>,
+	events: Option<mpsc::Receiver<GuiSessionHostMessage>>,
 }
 
-#[derive(Clone)]
 enum RuntimeClient {
-	Ipc(IpcClient),
+	Session(GuiSessionClient),
 	Local(LocalClient),
 }
 
@@ -82,7 +82,7 @@ impl GuiRuntimeSession {
 			return Self::start_owned(options);
 		}
 
-		let mut client = GuiRuntimeClient::new_ipc(options.socket_path.clone());
+		let mut client = GuiRuntimeClient::new_ipc(options.socket_path.clone())?;
 		ensure_runtime_capabilities(&mut client, "unexpected capabilities response from shared GUI runtime")?;
 
 		Ok((
@@ -110,40 +110,41 @@ impl GuiRuntimeSession {
 }
 
 impl GuiRuntimeClient {
-	#[must_use]
-	pub fn new_ipc(socket_path: impl Into<PathBuf>) -> Self {
+	pub fn new_ipc(socket_path: impl Into<PathBuf>) -> Result<Self, GlorpError> {
 		let socket_path = socket_path.into();
-		Self {
-			client: RuntimeClient::Ipc(IpcClient::new(socket_path.as_path())),
-			socket_path,
+		let (client, frame, events) = GuiSessionClient::connect(
+			socket_path.as_path(),
+			GuiLayoutRequest {
+				layout_width: DEFAULT_LAYOUT_WIDTH,
+			},
+		)?;
+		Ok(Self {
+			client: RuntimeClient::Session(client),
 			layout_width: DEFAULT_LAYOUT_WIDTH,
-		}
+			boot_frame: Some(frame),
+			events: Some(events),
+		})
 	}
 
 	#[must_use]
-	pub fn new_local(socket_path: impl Into<PathBuf>, host: Arc<Mutex<RuntimeHost>>) -> Self {
+	pub fn new_local(_socket_path: impl Into<PathBuf>, host: Arc<Mutex<RuntimeHost>>) -> Self {
 		Self {
 			client: RuntimeClient::Local(LocalClient::shared(host)),
-			socket_path: socket_path.into(),
 			layout_width: DEFAULT_LAYOUT_WIDTH,
+			boot_frame: None,
+			events: None,
 		}
 	}
 
 	pub fn set_layout_width(&mut self, layout_width: f32) {
 		self.layout_width = layout_width.max(1.0);
+		self.boot_frame = None;
 	}
 
 	pub fn execute_gui(&mut self, command: GuiCommand) -> Result<(), GlorpError> {
 		let layout = self.layout_request();
 		match &self.client {
-			RuntimeClient::Ipc(_) => {
-				let GuiTransportResponse::ExecuteGui(result) =
-					gui_transport_request(&self.socket_path, GuiTransportRequest::ExecuteGui { layout, command })?
-				else {
-					return Err(GlorpError::transport("unexpected private gui execute response"));
-				};
-				result
-			}
+			RuntimeClient::Session(client) => client.execute_gui(layout, command),
 			RuntimeClient::Local(client) => with_local_runtime(client, |host| host.execute_gui_at(layout, command)),
 		}
 	}
@@ -151,31 +152,31 @@ impl GuiRuntimeClient {
 	pub fn gui_edit(&mut self, mut request: GuiEditRequest) -> Result<GuiEditResponse, GlorpError> {
 		request.layout = self.layout_request();
 		match &self.client {
-			RuntimeClient::Ipc(_) => {
-				let GuiTransportResponse::Edit(result) =
-					gui_transport_request(&self.socket_path, GuiTransportRequest::Edit(request))?
-				else {
-					return Err(GlorpError::transport("unexpected private gui edit response"));
-				};
-				*result
-			}
+			RuntimeClient::Session(client) => client.gui_edit(request),
 			RuntimeClient::Local(client) => with_local_runtime(client, |host| host.gui_edit(request)),
 		}
 	}
 
 	pub fn gui_frame(&mut self) -> Result<GuiRuntimeFrame, GlorpError> {
+		if let Some(frame) = self.boot_frame.take() {
+			return Ok(frame);
+		}
 		let layout = self.layout_request();
 		match &self.client {
-			RuntimeClient::Ipc(_) => {
-				let GuiTransportResponse::GuiFrame(result) =
-					gui_transport_request(&self.socket_path, GuiTransportRequest::GuiFrame(layout))?
-				else {
-					return Err(GlorpError::transport("unexpected private gui frame response"));
-				};
-				*result
-			}
+			RuntimeClient::Session(client) => client.gui_frame(layout),
 			RuntimeClient::Local(client) => with_local_runtime(client, |host| Ok(host.gui_frame_at(layout))),
 		}
+	}
+
+	pub fn drain_events(&mut self) -> Vec<GuiSessionHostMessage> {
+		let Some(events) = &self.events else {
+			return Vec::new();
+		};
+		let mut drained = Vec::new();
+		while let Ok(message) = events.try_recv() {
+			drained.push(message);
+		}
+		drained
 	}
 
 	fn layout_request(&self) -> GuiLayoutRequest {
@@ -188,7 +189,7 @@ impl GuiRuntimeClient {
 impl GlorpCaller for GuiRuntimeClient {
 	fn call(&mut self, call: GlorpCall) -> Result<GlorpCallResult, GlorpError> {
 		match &mut self.client {
-			RuntimeClient::Ipc(client) => client.call(call),
+			RuntimeClient::Session(client) => client.call(call),
 			RuntimeClient::Local(client) => client.call(call),
 		}
 	}
